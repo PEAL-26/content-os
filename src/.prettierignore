@@ -1,0 +1,16 @@
+# Ignore build artifacts
+dist/
+build/
+
+# Ignore specific file types
+*.html
+*.min.js
+
+node_modules/
+public/
+.env
+.env.example
+.DS_Store
+.prettierignore
+
+

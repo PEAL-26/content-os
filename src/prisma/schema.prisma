@@ -1,0 +1,429 @@
+// =============================================================================
+// ContentOS — Prisma Schema
+// Stack: Supabase (PostgreSQL) + Prisma ORM
+// =============================================================================
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+enum UserRole {
+  OWNER
+  EDITOR
+  VIEWER
+}
+
+enum ContentPillar {
+  P1_EDUCATION // Topo — Atrair
+  P2_USE_CASES // Meio — Mostrar valor
+  P3_CONVERSION // Fundo — Vender
+  P4_AUTHORITY // Bastidores — Confiança
+}
+
+enum SocialChannel {
+  LINKEDIN
+  INSTAGRAM
+  TIKTOK
+  YOUTUBE
+  TWITTER
+}
+
+enum ContentFormat {
+  CAROUSEL // Carrossel (slides)
+  SHORT_VIDEO // TikTok / Reels
+  LINKEDIN_POST // Post opinativo LinkedIn
+  INSTAGRAM_POST
+  THREAD // Thread (X/Twitter)
+  CTA_POST // Call to Action direto
+  VIDEO_SCRIPT // Roteiro de vídeo
+}
+
+enum ArticleStatus {
+  DRAFT
+  REVIEW
+  APPROVED
+  PUBLISHED
+}
+
+enum ContentPieceStatus {
+  DRAFT
+  APPROVED
+  SCHEDULED
+  PUBLISHED
+}
+
+enum PlanItemStatus {
+  PLANNED
+  PUBLISHED
+  SKIPPED
+}
+
+enum FunnelStage {
+  TOP // Atração
+  MIDDLE // Consideração
+  BOTTOM // Conversão
+}
+
+// =============================================================================
+// WORKSPACE (Multi-tenant root)
+// =============================================================================
+
+model Workspace {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique // URL-friendly identifier
+  description String?
+  logoUrl     String?
+  sector      String? // Ex: "SaaS", "Consultoria", "E-commerce"
+  website     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Configurações de voz e tom
+  voiceTone        String? // Ex: "directo e técnico", "casual mas profissional"
+  targetAudience   String? // Ex: "PMEs angolanas", "Startups B2B"
+  contentLanguage  String  @default("pt") // Idioma principal do conteúdo
+  valueProposition String? // Proposta de valor da empresa (alimenta IA)
+
+  // Regras operacionais (baseadas no documento)
+  valueRatio      Int @default(70) // % de conteúdo de valor (padrão 70/30)
+  productRatio    Int @default(30) // % de conteúdo de produto
+  postsPerWeek    Int @default(3)
+  articlesPerWeek Int @default(1)
+
+  // Relações
+  members       WorkspaceMember[]
+  products      Product[]
+  pillars       PillarConfig[]
+  channelConfig ChannelConfig[]
+  articles      Article[]
+  weeklyPlans   WeeklyPlan[]
+  tags          Tag[]
+
+  @@map("workspaces")
+}
+
+// =============================================================================
+// WORKSPACE MEMBERS (Auth)
+// =============================================================================
+
+model WorkspaceMember {
+  id          String   @id @default(uuid())
+  workspaceId String
+  userId      String // Supabase auth.users UUID
+  role        UserRole @default(EDITOR)
+  joinedAt    DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@map("workspace_members")
+}
+
+// =============================================================================
+// PRODUCTS (Produtos da empresa)
+// =============================================================================
+
+model Product {
+  id             String   @id @default(uuid())
+  workspaceId    String
+  name           String
+  slug           String
+  description    String?
+  tagline        String? // Frase curta para usar em CTAs
+  landingUrl     String? // URL da landing page
+  demoUrl        String?
+  targetAudience String? // Público específico do produto
+  problemSolved  String? // Problema que resolve (para prompts IA)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  articles      Article[]
+  contentPieces ContentPiece[]
+  planItems     PlanItem[]
+
+  @@unique([workspaceId, slug])
+  @@map("products")
+}
+
+// =============================================================================
+// PILLAR CONFIG (Pilares de conteúdo configuráveis)
+// =============================================================================
+
+model PillarConfig {
+  id          String        @id @default(uuid())
+  workspaceId String
+  pillar      ContentPillar
+  name        String // Nome customizável (ex: "Educação & Problemas")
+  objective   String? // Objetivo do pilar
+  funnelStage FunnelStage
+  description String? // Descrição interna
+  examples    String[] // Exemplos de temas (array de strings)
+  isActive    Boolean       @default(true)
+  sortOrder   Int           @default(0)
+
+  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  articles  Article[]
+  planItems PlanItem[]
+
+  @@unique([workspaceId, pillar])
+  @@map("pillar_configs")
+}
+
+// =============================================================================
+// CHANNEL CONFIG (Configuração por canal)
+// =============================================================================
+
+model ChannelConfig {
+  id          String        @id @default(uuid())
+  workspaceId String
+  channel     SocialChannel
+  isActive    Boolean       @default(true)
+  handle      String? // @username ou URL do perfil
+  isPrimary   Boolean       @default(false) // Canal principal (ex: LinkedIn B2B)
+  defaultTone String? // Tom específico para este canal
+  notes       String? // Notas internas
+  createdAt   DateTime      @default(now())
+
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contentPieces ContentPiece[]
+  planItems     PlanItem[]
+
+  @@unique([workspaceId, channel])
+  @@map("channel_configs")
+}
+
+// =============================================================================
+// TAGS (Etiquetas transversais)
+// =============================================================================
+
+model Tag {
+  id          String   @id @default(uuid())
+  workspaceId String
+  name        String
+  color       String? // Hex color para UI
+  createdAt   DateTime @default(now())
+
+  workspace Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  articles  ArticleTag[]
+
+  @@unique([workspaceId, name])
+  @@map("tags")
+}
+
+model ArticleTag {
+  articleId String
+  tagId     String
+
+  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  tag     Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([articleId, tagId])
+  @@map("article_tags")
+}
+
+// =============================================================================
+// ARTICLES (Artigos do blog — fonte de conteúdo)
+// =============================================================================
+
+model Article {
+  id          String  @id @default(uuid())
+  workspaceId String
+  productId   String? // Produto relacionado (opcional)
+  pillarId    String? // Pilar de conteúdo
+
+  // Conteúdo
+  title   String
+  slug    String // Gerado automaticamente pela IA
+  summary String? // Resumo/meta description
+  body    String // Corpo completo do artigo (Markdown)
+
+  // SEO
+  seoTitle       String?
+  seoDescription String?
+  keywords       String[] // Keywords para SEO
+
+  // Estado
+  status       ArticleStatus @default(DRAFT)
+  publishedAt  DateTime?
+  publishedUrl String? // URL final no site
+
+  // IA
+  aiGenerated  Boolean @default(false)
+  aiPromptUsed String? // Prompt usado para gerar (auditoria)
+
+  // Metadados
+  readingTimeMin Int? // Tempo estimado de leitura
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  createdBy      String? // Supabase auth.users UUID
+
+  // Relações
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  product       Product?       @relation(fields: [productId], references: [id])
+  pillar        PillarConfig?  @relation(fields: [pillarId], references: [id])
+  tags          ArticleTag[]
+  contentPieces ContentPiece[]
+  videoScripts  VideoScript[]
+  planItems     PlanItem[]
+
+  @@unique([workspaceId, slug])
+  @@map("articles")
+}
+
+// =============================================================================
+// CONTENT PIECES (Derivados do artigo para cada rede social)
+// Cada artigo gera 3-5 peças de conteúdo
+// =============================================================================
+
+model ContentPiece {
+  id          String  @id @default(uuid())
+  articleId   String
+  workspaceId String
+  productId   String? // Produto mencionado nesta peça
+  channelId   String? // Canal alvo
+
+  // Classificação
+  format ContentFormat
+  pillar ContentPillar?
+
+  // Conteúdo
+  title    String? // Título interno/referência
+  body     String // Texto principal da peça
+  hookText String? // Frase de abertura (gancho)
+  ctaText  String? // Call to action
+  hashtags String[] // Hashtags (para Instagram/TikTok)
+
+  // Carrossel específico
+  slides     Json? // Array de slides: [{order, title, body}]
+  slideCount Int?
+
+  // Estado
+  status      ContentPieceStatus @default(DRAFT)
+  publishedAt DateTime?
+
+  // IA
+  aiGenerated Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relações
+  article   Article        @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  product   Product?       @relation(fields: [productId], references: [id])
+  channel   ChannelConfig? @relation(fields: [channelId], references: [id])
+  planItems PlanItem[]
+
+  @@map("content_pieces")
+}
+
+// =============================================================================
+// VIDEO SCRIPTS (Roteiros de vídeo curto — TikTok / Reels)
+// =============================================================================
+
+model VideoScript {
+  id          String @id @default(uuid())
+  articleId   String
+  workspaceId String
+
+  // Conteúdo do roteiro
+  title      String
+  hook       String // Primeiros 3 segundos (gancho visual/verbal)
+  problem    String? // Apresentação do problema
+  solution   String? // A solução / conteúdo central
+  cta        String // Call to action final
+  fullScript String // Roteiro completo formatado
+
+  // Configuração de produção
+  durationSec   Int?          @default(60) // Duração estimada em segundos
+  targetChannel SocialChannel @default(INSTAGRAM) // INSTAGRAM ou TIKTOK
+  onScreenText  String? // Textos para aparecer no vídeo
+  bRoll         String? // Sugestões de b-roll / cenas de apoio
+
+  // Estado
+  status      ArticleStatus @default(DRAFT) // Reutiliza enum
+  aiGenerated Boolean       @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@map("video_scripts")
+}
+
+// =============================================================================
+// WEEKLY PLANS (Planeamento semanal)
+// =============================================================================
+
+model WeeklyPlan {
+  id          String   @id @default(uuid())
+  workspaceId String
+  weekStart   DateTime // Segunda-feira da semana (normalizado)
+  weekEnd     DateTime // Domingo da semana
+  notes       String? // Notas gerais da semana
+  theme       String? // Tema/foco semanal opcional
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  items     PlanItem[]
+
+  @@unique([workspaceId, weekStart])
+  @@map("weekly_plans")
+}
+
+// =============================================================================
+// PLAN ITEMS (Items agendados dentro de um plano semanal)
+// Cada item liga um conteúdo a um dia e canal específico
+// =============================================================================
+
+model PlanItem {
+  id           String @id @default(uuid())
+  weeklyPlanId String
+  workspaceId  String
+
+  // O que vai ser publicado (um dos três é obrigatório)
+  articleId      String? // Se for partilha de artigo
+  contentPieceId String? // Se for peça derivada (carrossel, post, etc.)
+  productId      String? // Produto em destaque
+
+  // Quando e onde
+  pillarId     String? // Pilar associado
+  channelId    String? // Canal alvo
+  scheduledFor DateTime // Data e hora planeada
+  dayOfWeek    Int // 1=Segunda ... 7=Domingo
+
+  // Estado
+  status       PlanItemStatus @default(PLANNED)
+  publishedAt  DateTime? // Data real de publicação
+  publishedUrl String? // URL do post publicado (para tracking)
+  notes        String? // Notas internas do item
+
+  // Metadados
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relações
+  weeklyPlan   WeeklyPlan     @relation(fields: [weeklyPlanId], references: [id], onDelete: Cascade)
+  article      Article?       @relation(fields: [articleId], references: [id])
+  contentPiece ContentPiece?  @relation(fields: [contentPieceId], references: [id])
+  product      Product?       @relation(fields: [productId], references: [id])
+  pillar       PillarConfig?  @relation(fields: [pillarId], references: [id])
+  channel      ChannelConfig? @relation(fields: [channelId], references: [id])
+
+  @@map("plan_items")
+}
