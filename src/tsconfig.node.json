@@ -22,7 +22,10 @@
         "noFallthroughCasesInSwitch": true,
         "noUncheckedSideEffectImports": true,
         "esModuleInterop": true,
-        "ignoreDeprecations": "6.0"
+        "ignoreDeprecations": "5.0",
+        "paths": {
+            "@/*": ["./src/*"]
+        }
     },
     "include": ["vite.config.ts"]
 }
