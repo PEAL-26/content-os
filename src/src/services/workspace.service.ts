@@ -4,6 +4,7 @@ import type {
     WorkspaceMember,
     WorkspaceWithRole,
 } from '@/types/database'
+import { pillarService } from './pillar.service'
 import { v4 as uuidv4 } from 'uuid'
 
 export type { Workspace, WorkspaceMember, WorkspaceWithRole }
@@ -121,6 +122,12 @@ export const workspaceService = {
             )
         }
 
+        try {
+            await pillarService.createDefaultPillars(workspaceId)
+        } catch (pillarError) {
+            console.error('Erro ao criar pilares por defeito:', pillarError)
+        }
+
         return { workspaceId }
     },
 
@@ -143,6 +150,7 @@ export const workspaceService = {
                 productRatio: input.productRatio,
                 postsPerWeek: input.postsPerWeek,
                 articlesPerWeek: input.articlesPerWeek,
+                updatedAt: new Date().toISOString(),
             })
             .eq('id', workspaceId)
             .select()
@@ -160,9 +168,12 @@ export const workspaceService = {
         userId: string,
         role: 'OWNER' | 'EDITOR' | 'VIEWER' = 'EDITOR'
     ): Promise<WorkspaceMember> {
+        const memberId = uuidv4()
+
         const { data, error } = await supabase
             .from('workspace_members')
             .insert({
+                id: memberId,
                 workspaceId,
                 userId,
                 role,

@@ -1,8 +1,10 @@
 import { ProtectedWorkspaceRoute } from '@/components/auth/protected-workspace-route'
 import { DashboardLayout } from '@/layouts/dashboard-layout'
+import { SettingsLayout } from '@/layouts/settings-layout'
 import { LoginPage } from '@/pages/auth/login'
 import { RegisterPage } from '@/pages/auth/register'
 import { CreateWorkspacePage } from '@/pages/onboarding/create-workspace'
+import { PillarsPage } from '@/pages/settings/Pillars'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 
 function DashboardHome() {
@@ -21,6 +23,16 @@ function PlaceholderPage({ title }: { title: string }) {
         <div>
             <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
             <p className="mt-2 text-gray-600">Página em desenvolvimento...</p>
+        </div>
+    )
+}
+
+function SettingsHome() {
+    return (
+        <div>
+            <p className="text-gray-500">
+                Selecione uma categoria de configurações no menu acima.
+            </p>
         </div>
     )
 }
@@ -83,7 +95,35 @@ export function App() {
                     element={
                         <ProtectedWorkspaceRoute>
                             <DashboardLayout>
-                                <PlaceholderPage title="Configurações" />
+                                <SettingsLayout>
+                                    <SettingsHome />
+                                </SettingsLayout>
+                            </DashboardLayout>
+                        </ProtectedWorkspaceRoute>
+                    }
+                />
+
+                <Route
+                    path="/dashboard/settings/pillars"
+                    element={
+                        <ProtectedWorkspaceRoute>
+                            <DashboardLayout>
+                                <SettingsLayout>
+                                    <PillarsPage />
+                                </SettingsLayout>
+                            </DashboardLayout>
+                        </ProtectedWorkspaceRoute>
+                    }
+                />
+
+                <Route
+                    path="/dashboard/settings/:section"
+                    element={
+                        <ProtectedWorkspaceRoute>
+                            <DashboardLayout>
+                                <SettingsLayout>
+                                    <PlaceholderPage title="Configurações" />
+                                </SettingsLayout>
                             </DashboardLayout>
                         </ProtectedWorkspaceRoute>
                     }

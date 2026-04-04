@@ -1,0 +1,110 @@
+import { supabase } from '@/lib/supabase'
+import { pillarService } from './pillar.service'
+import { v4 as uuidv4 } from 'uuid'
+
+export interface WorkspaceInitResult {
+    pillarsCreated: boolean
+    channelsCreated: boolean
+    tagsCreated: boolean
+}
+
+export const workspaceInitService = {
+    async ensureDefaultConfigs(workspaceId: string): Promise<WorkspaceInitResult> {
+        const results: WorkspaceInitResult = {
+            pillarsCreated: false,
+            channelsCreated: false,
+            tagsCreated: false,
+        }
+
+        try {
+            results.pillarsCreated = await pillarService.checkAndCreatePillars(
+                workspaceId
+            )
+        } catch (error) {
+            console.error('Erro ao inicializar pilares:', error)
+        }
+
+        try {
+            results.channelsCreated = await this.ensureDefaultChannels(workspaceId)
+        } catch (error) {
+            console.error('Erro ao inicializar canais:', error)
+        }
+
+        try {
+            results.tagsCreated = await this.ensureDefaultTags(workspaceId)
+        } catch (error) {
+            console.error('Erro ao inicializar tags:', error)
+        }
+
+        return results
+    },
+
+    async ensureDefaultChannels(workspaceId: string): Promise<boolean> {
+        const { data: existing } = await supabase
+            .from('channel_configs')
+            .select('id')
+            .eq('workspaceId', workspaceId)
+            .limit(1)
+
+        if (existing && existing.length > 0) {
+            return false
+        }
+
+        const defaultChannels = [
+            { channel: 'LINKEDIN', isActive: true, isPrimary: true },
+            { channel: 'INSTAGRAM', isActive: true, isPrimary: false },
+            { channel: 'TIKTOK', isActive: true, isPrimary: false },
+            { channel: 'YOUTUBE', isActive: false, isPrimary: false },
+        ]
+
+        const channelsToInsert = defaultChannels.map((ch) => ({
+            id: uuidv4(),
+            workspaceId,
+            ...ch,
+        }))
+
+        await supabase.from('channel_configs').insert(channelsToInsert)
+
+        return true
+    },
+
+    async ensureDefaultTags(workspaceId: string): Promise<boolean> {
+        const { data: existing } = await supabase
+            .from('tags')
+            .select('id')
+            .eq('workspaceId', workspaceId)
+            .limit(1)
+
+        if (existing && existing.length > 0) {
+            return false
+        }
+
+        const defaultTags = [
+            { name: 'automação', color: '#6366f1' },
+            { name: 'gestão', color: '#10b981' },
+            { name: 'tutorial', color: '#f59e0b' },
+            { name: 'caso-real', color: '#ef4444' },
+            { name: 'bastidores', color: '#8b5cf6' },
+            { name: 'tendências', color: '#06b6d4' },
+        ]
+
+        const tagsToInsert = defaultTags.map((tag) => ({
+            id: uuidv4(),
+            workspaceId,
+            ...tag,
+        }))
+
+        await supabase.from('tags').insert(tagsToInsert)
+
+        return true
+    },
+
+    async isInitialized(workspaceId: string): Promise<boolean> {
+        const { data: pillars } = await supabase
+            .from('pillar_configs')
+            .select('id')
+            .eq('workspaceId', workspaceId)
+
+        return (pillars?.length ?? 0) > 0
+    },
+}

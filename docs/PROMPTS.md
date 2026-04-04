@@ -112,7 +112,7 @@ como filtro obrigatório. Sem mock data — tudo ligado ao Supabase real.
 
 ---
 
-### PROMPT 2.2 — Configuração de Pilares de Conteúdo
+### [x] PROMPT 2.2 — Configuração de Pilares de Conteúdo
 
 ```markdown
 Antes de implementar qualquer coisa, analisa o que já existe no projecto:
