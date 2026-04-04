@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { PillarBadge } from './PillarBadge'
+import { PillarBadge } from './pillar-badge'
 import { PILLAR_COLORS, FUNNEL_STAGE_LABELS } from '@/types/pillar'
 import type { PillarConfig, PillarConfigInput } from '@/types/pillar'
 import type { ContentPillar, FunnelStage } from '@/types/pillar'

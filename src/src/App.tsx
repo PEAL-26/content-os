@@ -4,7 +4,8 @@ import { SettingsLayout } from '@/layouts/settings-layout'
 import { LoginPage } from '@/pages/auth/login'
 import { RegisterPage } from '@/pages/auth/register'
 import { CreateWorkspacePage } from '@/pages/onboarding/create-workspace'
-import { PillarsPage } from '@/pages/settings/Pillars'
+import { PillarsPage } from '@/pages/settings/pillars'
+import { ProductsPage } from '@/pages/settings/products'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 
 function DashboardHome() {
@@ -110,6 +111,19 @@ export function App() {
                             <DashboardLayout>
                                 <SettingsLayout>
                                     <PillarsPage />
+                                </SettingsLayout>
+                            </DashboardLayout>
+                        </ProtectedWorkspaceRoute>
+                    }
+                />
+
+                <Route
+                    path="/dashboard/settings/products"
+                    element={
+                        <ProtectedWorkspaceRoute>
+                            <DashboardLayout>
+                                <SettingsLayout>
+                                    <ProductsPage />
                                 </SettingsLayout>
                             </DashboardLayout>
                         </ProtectedWorkspaceRoute>

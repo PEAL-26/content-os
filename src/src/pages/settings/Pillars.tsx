@@ -1,5 +1,5 @@
 import { usePillars } from '@/hooks/use-pillars'
-import { PillarCard } from '@/components/content/PillarCard'
+import { PillarCard } from '@/components/content/pillar-card'
 import { PILLAR_LABELS } from '@/types/pillar'
 
 export function PillarsPage() {

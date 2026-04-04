@@ -145,7 +145,7 @@ por pilar com feedback visual de sucesso/erro. Sem page refresh após guardar.
 
 ---
 
-### PROMPT 2.3 — Gestão de Produtos
+### [] PROMPT 2.3 — Gestão de Produtos
 
 ```markdown
 Antes de implementar qualquer coisa, analisa o que já existe no projecto:

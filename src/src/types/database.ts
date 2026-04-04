@@ -29,3 +29,19 @@ export interface WorkspaceMember {
 export interface WorkspaceWithRole extends Workspace {
     memberRole?: 'OWNER' | 'EDITOR' | 'VIEWER'
 }
+
+export interface Product {
+    id: string
+    workspaceId: string
+    name: string
+    slug: string
+    description: string | null
+    tagline: string | null
+    landingUrl: string | null
+    demoUrl: string | null
+    targetAudience: string | null
+    problemSolved: string | null
+    isActive: boolean
+    createdAt: string
+    updatedAt: string
+}
