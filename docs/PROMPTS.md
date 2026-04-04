@@ -9,7 +9,7 @@ Segue a ordem das fases para evitar dependências em falta.
 
 ## FASE 1 — Setup & Autenticação
 
-### PROMPT 1.1 — Estrutura base do projecto + configuração Supabase
+### [x] PROMPT 1.1 — Estrutura base do projecto + configuração Supabase
 
 ```markdown
 Antes de implementar qualquer coisa, analisa toda a estrutura actual do projecto:
@@ -40,7 +40,7 @@ estrita e sem `any`. Não implementar UI nesta fase.
 
 ---
 
-### PROMPT 1.2 — Sistema de autenticação completo
+### [x] PROMPT 1.2 — Sistema de autenticação completo
 
 ```markdown
 Antes de implementar qualquer coisa, analisa o que já existe no projecto
@@ -77,7 +77,7 @@ externas — usar estado React controlado simples.
 
 ## FASE 2 — Workspace & Configurações
 
-### PROMPT 2.1 — Criação e gestão de Workspace
+### [x] PROMPT 2.1 — Criação e gestão de Workspace
 
 ```markdown
 Antes de implementar qualquer coisa, analisa o que já existe no projecto:

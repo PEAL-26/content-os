@@ -1,23 +1,26 @@
+import { ProtectedWorkspaceRoute } from '@/components/auth/protected-workspace-route'
+import { DashboardLayout } from '@/layouts/dashboard-layout'
+import { LoginPage } from '@/pages/auth/login'
+import { RegisterPage } from '@/pages/auth/register'
+import { CreateWorkspacePage } from '@/pages/onboarding/create-workspace'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
-import { ProtectedRoute } from './components/auth/protected-route'
-import { useAuthContext } from './context/auth-context'
-import { LoginPage } from './pages/auth/login'
-import { RegisterPage } from './pages/auth/register'
 
-function DashboardPlaceholder() {
-    const { signOut } = useAuthContext()
+function DashboardHome() {
     return (
-        <div className="flex min-h-screen items-center justify-center bg-gray-50">
-            <div className="text-center">
-                <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-                <p className="mt-2 text-gray-600">Bem-vindo ao ContentOS!</p>
-                <button
-                    onClick={signOut}
-                    className="mt-4 rounded bg-blue-500 px-4 py-2 font-bold text-white hover:bg-blue-700"
-                >
-                    Logout
-                </button>
-            </div>
+        <div>
+            <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+            <p className="mt-2 text-gray-600">
+                Bem-vindo ao ContentOS! Selecione uma opção no menu lateral.
+            </p>
+        </div>
+    )
+}
+
+function PlaceholderPage({ title }: { title: string }) {
+    return (
+        <div>
+            <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
+            <p className="mt-2 text-gray-600">Página em desenvolvimento...</p>
         </div>
     )
 }
@@ -29,12 +32,60 @@ export function App() {
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/register" element={<RegisterPage />} />
 
+                <Route path="/onboarding" element={<CreateWorkspacePage />} />
+
                 <Route
                     path="/dashboard"
                     element={
-                        <ProtectedRoute>
-                            <DashboardPlaceholder />
-                        </ProtectedRoute>
+                        <ProtectedWorkspaceRoute>
+                            <DashboardLayout>
+                                <DashboardHome />
+                            </DashboardLayout>
+                        </ProtectedWorkspaceRoute>
+                    }
+                />
+
+                <Route
+                    path="/dashboard/articles"
+                    element={
+                        <ProtectedWorkspaceRoute>
+                            <DashboardLayout>
+                                <PlaceholderPage title="Artigos" />
+                            </DashboardLayout>
+                        </ProtectedWorkspaceRoute>
+                    }
+                />
+
+                <Route
+                    path="/dashboard/content"
+                    element={
+                        <ProtectedWorkspaceRoute>
+                            <DashboardLayout>
+                                <PlaceholderPage title="Conteúdo" />
+                            </DashboardLayout>
+                        </ProtectedWorkspaceRoute>
+                    }
+                />
+
+                <Route
+                    path="/dashboard/planning"
+                    element={
+                        <ProtectedWorkspaceRoute>
+                            <DashboardLayout>
+                                <PlaceholderPage title="Planeamento" />
+                            </DashboardLayout>
+                        </ProtectedWorkspaceRoute>
+                    }
+                />
+
+                <Route
+                    path="/dashboard/settings"
+                    element={
+                        <ProtectedWorkspaceRoute>
+                            <DashboardLayout>
+                                <PlaceholderPage title="Configurações" />
+                            </DashboardLayout>
+                        </ProtectedWorkspaceRoute>
                     }
                 />
 

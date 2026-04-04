@@ -74,37 +74,45 @@ USING (
 
 CREATE POLICY "workspace_members_select"
 ON workspace_members FOR SELECT
-USING ("workspaceId"::uuid IN (SELECT my_workspace_ids()));
+USING ("userId"::uuid = auth.uid() OR "workspaceId"::uuid IN (
+    SELECT "workspaceId"::uuid 
+    FROM workspace_members
+    WHERE "userId"::uuid = auth.uid() AND role = 'OWNER'
+));
 
+-- Inserção
 CREATE POLICY "workspace_members_insert"
 ON workspace_members FOR INSERT
 WITH CHECK (
-  "workspaceId"::uuid IN (
-    SELECT "workspaceId"::uuid
-    FROM workspace_members
-    WHERE "userId"::uuid = auth.uid() AND role = 'OWNER'
-  )
+    -- só OWNER pode adicionar
+    "workspaceId"::uuid IN (
+        SELECT "workspaceId"::uuid 
+        FROM workspace_members
+        WHERE "userId"::uuid = auth.uid() AND role = 'OWNER'
+    )
 );
 
+-- Deleção
 CREATE POLICY "workspace_members_delete"
 ON workspace_members FOR DELETE
 USING (
-  "userId"::uuid = auth.uid()
-  OR "workspaceId"::uuid IN (
-    SELECT "workspaceId"::uuid
-    FROM workspace_members
-    WHERE "userId"::uuid = auth.uid() AND role = 'OWNER'
-  )
+    "userId"::uuid = auth.uid()
+    OR "workspaceId"::uuid IN (
+        SELECT "workspaceId"::uuid
+        FROM workspace_members
+        WHERE "userId"::uuid = auth.uid() AND role = 'OWNER'
+    )
 );
 
+-- Update (alterar role)
 CREATE POLICY "workspace_members_update"
 ON workspace_members FOR UPDATE
 USING (
-  "workspaceId"::uuid IN (
-    SELECT "workspaceId"::uuid
-    FROM workspace_members
-    WHERE "userId"::uuid = auth.uid() AND role = 'OWNER'
-  )
+    "workspaceId"::uuid IN (
+        SELECT "workspaceId"::uuid
+        FROM workspace_members
+        WHERE "userId"::uuid = auth.uid() AND role = 'OWNER'
+    )
 );
 
 -- =============================================================================

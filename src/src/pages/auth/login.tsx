@@ -1,23 +1,16 @@
 import { useAuthContext } from '@/context/auth-context'
 import { loginSchema, type LoginFormData } from '@/lib/schemas/auth'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 export function LoginPage() {
     const navigate = useNavigate()
     const location = useLocation()
-    const { signIn, isLoading, error, clearError, user } = useAuthContext()
+    const { signIn, isLoading, error, clearError } = useAuthContext()
 
     const from =
         (location.state as { from?: Location })?.from?.pathname || '/dashboard'
-
-    useEffect(() => {
-        if (user) {
-            navigate(from, { replace: true })
-        }
-    }, [user, navigate, from])
 
     const {
         register,

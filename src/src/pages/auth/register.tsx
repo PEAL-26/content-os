@@ -1,19 +1,12 @@
 import { useAuthContext } from '@/context/auth-context'
 import { registerSchema, type RegisterFormData } from '@/lib/schemas/auth'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useNavigate } from 'react-router-dom'
 
 export function RegisterPage() {
     const navigate = useNavigate()
-    const { signUp, isLoading, error, clearError, user } = useAuthContext()
-
-    useEffect(() => {
-        if (user) {
-            navigate('/dashboard', { replace: true })
-        }
-    }, [user, navigate])
+    const { signUp, isLoading, error, clearError } = useAuthContext()
 
     const {
         register,
