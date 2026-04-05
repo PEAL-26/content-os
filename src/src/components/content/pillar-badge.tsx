@@ -1,5 +1,5 @@
-import { PILLAR_COLORS, PILLAR_LABELS } from '@/types/pillar'
 import type { ContentPillar } from '@/types/pillar'
+import { PILLAR_COLORS, PILLAR_LABELS } from '@/types/pillar'
 
 interface PillarBadgeProps {
     pillar: ContentPillar
@@ -74,7 +74,9 @@ export function PillarChip({ pillar, className = '' }: PillarChipProps) {
         <span
             className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${colors.bg} ${colors.border} ${colors.text} ${className}`}
         >
-            <span className={`h-1.5 w-1.5 rounded-full ${colors.text.replace('text-', 'bg-')}`} />
+            <span
+                className={`h-1.5 w-1.5 rounded-full ${colors.text.replace('text-', 'bg-')}`}
+            />
             <span>{label}</span>
         </span>
     )

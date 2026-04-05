@@ -1,6 +1,6 @@
-import React from 'react'
 import type { SocialChannel } from '@/types/database'
 import { CHANNEL_COLORS, CHANNEL_LABELS } from '@/types/database'
+import React from 'react'
 
 interface ChannelBadgeProps {
     channel: SocialChannel
@@ -10,12 +10,33 @@ interface ChannelBadgeProps {
 }
 
 const sizeClasses = {
-    sm: { icon: 'h-4 w-4', text: 'text-xs', padding: 'px-1.5 py-0.5', gap: 'gap-1' },
-    md: { icon: 'h-5 w-5', text: 'text-sm', padding: 'px-2 py-1', gap: 'gap-1.5' },
-    lg: { icon: 'h-6 w-6', text: 'text-base', padding: 'px-3 py-1.5', gap: 'gap-2' },
+    sm: {
+        icon: 'h-4 w-4',
+        text: 'text-xs',
+        padding: 'px-1.5 py-0.5',
+        gap: 'gap-1',
+    },
+    md: {
+        icon: 'h-5 w-5',
+        text: 'text-sm',
+        padding: 'px-2 py-1',
+        gap: 'gap-1.5',
+    },
+    lg: {
+        icon: 'h-6 w-6',
+        text: 'text-base',
+        padding: 'px-3 py-1.5',
+        gap: 'gap-2',
+    },
 }
 
-function ChannelSvgIcon({ channel, className }: { channel: SocialChannel; className: string }) {
+function ChannelSvgIcon({
+    channel,
+    className,
+}: {
+    channel: SocialChannel
+    className: string
+}) {
     const iconPaths: Record<SocialChannel, React.ReactNode> = {
         LINKEDIN: (
             <svg className={className} viewBox="0 0 24 24" fill="currentColor">

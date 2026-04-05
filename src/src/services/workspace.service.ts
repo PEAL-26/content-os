@@ -4,8 +4,8 @@ import type {
     WorkspaceMember,
     WorkspaceWithRole,
 } from '@/types/database'
-import { pillarService } from './pillar.service'
 import { v4 as uuidv4 } from 'uuid'
+import { pillarService } from './pillar.service'
 
 export type { Workspace, WorkspaceMember, WorkspaceWithRole }
 

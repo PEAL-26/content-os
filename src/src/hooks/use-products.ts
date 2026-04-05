@@ -1,8 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { useWorkspaceStore } from '@/stores/workspace-store'
+import type {
+    CreateProductInput,
+    UpdateProductInput,
+} from '@/lib/schemas/product'
 import { productService } from '@/services/product.service'
+import { useWorkspaceStore } from '@/stores/workspace-store'
 import type { Product } from '@/types/database'
-import type { CreateProductInput, UpdateProductInput } from '@/lib/schemas/product'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 export type ProductSortBy = 'createdAt' | 'name' | 'isActive'
 export type SortOrder = 'asc' | 'desc'
@@ -29,7 +32,9 @@ export function useProducts() {
             setProducts(data)
             hasFetchedRef.current = true
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Erro ao carregar produtos')
+            setError(
+                err instanceof Error ? err.message : 'Erro ao carregar produtos'
+            )
         } finally {
             setIsLoading(false)
         }
@@ -64,7 +69,10 @@ export function useProducts() {
             } catch (err) {
                 return {
                     success: false,
-                    error: err instanceof Error ? err.message : 'Erro ao criar produto',
+                    error:
+                        err instanceof Error
+                            ? err.message
+                            : 'Erro ao criar produto',
                 }
             }
         },
@@ -82,7 +90,10 @@ export function useProducts() {
             } catch (err) {
                 return {
                     success: false,
-                    error: err instanceof Error ? err.message : 'Erro ao atualizar produto',
+                    error:
+                        err instanceof Error
+                            ? err.message
+                            : 'Erro ao atualizar produto',
                 }
             }
         },
@@ -92,14 +103,15 @@ export function useProducts() {
     const toggleActive = useCallback(async (id: string) => {
         try {
             const product = await productService.toggleActive(id)
-            setProducts((prev) =>
-                prev.map((p) => (p.id === id ? product : p))
-            )
+            setProducts((prev) => prev.map((p) => (p.id === id ? product : p)))
             return { success: true, product }
         } catch (err) {
             return {
                 success: false,
-                error: err instanceof Error ? err.message : 'Erro ao arquivar produto',
+                error:
+                    err instanceof Error
+                        ? err.message
+                        : 'Erro ao arquivar produto',
             }
         }
     }, [])
@@ -117,7 +129,7 @@ export function useProducts() {
                 comparison = a.name.localeCompare(b.name)
                 break
             case 'isActive':
-                comparison = (a.isActive === b.isActive ? 0 : a.isActive ? -1 : 1)
+                comparison = a.isActive === b.isActive ? 0 : a.isActive ? -1 : 1
                 break
         }
 

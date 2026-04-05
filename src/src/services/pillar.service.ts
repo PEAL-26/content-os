@@ -1,6 +1,9 @@
 import { supabase } from '@/lib/supabase'
-import type { PillarConfig, PillarConfigInput } from '@/types/pillar'
-import type { ContentPillar } from '@/types/pillar'
+import type {
+    ContentPillar,
+    PillarConfig,
+    PillarConfigInput,
+} from '@/types/pillar'
 import { DEFAULT_PILLARS } from '@/types/pillar'
 import { v4 as uuidv4 } from 'uuid'
 

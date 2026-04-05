@@ -293,14 +293,17 @@ export function CreateWorkspacePage() {
                                             className="flex-1"
                                         />
                                         <span className="w-20 text-sm text-gray-600">
-                                            Produto ({100 - (valueRatio ?? 70)}%)
+                                            Produto ({100 - (valueRatio ?? 70)}
+                                            %)
                                         </span>
                                     </div>
 
                                     <div className="flex h-3 overflow-hidden rounded-full bg-gray-200">
                                         <div
                                             className="bg-blue-500 transition-all duration-200"
-                                            style={{ width: `${valueRatio ?? 70}%` }}
+                                            style={{
+                                                width: `${valueRatio ?? 70}%`,
+                                            }}
                                         />
                                         <div
                                             className="bg-purple-500 transition-all duration-200"

@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase'
-import { pillarService } from './pillar.service'
-import { channelService } from './channel.service'
 import { v4 as uuidv4 } from 'uuid'
+import { channelService } from './channel.service'
+import { pillarService } from './pillar.service'
 
 export interface WorkspaceInitResult {
     pillarsCreated: boolean
@@ -10,7 +10,9 @@ export interface WorkspaceInitResult {
 }
 
 export const workspaceInitService = {
-    async ensureDefaultConfigs(workspaceId: string): Promise<WorkspaceInitResult> {
+    async ensureDefaultConfigs(
+        workspaceId: string
+    ): Promise<WorkspaceInitResult> {
         const results: WorkspaceInitResult = {
             pillarsCreated: false,
             channelsCreated: false,
@@ -18,15 +20,15 @@ export const workspaceInitService = {
         }
 
         try {
-            results.pillarsCreated = await pillarService.checkAndCreatePillars(
-                workspaceId
-            )
+            results.pillarsCreated =
+                await pillarService.checkAndCreatePillars(workspaceId)
         } catch (error) {
             console.error('Erro ao inicializar pilares:', error)
         }
 
         try {
-            results.channelsCreated = await channelService.checkAndCreateChannels(workspaceId)
+            results.channelsCreated =
+                await channelService.checkAndCreateChannels(workspaceId)
         } catch (error) {
             console.error('Erro ao inicializar canais:', error)
         }

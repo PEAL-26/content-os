@@ -84,7 +84,9 @@ export const channelService = {
         return data as ChannelConfig
     },
 
-    async getPrimaryChannel(workspaceId: string): Promise<ChannelConfig | null> {
+    async getPrimaryChannel(
+        workspaceId: string
+    ): Promise<ChannelConfig | null> {
         const { data, error } = await supabase
             .from('channel_configs')
             .select('*')
@@ -142,7 +144,9 @@ export const channelService = {
         if (input.isPrimary === true) {
             const channel = await this.getChannel(id)
             if (channel && !channel.isPrimary) {
-                const currentPrimary = await this.getPrimaryChannel(channel.workspaceId)
+                const currentPrimary = await this.getPrimaryChannel(
+                    channel.workspaceId
+                )
                 if (currentPrimary && currentPrimary.id !== id) {
                     await supabase
                         .from('channel_configs')
@@ -203,7 +207,9 @@ export const channelService = {
             .insert(channelsToInsert)
 
         if (error) {
-            throw new Error(`Erro ao criar canais por defeito: ${error.message}`)
+            throw new Error(
+                `Erro ao criar canais por defeito: ${error.message}`
+            )
         }
     },
 

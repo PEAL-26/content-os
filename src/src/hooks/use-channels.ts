@@ -1,7 +1,10 @@
-import { useState, useEffect, useCallback } from 'react'
-import { channelService, type UpdateChannelInput } from '@/services/channel.service'
 import { useWorkspace } from '@/hooks/use-workspace'
+import {
+    channelService,
+    type UpdateChannelInput,
+} from '@/services/channel.service'
 import type { ChannelConfig, SocialChannel } from '@/types/database'
+import { useCallback, useEffect, useState } from 'react'
 
 export function useChannels() {
     const { currentWorkspace } = useWorkspace()
@@ -20,7 +23,9 @@ export function useChannels() {
             setChannels(data)
         } catch (err) {
             console.error('Error fetching channels:', err)
-            setError(err instanceof Error ? err.message : 'Erro ao carregar canais')
+            setError(
+                err instanceof Error ? err.message : 'Erro ao carregar canais'
+            )
         } finally {
             setIsLoading(false)
         }
@@ -58,29 +63,44 @@ export function useChannels() {
                 return newChannel
             } catch (err) {
                 console.error('Error creating channel:', err)
-                setError(err instanceof Error ? err.message : 'Erro ao criar canal')
+                setError(
+                    err instanceof Error ? err.message : 'Erro ao criar canal'
+                )
                 return null
             }
         },
         [currentWorkspace?.id]
     )
 
-    const deleteChannel = useCallback(async (channelId: string): Promise<boolean> => {
-        try {
-            await channelService.deleteChannel(channelId)
-            setChannels((prev) => prev.filter((ch) => ch.id !== channelId))
-            return true
-        } catch (err) {
-            console.error('Error deleting channel:', err)
-            setError(err instanceof Error ? err.message : 'Erro ao eliminar canal')
-            return false
-        }
-    }, [])
+    const deleteChannel = useCallback(
+        async (channelId: string): Promise<boolean> => {
+            try {
+                await channelService.deleteChannel(channelId)
+                setChannels((prev) => prev.filter((ch) => ch.id !== channelId))
+                return true
+            } catch (err) {
+                console.error('Error deleting channel:', err)
+                setError(
+                    err instanceof Error
+                        ? err.message
+                        : 'Erro ao eliminar canal'
+                )
+                return false
+            }
+        },
+        []
+    )
 
     const updateChannel = useCallback(
-        async (channelId: string, data: UpdateChannelInput): Promise<boolean> => {
+        async (
+            channelId: string,
+            data: UpdateChannelInput
+        ): Promise<boolean> => {
             try {
-                const updatedChannel = await channelService.updateChannel(channelId, data)
+                const updatedChannel = await channelService.updateChannel(
+                    channelId,
+                    data
+                )
 
                 setChannels((prev) => {
                     if (data.isPrimary === true) {
@@ -101,7 +121,11 @@ export function useChannels() {
                 return true
             } catch (err) {
                 console.error('Error updating channel:', err)
-                setError(err instanceof Error ? err.message : 'Erro ao atualizar canal')
+                setError(
+                    err instanceof Error
+                        ? err.message
+                        : 'Erro ao atualizar canal'
+                )
                 return false
             }
         },

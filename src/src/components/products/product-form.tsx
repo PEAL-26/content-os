@@ -1,12 +1,12 @@
-import { useEffect } from 'react'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
 import {
     createProductSchema,
     type CreateProductInput,
 } from '@/lib/schemas/product'
 import { productService } from '@/services/product.service'
 import type { Product } from '@/types/database'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { useEffect } from 'react'
+import { useForm } from 'react-hook-form'
 
 interface ProductFormProps {
     product?: Product
@@ -84,7 +84,7 @@ export function ProductForm({
                     <input
                         {...register('name')}
                         type="text"
-                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
                         placeholder="Sistema de Gestão de Pedidos"
                     />
                     {errors.name && (
@@ -102,7 +102,7 @@ export function ProductForm({
                         <input
                             {...register('slug')}
                             type="text"
-                            className="mt-1 block flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            className="mt-1 block flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
                             placeholder="sistema-gestao-pedidos"
                         />
                         <button
@@ -141,7 +141,7 @@ export function ProductForm({
                 <input
                     {...register('tagline')}
                     type="text"
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
                     placeholder="Das pedidos ao papel — automatizado em 24h"
                 />
                 {errors.tagline && (
@@ -158,7 +158,7 @@ export function ProductForm({
                 <textarea
                     {...register('description')}
                     rows={2}
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
                     placeholder="Sistema simples para gerir pedidos, clientes e entregas sem complexidade técnica."
                 />
                 {errors.description && (
@@ -176,7 +176,7 @@ export function ProductForm({
                     <input
                         {...register('landingUrl')}
                         type="url"
-                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
                         placeholder="https://empresa.com/produto"
                     />
                     {errors.landingUrl && (
@@ -193,7 +193,7 @@ export function ProductForm({
                     <input
                         {...register('demoUrl')}
                         type="url"
-                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
                         placeholder="https://demo.empresa.com"
                     />
                     {errors.demoUrl && (
@@ -211,7 +211,7 @@ export function ProductForm({
                 <input
                     {...register('targetAudience')}
                     type="text"
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
                     placeholder="Empresas com 5-50 funcionários que gerem pedidos manualmente"
                 />
                 {errors.targetAudience && (
@@ -228,7 +228,7 @@ export function ProductForm({
                 <textarea
                     {...register('problemSolved')}
                     rows={3}
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
                     placeholder="Perda de pedidos, erros de comunicação interna e falta de visibilidade sobre o estado das encomendas"
                 />
                 <p className="mt-1 text-xs text-gray-500">

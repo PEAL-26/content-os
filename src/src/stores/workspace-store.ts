@@ -152,7 +152,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     },
 
     clearWorkspace: () => {
-        set({ currentWorkspace: null, workspaces: [], error: null, hasFetched: false })
+        set({
+            currentWorkspace: null,
+            workspaces: [],
+            error: null,
+            hasFetched: false,
+        })
     },
 
     clearError: () => {

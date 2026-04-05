@@ -1,9 +1,12 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { useWorkspaceStore } from '@/stores/workspace-store'
 import { pillarService } from '@/services/pillar.service'
 import { workspaceInitService } from '@/services/workspace-init.service'
-import type { PillarConfig, PillarConfigInput } from '@/types/pillar'
-import type { ContentPillar } from '@/types/pillar'
+import { useWorkspaceStore } from '@/stores/workspace-store'
+import type {
+    ContentPillar,
+    PillarConfig,
+    PillarConfigInput,
+} from '@/types/pillar'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 interface UpdateState {
     isLoading: boolean
@@ -18,7 +21,9 @@ export function usePillars() {
     const [isInitializing, setIsInitializing] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [initMessage, setInitMessage] = useState<string | null>(null)
-    const [updateStates, setUpdateStates] = useState<Record<string, UpdateState>>({})
+    const [updateStates, setUpdateStates] = useState<
+        Record<string, UpdateState>
+    >({})
     const hasFetchedRef = useRef(false)
 
     const workspaceId = currentWorkspace?.id
@@ -50,7 +55,9 @@ export function usePillars() {
 
             hasFetchedRef.current = true
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Erro ao carregar pilares')
+            setError(
+                err instanceof Error ? err.message : 'Erro ao carregar pilares'
+            )
         } finally {
             setIsLoading(false)
             setIsInitializing(false)

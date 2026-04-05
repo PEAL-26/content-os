@@ -179,7 +179,7 @@ apenas arquivar.
 
 ---
 
-### [] PROMPT 2.4 — Configuração de Canais Sociais
+### [x] PROMPT 2.4 — Configuração de Canais Sociais
 
 ```markdown
 Antes de implementar qualquer coisa, analisa o que já existe no projecto:
@@ -214,7 +214,7 @@ começa inactivo por defeito (conforme estratégia do documento (README.md)).
 
 ## FASE 3 — Artigos (Core da aplicação)
 
-### [] PROMPT 3.1 — Lista de artigos e estrutura da página
+### [x] PROMPT 3.1 — Lista de artigos e estrutura da página
 
 ```markdown
 Antes de implementar qualquer coisa, analisa o que já existe no projecto:
@@ -249,7 +249,7 @@ artigo sem recarregar a página. Qualquer função ligada ao supabase, deve esta
 
 ---
 
-### [] PROMPT 3.2 — Editor de artigos
+### [x] PROMPT 3.2 — Editor de artigos
 
 ```markdown
 Antes de implementar qualquer coisa, analisa o que já existe no projecto:

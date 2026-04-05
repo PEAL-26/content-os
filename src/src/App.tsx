@@ -1,12 +1,15 @@
 import { ProtectedWorkspaceRoute } from '@/components/auth/protected-workspace-route'
 import { DashboardLayout } from '@/layouts/dashboard-layout'
 import { SettingsLayout } from '@/layouts/settings-layout'
+import { ArticleEditor } from '@/pages/articles/article-editor'
+import { ArticleList } from '@/pages/articles/article-list'
 import { LoginPage } from '@/pages/auth/login'
 import { RegisterPage } from '@/pages/auth/register'
 import { CreateWorkspacePage } from '@/pages/onboarding/create-workspace'
+import { ChannelsPage } from '@/pages/settings/channels'
 import { PillarsPage } from '@/pages/settings/pillars'
 import { ProductsPage } from '@/pages/settings/products'
-import { ChannelsPage } from '@/pages/settings/channels'
+import { NuqsAdapter } from 'nuqs/adapters/react-router/v7'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 
 function DashboardHome() {
@@ -42,131 +45,147 @@ function SettingsHome() {
 export function App() {
     return (
         <BrowserRouter>
-            <Routes>
-                <Route path="/login" element={<LoginPage />} />
-                <Route path="/register" element={<RegisterPage />} />
+            <NuqsAdapter>
+                <Routes>
+                    <Route path="/login" element={<LoginPage />} />
+                    <Route path="/register" element={<RegisterPage />} />
 
-                <Route path="/onboarding" element={<CreateWorkspacePage />} />
+                    <Route
+                        path="/onboarding"
+                        element={<CreateWorkspacePage />}
+                    />
 
-                <Route
-                    path="/dashboard"
-                    element={
-                        <ProtectedWorkspaceRoute>
-                            <DashboardLayout>
-                                <DashboardHome />
-                            </DashboardLayout>
-                        </ProtectedWorkspaceRoute>
-                    }
-                />
+                    <Route
+                        path="/dashboard"
+                        element={
+                            <ProtectedWorkspaceRoute>
+                                <DashboardLayout>
+                                    <DashboardHome />
+                                </DashboardLayout>
+                            </ProtectedWorkspaceRoute>
+                        }
+                    />
 
-                <Route
-                    path="/dashboard/articles"
-                    element={
-                        <ProtectedWorkspaceRoute>
-                            <DashboardLayout>
-                                <PlaceholderPage title="Artigos" />
-                            </DashboardLayout>
-                        </ProtectedWorkspaceRoute>
-                    }
-                />
+                    <Route
+                        path="/dashboard/articles"
+                        element={
+                            <ProtectedWorkspaceRoute>
+                                <DashboardLayout>
+                                    <ArticleList />
+                                </DashboardLayout>
+                            </ProtectedWorkspaceRoute>
+                        }
+                    />
 
-                <Route
-                    path="/dashboard/content"
-                    element={
-                        <ProtectedWorkspaceRoute>
-                            <DashboardLayout>
-                                <PlaceholderPage title="Conteúdo" />
-                            </DashboardLayout>
-                        </ProtectedWorkspaceRoute>
-                    }
-                />
+                    <Route
+                        path="/dashboard/articles/:id/edit"
+                        element={
+                            <ProtectedWorkspaceRoute>
+                                <DashboardLayout>
+                                    <ArticleEditor />
+                                </DashboardLayout>
+                            </ProtectedWorkspaceRoute>
+                        }
+                    />
 
-                <Route
-                    path="/dashboard/planning"
-                    element={
-                        <ProtectedWorkspaceRoute>
-                            <DashboardLayout>
-                                <PlaceholderPage title="Planeamento" />
-                            </DashboardLayout>
-                        </ProtectedWorkspaceRoute>
-                    }
-                />
+                    <Route
+                        path="/dashboard/content"
+                        element={
+                            <ProtectedWorkspaceRoute>
+                                <DashboardLayout>
+                                    <PlaceholderPage title="Conteúdo" />
+                                </DashboardLayout>
+                            </ProtectedWorkspaceRoute>
+                        }
+                    />
 
-                <Route
-                    path="/dashboard/settings"
-                    element={
-                        <ProtectedWorkspaceRoute>
-                            <DashboardLayout>
-                                <SettingsLayout>
-                                    <SettingsHome />
-                                </SettingsLayout>
-                            </DashboardLayout>
-                        </ProtectedWorkspaceRoute>
-                    }
-                />
+                    <Route
+                        path="/dashboard/planning"
+                        element={
+                            <ProtectedWorkspaceRoute>
+                                <DashboardLayout>
+                                    <PlaceholderPage title="Planeamento" />
+                                </DashboardLayout>
+                            </ProtectedWorkspaceRoute>
+                        }
+                    />
 
-                <Route
-                    path="/dashboard/settings/pillars"
-                    element={
-                        <ProtectedWorkspaceRoute>
-                            <DashboardLayout>
-                                <SettingsLayout>
-                                    <PillarsPage />
-                                </SettingsLayout>
-                            </DashboardLayout>
-                        </ProtectedWorkspaceRoute>
-                    }
-                />
+                    <Route
+                        path="/dashboard/settings"
+                        element={
+                            <ProtectedWorkspaceRoute>
+                                <DashboardLayout>
+                                    <SettingsLayout>
+                                        <SettingsHome />
+                                    </SettingsLayout>
+                                </DashboardLayout>
+                            </ProtectedWorkspaceRoute>
+                        }
+                    />
 
-                <Route
-                    path="/dashboard/settings/channels"
-                    element={
-                        <ProtectedWorkspaceRoute>
-                            <DashboardLayout>
-                                <SettingsLayout>
-                                    <ChannelsPage />
-                                </SettingsLayout>
-                            </DashboardLayout>
-                        </ProtectedWorkspaceRoute>
-                    }
-                />
+                    <Route
+                        path="/dashboard/settings/pillars"
+                        element={
+                            <ProtectedWorkspaceRoute>
+                                <DashboardLayout>
+                                    <SettingsLayout>
+                                        <PillarsPage />
+                                    </SettingsLayout>
+                                </DashboardLayout>
+                            </ProtectedWorkspaceRoute>
+                        }
+                    />
 
-                <Route
-                    path="/dashboard/settings/products"
-                    element={
-                        <ProtectedWorkspaceRoute>
-                            <DashboardLayout>
-                                <SettingsLayout>
-                                    <ProductsPage />
-                                </SettingsLayout>
-                            </DashboardLayout>
-                        </ProtectedWorkspaceRoute>
-                    }
-                />
+                    <Route
+                        path="/dashboard/settings/channels"
+                        element={
+                            <ProtectedWorkspaceRoute>
+                                <DashboardLayout>
+                                    <SettingsLayout>
+                                        <ChannelsPage />
+                                    </SettingsLayout>
+                                </DashboardLayout>
+                            </ProtectedWorkspaceRoute>
+                        }
+                    />
 
-                <Route
-                    path="/dashboard/settings/:section"
-                    element={
-                        <ProtectedWorkspaceRoute>
-                            <DashboardLayout>
-                                <SettingsLayout>
-                                    <PlaceholderPage title="Configurações" />
-                                </SettingsLayout>
-                            </DashboardLayout>
-                        </ProtectedWorkspaceRoute>
-                    }
-                />
+                    <Route
+                        path="/dashboard/settings/products"
+                        element={
+                            <ProtectedWorkspaceRoute>
+                                <DashboardLayout>
+                                    <SettingsLayout>
+                                        <ProductsPage />
+                                    </SettingsLayout>
+                                </DashboardLayout>
+                            </ProtectedWorkspaceRoute>
+                        }
+                    />
 
-                <Route
-                    path="/"
-                    element={<Navigate to="/dashboard" replace />}
-                />
+                    <Route
+                        path="/dashboard/settings/:section"
+                        element={
+                            <ProtectedWorkspaceRoute>
+                                <DashboardLayout>
+                                    <SettingsLayout>
+                                        <PlaceholderPage title="Configurações" />
+                                    </SettingsLayout>
+                                </DashboardLayout>
+                            </ProtectedWorkspaceRoute>
+                        }
+                    />
 
-                <Route
-                    path="*"
-                    element={<Navigate to="/dashboard" replace />}
-                />
-            </Routes>
+                    <Route
+                        path="/"
+                        element={<Navigate to="/dashboard" replace />}
+                    />
+
+                    <Route
+                        path="*"
+                        element={<Navigate to="/dashboard" replace />}
+                    />
+                </Routes>
+            </NuqsAdapter>
         </BrowserRouter>
     )
 }

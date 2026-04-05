@@ -1,8 +1,12 @@
-import { useState, useEffect } from 'react'
+import type {
+    ContentPillar,
+    FunnelStage,
+    PillarConfig,
+    PillarConfigInput,
+} from '@/types/pillar'
+import { FUNNEL_STAGE_LABELS, PILLAR_COLORS } from '@/types/pillar'
+import { useEffect, useState } from 'react'
 import { PillarBadge } from './pillar-badge'
-import { PILLAR_COLORS, FUNNEL_STAGE_LABELS } from '@/types/pillar'
-import type { PillarConfig, PillarConfigInput } from '@/types/pillar'
-import type { ContentPillar, FunnelStage } from '@/types/pillar'
 
 interface PillarCardProps {
     pillar: PillarConfig
@@ -113,7 +117,7 @@ export function PillarCard({
                                             name: e.target.value,
                                         }))
                                     }
-                                    className="rounded-md border border-gray-300 px-2 py-1 text-sm font-medium focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                    className="rounded-md border border-gray-300 px-2 py-1 text-sm font-medium focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
                                 />
                             ) : (
                                 <h3 className="font-semibold text-gray-900">
@@ -135,7 +139,7 @@ export function PillarCard({
                                 disabled={isSaving}
                                 className="peer sr-only"
                             />
-                            <div className="peer h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-blue-600 peer-checked:after:translate-x-full peer-checked:after:border-white peer-disabled:cursor-not-allowed peer-disabled:opacity-50" />
+                            <div className="peer h-6 w-11 rounded-full bg-gray-200 peer-checked:bg-blue-600 peer-disabled:cursor-not-allowed peer-disabled:opacity-50 after:absolute after:top-[2px] after:left-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:after:translate-x-full peer-checked:after:border-white" />
                         </label>
                         <span className="text-xs text-gray-500">
                             {pillar.isActive ? 'Ativo' : 'Inativo'}
@@ -159,7 +163,7 @@ export function PillarCard({
                                     objective: e.target.value,
                                 }))
                             }
-                            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
                             placeholder="Descreva o objetivo deste pilar"
                         />
                     ) : (
@@ -182,7 +186,7 @@ export function PillarCard({
                                     funnelStage: e.target.value as FunnelStage,
                                 }))
                             }
-                            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
                         >
                             {Object.entries(FUNNEL_STAGE_LABELS).map(
                                 ([value, label]) => (
@@ -213,7 +217,7 @@ export function PillarCard({
                                 }))
                             }
                             rows={2}
-                            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
                             placeholder="Descrição interna deste pilar"
                         />
                     ) : (
@@ -282,7 +286,7 @@ export function PillarCard({
                                         }
                                     }}
                                     placeholder="Adicionar exemplo..."
-                                    className="flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                    className="flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
                                 />
                                 <button
                                     type="button"
@@ -297,9 +301,7 @@ export function PillarCard({
                 </div>
 
                 <div className="flex items-center justify-between border-t pt-4">
-                    {error && (
-                        <p className="text-sm text-red-600">{error}</p>
-                    )}
+                    {error && <p className="text-sm text-red-600">{error}</p>}
                     {isSuccess && (
                         <p className="flex items-center gap-1 text-sm text-green-600">
                             <svg

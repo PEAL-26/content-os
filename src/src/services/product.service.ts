@@ -1,6 +1,9 @@
+import type {
+    CreateProductInput,
+    UpdateProductInput,
+} from '@/lib/schemas/product'
 import { supabase } from '@/lib/supabase'
 import type { Product } from '@/types/database'
-import type { CreateProductInput, UpdateProductInput } from '@/lib/schemas/product'
 import { v4 as uuidv4 } from 'uuid'
 
 export const productService = {
@@ -135,7 +138,9 @@ export const productService = {
             .single()
 
         if (error) {
-            throw new Error(`Erro ao alternar estado do produto: ${error.message}`)
+            throw new Error(
+                `Erro ao alternar estado do produto: ${error.message}`
+            )
         }
 
         return data as Product

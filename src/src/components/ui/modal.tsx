@@ -139,7 +139,9 @@ export function ConfirmModal({
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={title} size="sm">
             <div className="space-y-4">
-                <div className={`flex items-start gap-3 rounded-lg ${styles.bg} p-3`}>
+                <div
+                    className={`flex items-start gap-3 rounded-lg ${styles.bg} p-3`}
+                >
                     <svg
                         className={`h-5 w-5 ${styles.icon} mt-0.5`}
                         fill="none"

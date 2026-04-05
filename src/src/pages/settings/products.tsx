@@ -1,10 +1,10 @@
-import { useState } from 'react'
-import { useProducts, type ProductSortBy } from '@/hooks/use-products'
-import { Modal, ConfirmModal } from '@/components/ui/modal'
-import { ProductForm } from '@/components/products/product-form'
 import { ProductCard } from '@/components/products/product-card'
-import type { Product } from '@/types/database'
+import { ProductForm } from '@/components/products/product-form'
+import { ConfirmModal, Modal } from '@/components/ui/modal'
+import { useProducts, type ProductSortBy } from '@/hooks/use-products'
 import type { CreateProductInput } from '@/lib/schemas/product'
+import type { Product } from '@/types/database'
+import { useState } from 'react'
 
 const sortOptions: { value: ProductSortBy; label: string }[] = [
     { value: 'createdAt', label: 'Data de criação' },
@@ -31,7 +31,9 @@ export function ProductsPage() {
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false)
     const [editingProduct, setEditingProduct] = useState<Product | null>(null)
-    const [productToArchive, setProductToArchive] = useState<Product | null>(null)
+    const [productToArchive, setProductToArchive] = useState<Product | null>(
+        null
+    )
     const [isSaving, setIsSaving] = useState(false)
     const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null)
 
@@ -121,7 +123,8 @@ export function ProductsPage() {
                         Produtos
                     </h1>
                     <p className="mt-1 text-sm text-gray-500">
-                        Gerir os produtos da empresa para criar conteúdo direcionado
+                        Gerir os produtos da empresa para criar conteúdo
+                        direcionado
                     </p>
                 </div>
 
@@ -148,7 +151,7 @@ export function ProductsPage() {
 
             {feedbackMessage && (
                 <div className="rounded-md bg-green-50 p-3">
-                    <p className="text-sm text-green-700 flex items-center gap-2">
+                    <p className="flex items-center gap-2 text-sm text-green-700">
                         <svg
                             className="h-4 w-4"
                             fill="none"
@@ -175,11 +178,15 @@ export function ProductsPage() {
 
             <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
-                    <label className="text-sm text-gray-600">Ordenar por:</label>
+                    <label className="text-sm text-gray-600">
+                        Ordenar por:
+                    </label>
                     <select
                         value={sortBy}
-                        onChange={(e) => setSortBy(e.target.value as ProductSortBy)}
-                        className="rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        onChange={(e) =>
+                            setSortBy(e.target.value as ProductSortBy)
+                        }
+                        className="rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
                     >
                         {sortOptions.map((option) => (
                             <option key={option.value} value={option.value}>
@@ -195,15 +202,35 @@ export function ProductsPage() {
                 >
                     {sortOrder === 'desc' ? (
                         <>
-                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            <svg
+                                className="h-4 w-4"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M19 9l-7 7-7-7"
+                                />
                             </svg>
                             Decrescente
                         </>
                     ) : (
                         <>
-                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                            <svg
+                                className="h-4 w-4"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M5 15l7-7 7 7"
+                                />
                             </svg>
                             Crescente
                         </>
@@ -211,7 +238,8 @@ export function ProductsPage() {
                 </button>
 
                 <span className="text-sm text-gray-500">
-                    {activeProducts.length} ativo{activeProducts.length !== 1 ? 's' : ''}
+                    {activeProducts.length} ativo
+                    {activeProducts.length !== 1 ? 's' : ''}
                     {archivedProducts.length > 0 &&
                         ` · ${archivedProducts.length} archivado${archivedProducts.length !== 1 ? 's' : ''}`}
                 </span>
@@ -242,8 +270,18 @@ export function ProductsPage() {
                         onClick={handleOpenCreate}
                         className="mt-4 inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
                     >
-                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        <svg
+                            className="h-4 w-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M12 4v16m8-8H4"
+                            />
                         </svg>
                         Adicionar produto
                     </button>
@@ -315,7 +353,11 @@ export function ProductsPage() {
                     setProductToArchive(null)
                 }}
                 onConfirm={handleConfirmArchive}
-                title={productToArchive?.isActive ? 'Arquivar Produto' : 'Ativar Produto'}
+                title={
+                    productToArchive?.isActive
+                        ? 'Arquivar Produto'
+                        : 'Ativar Produto'
+                }
                 message={
                     productToArchive?.isActive
                         ? `Ao arquivar "${productToArchive?.name}", os artigos e conteúdos existentes não serão afetados. Pode ativar o produto novamente a qualquer momento.`

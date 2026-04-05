@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from 'react'
 import { useProducts } from '@/hooks/use-products'
+import { useEffect, useRef, useState } from 'react'
 
 interface ProductSelectorProps {
     value: string | null
@@ -37,7 +37,8 @@ export function ProductSelector({
         }
 
         document.addEventListener('mousedown', handleClickOutside)
-        return () => document.removeEventListener('mousedown', handleClickOutside)
+        return () =>
+            document.removeEventListener('mousedown', handleClickOutside)
     }, [])
 
     return (
@@ -45,7 +46,7 @@ export function ProductSelector({
             <button
                 type="button"
                 onClick={() => setIsOpen(!isOpen)}
-                className="flex w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm hover:border-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="flex w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm hover:border-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
             >
                 <span
                     className={`truncate ${
@@ -72,7 +73,7 @@ export function ProductSelector({
             </button>
 
             {isOpen && (
-                <div className="absolute z-50 mt-1 w-full rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5">
+                <div className="ring-opacity-5 absolute z-50 mt-1 w-full rounded-md bg-white py-1 shadow-lg ring-1 ring-black">
                     {products.length === 0 ? (
                         <div className="px-4 py-2 text-sm text-gray-500">
                             Nenhum produto disponível

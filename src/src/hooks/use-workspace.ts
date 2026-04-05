@@ -1,8 +1,8 @@
+import { useAuthContext } from '@/context/auth-context'
+import { workspaceInitService } from '@/services/workspace-init.service'
+import { useWorkspaceStore } from '@/stores/workspace-store'
 import { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAuthContext } from '@/context/auth-context'
-import { useWorkspaceStore } from '@/stores/workspace-store'
-import { workspaceInitService } from '@/services/workspace-init.service'
 
 export function useWorkspace() {
     const { user, isLoading: authLoading } = useAuthContext()
