@@ -145,7 +145,7 @@ por pilar com feedback visual de sucesso/erro. Sem page refresh após guardar.
 
 ---
 
-### [] PROMPT 2.3 — Gestão de Produtos
+### [x] PROMPT 2.3 — Gestão de Produtos
 
 ```markdown
 Antes de implementar qualquer coisa, analisa o que já existe no projecto:
@@ -179,7 +179,7 @@ apenas arquivar.
 
 ---
 
-### PROMPT 2.4 — Configuração de Canais Sociais
+### [] PROMPT 2.4 — Configuração de Canais Sociais
 
 ```markdown
 Antes de implementar qualquer coisa, analisa o que já existe no projecto:
@@ -193,69 +193,69 @@ o seguinte:
 
 Implementa a configuração dos canais de distribuição. Cria:
 
-- `src/pages/Settings/Channels.tsx` — página com um card por canal social.
+- `src/pages/settings/channels.tsx` — página com um card por canal social.
   Cada card tem: ícone do canal, toggle activo/inactivo, campo para handle/URL
   do perfil, toggle "canal principal" (só um pode ser principal — LinkedIn por
   defeito), campo de tom padrão para esse canal, e notas internas. Canal
   inactivo fica com card em estado desabilitado (opacity reduzida)
-- `src/hooks/useChannels.ts` — hook com `getChannels()`, `updateChannel()`,
+- `src/hooks/use-channels.ts` — hook com `getChannels()`, `updateChannel()`,
   `getActiveChannels()`. O método `getActiveChannels()` será usado no
   planeador e gerador de conteúdo
-- `src/components/channels/ChannelBadge.tsx` — componente reutilizável com
+- `src/components/channels/channel-badge.tsx` — componente reutilizável com
   ícone + nome do canal. Cores por canal: LinkedIn=azul, Instagram=rosa,
   TikTok=preto, YouTube=vermelho. Aceita prop `size` (sm/md/lg)
 
 Garantir que apenas um canal pode ter `isPrimary = true` por workspace — ao
 activar um como principal, desactivar automaticamente o anterior. O YouTube
-começa inactivo por defeito (conforme estratégia do documento).
+começa inactivo por defeito (conforme estratégia do documento (README.md)).
 ```
 
 ---
 
 ## FASE 3 — Artigos (Core da aplicação)
 
-### PROMPT 3.1 — Lista de artigos e estrutura da página
+### [] PROMPT 3.1 — Lista de artigos e estrutura da página
 
 ```markdown
 Antes de implementar qualquer coisa, analisa o que já existe no projecto:
-verifica se existe alguma página de artigos em `src/pages/Articles/`, se
-o `PillarBadge` e `ProductSelector` já estão implementados, se existe
+verifica se existe alguma página de artigos em `src/pages/articles/`, se
+o `pillar-badge` e `product-selector` já estão implementados, se existe
 componente de layout principal com sidebar/header já configurado, e como
-está configurado o router em `src/App.tsx`. Confirma no schema os campos
-do modelo `Article` (status enum: DRAFT/REVIEW/APPROVED/PUBLISHED, campos
+está configurado o router em `src/app.tsx`. Confirma no schema os campos
+do modelo `article` (status enum: DRAFT/REVIEW/APPROVED/PUBLISHED, campos
 SEO, relações com Product e PillarConfig). Só depois de teres esse contexto
 completo, implementa o seguinte:
 
 Implementa a página de lista de artigos. Cria:
 
-- `src/pages/Articles/ArticleList.tsx` — lista paginada de artigos com:
+- `src/pages/articles/article-list.tsx` — lista paginada de artigos com:
   filtros por status (todos / rascunho / revisão / aprovado / publicado),
   filtro por pilar (P1/P2/P3/P4), filtro por produto, barra de pesquisa
   por título. Cada item da lista mostra: título, pilar (badge), produto
   associado (se houver), status (badge com cor), data de criação, número
   de peças de conteúdo geradas, e acções rápidas (editar, duplicar, apagar)
-- `src/hooks/useArticles.ts` — hook com `getArticles(filters)`,
+- `src/hooks/use-articles.ts` — hook com `getArticles(filters)`,
   `createArticle()`, `updateArticle()`, `deleteArticle()`,
   `duplicateArticle()`. Todas as queries filtradas por `workspaceId`
-- `src/components/articles/ArticleStatusBadge.tsx` — badge com cor por
-  status: DRAFT=cinza, REVIEW=amarelo, APPROVED=verde-claro, PUBLISHED=verde
+- `src/components/articles/article-status-badge.tsx` — badge com cor por
+  status: DRAFT=cinza, REVIEW=amarelo, APPROVED=verde, PUBLISHED=azul
 - Estado vazio com CTA claro: "Ainda não tens artigos. Cria o primeiro ou
   gera um com IA"
 
 Sem paginação infinita — usar paginação simples com "Carregar mais" (limit 20
 por defecto). A lista deve actualizar em tempo real após criar ou editar um
-artigo sem recarregar a página.
+artigo sem recarregar a página. Qualquer função ligada ao supabase, deve estar na pasta services, confome o padrão já usado
 ```
 
 ---
 
-### PROMPT 3.2 — Editor de artigos
+### [] PROMPT 3.2 — Editor de artigos
 
 ```markdown
 Antes de implementar qualquer coisa, analisa o que já existe no projecto:
 verifica se existe algum editor de texto instalado (TipTap, react-md-editor,
-ou similar) nas dependências do `package.json`, se a página `ArticleList.tsx`
-já está implementada e o hook `useArticles.ts` está disponível, se o
+ou similar) nas dependências do `package.json`, se a página `article-list.tsx`
+já está implementada e o hook `use-articles.ts` está disponível, se o
 `ProductSelector` e `PillarBadge` já estão criados, e se existe alguma
 lógica de geração de slug. Confirma todos os campos editáveis do modelo
 `Article` incluindo os arrays (`keywords`) e campos opcionais de SEO.
@@ -263,7 +263,7 @@ Só depois de teres esse contexto completo, implementa o seguinte:
 
 Implementa o editor completo de artigos. Cria:
 
-- `src/pages/Articles/ArticleEditor.tsx` — página de criação e edição com
+- `src/pages/articles/article-editor.tsx` — página de criação e edição com
   dois painéis: painel esquerdo com formulário (título, pilar, produto,
   tags, campos SEO expansíveis) e painel direito com o editor de texto.
   O slug é gerado automaticamente ao escrever o título mas editável
@@ -274,10 +274,10 @@ Implementa o editor completo de artigos. Cria:
 - Editor de texto: usar `react-md-editor` (simples, sem dependências
   pesadas) com preview em Markdown. Se já existir outro editor no projecto,
   adaptar para ele
-- Auto-save: guardar rascunho automaticamente 2 segundos após o utilizador
+- Auto-save: guardar rascunho automaticamente 3 segundos após o utilizador
   parar de escrever (debounce). Indicador visual de "A guardar..." /
   "Guardado" no header do editor
-- `src/components/articles/ArticleForm.tsx` — secção de metadados
+- `src/components/articles/article-form.tsx` — secção de metadados
   (pilar, produto, tags, SEO) separada do editor, usada também no gerador IA
 
 O editor não deve perder conteúdo ao navegar para outra tab e voltar.
@@ -286,12 +286,12 @@ Usar `sessionStorage` para persistir rascunho local não guardado.
 
 ---
 
-### PROMPT 3.3 — Gerador de artigos com IA
+### [] PROMPT 3.3 — Gerador de artigos com IA
 
 ```markdown
 Antes de implementar qualquer coisa, analisa o que já existe no projecto:
 verifica se existe alguma integração com a API da Anthropic em `src/lib/`
-ou `src/services/`, se o `ArticleEditor.tsx` já está implementado, se o
+ou `src/services/`, se o `article-editor.tsx` já está implementado, se o
 `workspaceStore` exporta os dados completos do workspace (voiceTone,
 targetAudience, valueProposition), se o hook `usePillars.ts` está disponível,
 e se a chave `VITE_ANTHROPIC_API_KEY` está no `.env`. Confirma os campos do
@@ -309,12 +309,12 @@ Implementa a geração de artigos com IA. Cria:
   slug, summary, body em Markdown estruturado, keywords, readingTimeMin).
   A resposta deve ser JSON estruturado que mapeia directamente para o
   modelo Article. Guardar o prompt usado em `aiPromptUsed` para auditoria
-- `src/components/articles/ArticleGeneratorModal.tsx` — modal com: campo
+- `src/components/articles/article-generator-modal.tsx` — modal com: campo
   de tema/ideia inicial (obrigatório), selector de pilar, selector de produto
   (opcional), botão "Gerar artigo". Durante a geração mostrar loading com
-  mensagem. Após gerar, abrir directamente no ArticleEditor para revisão
+  mensagem. Após gerar, abrir directamente no article-editor para revisão
   antes de guardar — nunca guardar automaticamente sem o utilizador confirmar
-- `src/hooks/useAI.ts` — hook com `isGenerating`, `error`, e as funções
+- `src/hooks/use-ai.ts` — hook com `isGenerating`, `error`, e as funções
   de geração. Toda a lógica de chamada à API isolada aqui, nunca directamente
   nos componentes
 
@@ -327,14 +327,14 @@ Tratar erros de rate limit e timeout com mensagens claras em português.
 
 ## FASE 4 — Distribuição de Conteúdo
 
-### PROMPT 4.1 — Gerador de peças de conteúdo derivadas
+### [] PROMPT 4.1 — Gerador de peças de conteúdo derivadas
 
 ```markdown
 Antes de implementar qualquer coisa, analisa o que já existe no projecto:
 verifica se o `src/lib/ai.ts` já existe com a função `generateArticle` e
 como está estruturada a chamada à API Anthropic, se o hook `useArticles.ts`
 expõe o artigo completo com as suas relações (product, pillar, workspace),
-se existe alguma página de content pieces em `src/pages/Content/`, e se
+se existe alguma página de content pieces em `src/pages/content/`, e se
 o `ChannelBadge` já está implementado. Confirma no schema os campos do
 modelo `ContentPiece` incluindo o campo `slides` (Json) e o enum
 `ContentFormat` (CAROUSEL, SHORT_VIDEO, LINKEDIN_POST, INSTAGRAM_POST,
@@ -352,11 +352,11 @@ Cria:
   de 150-300 palavras com gancho forte, INSTAGRAM_POST gera post curto com
   hashtags, SHORT_VIDEO gera apenas hook + CTA (o roteiro completo é gerado
   separadamente), CTA_POST gera post directo com link para landing do produto
-- `src/components/content/ContentGeneratorPanel.tsx` — painel que aparece
+- `src/components/content/content-generator-panel.tsx` — painel que aparece
   dentro do `ArticleDetail` com checkboxes para seleccionar quais os formatos
   a gerar, selector de canal por formato, e botão "Gerar conteúdo
   seleccionado". Mostra progresso individual por peça durante a geração
-- `src/hooks/useContentPieces.ts` — hook com `getContentPieces(articleId)`,
+- `src/hooks/use-content-pieces.ts` — hook com `getContentPieces(articleId)`,
   `generatePieces()`, `updatePiece()`, `approvePiece()`, `deletePiece()`
 
 Cada peça gerada começa com status `DRAFT`. O utilizador tem de a aprovar
@@ -366,29 +366,29 @@ regenerar — criar sempre nova versão.
 
 ---
 
-### PROMPT 4.2 — Visualização e edição de peças de conteúdo
+### [] PROMPT 4.2 — Visualização e edição de peças de conteúdo
 
 ```markdown
 Antes de implementar qualquer coisa, analisa o que já existe no projecto:
-verifica se o `useContentPieces.ts` já está implementado com os métodos
+verifica se o `use-content-pieces.ts` já está implementado com os métodos
 correctos, se o `ContentGeneratorPanel` já está a funcionar e a criar
 registos na BD, e se existe alguma página de listagem de conteúdos em
-`src/pages/Content/`. Confirma o campo `slides` do modelo `ContentPiece`
+`src/pages/content/`. Confirma o campo `slides` do modelo `ContentPiece`
 que é do tipo `Json` (deve ser interpretado como `Array<{order: number,
 title: string, body: string}>`). Só depois de teres esse contexto completo,
 implementa o seguinte:
 
 Implementa a visualização e edição das peças de conteúdo geradas. Cria:
 
-- `src/pages/Content/ContentPieces.tsx` — lista de todas as peças do
+- `src/pages/content/content-pieces.tsx` — lista de todas as peças do
   workspace com filtros por formato, canal, status e artigo de origem.
   Cada item mostra: formato (ícone), canal alvo (ChannelBadge), status,
   gancho (hookText truncado), e acções. Vista em lista ou grid (toggle)
-- `src/components/content/ContentPieceCard.tsx` — card de preview que
+- `src/components/content/content-piece-card.tsx` — card de preview que
   simula visualmente o formato: post LinkedIn com caixa de texto longa,
   post Instagram com hashtags em baixo, carrossel com navegação entre
   slides (anterior/próximo), CTA com botão destacado
-- `src/components/content/ContentPieceEditor.tsx` — editor inline para
+- `src/components/content/content-piece-editor.tsx` — editor inline para
   editar qualquer campo da peça (body, hookText, ctaText, hashtags,
   slides individuais). Edição de slides do carrossel: lista reordenável
   com drag-and-drop simples (não precisa de biblioteca externa — reorder
@@ -403,7 +403,7 @@ de artigos. Um contador "X peças aprovadas / Y total" visível no topo da lista
 
 ---
 
-### PROMPT 4.3 — Gerador de roteiros de vídeo
+### [] PROMPT 4.3 — Gerador de roteiros de vídeo
 
 ```markdown
 Antes de implementar qualquer coisa, analisa o que já existe no projecto:
@@ -425,14 +425,14 @@ Implementa o gerador de roteiros de vídeo curto (TikTok/Reels). Cria:
   (onScreenText), e sugestões de b-roll (imagens/vídeos de apoio). O
   `fullScript` deve ser o roteiro completo formatado para leitura em voz
   alta, com indicações de pausa e ênfase
-- `src/pages/Content/VideoScripts.tsx` — lista de roteiros com filtro por
+- `src/pages/content/video-scripts.tsx` — lista de roteiros com filtro por
   canal (Instagram/TikTok) e status. Cada item mostra: título, gancho
   (primeiras palavras), duração estimada, canal alvo
-- `src/components/content/VideoScriptCard.tsx` — card expandível que
+- `src/components/content/video-script-Card.tsx` — card expandível que
   mostra o roteiro secção a secção: gancho destacado a negrito, corpo,
   CTA, e no final as sugestões de onScreenText e b-roll em formato de
   checklist. Botão "Copiar roteiro completo" para clipboard
-- `src/hooks/useVideoScripts.ts` — hook com `getVideoScripts(articleId)`,
+- `src/hooks/use-video-scripts.ts` — hook com `getVideoScripts(articleId)`,
   `generateScript()`, `updateScript()`
 
 O tempo de leitura estimado deve ser calculado automaticamente:
@@ -444,12 +444,12 @@ exceder a duração seleccionada.
 
 ## FASE 5 — Planeador Semanal
 
-### PROMPT 5.1 — Estrutura do planeador semanal
+### [] PROMPT 5.1 — Estrutura do planeador semanal
 
 ```markdown
 Antes de implementar qualquer coisa, analisa o que já existe no projecto:
-verifica se existe alguma página de planeador em `src/pages/Planner/`, se
-o `useContentPieces.ts` tem o método `getApprovedPieces()` ou similar para
+verifica se existe alguma página de planeador em `src/pages/planner/`, se
+o `use-content-pieces.ts` tem o método `getApprovedPieces()` ou similar para
 listar peças aprovadas disponíveis para agendamento, se o `ChannelBadge` e
 `PillarBadge` já estão disponíveis, e se existem helpers de data no projecto
 (date-fns ou similar nas dependências). Confirma no schema os campos de
@@ -459,18 +459,18 @@ esse contexto completo, implementa o seguinte:
 
 Implementa a estrutura base do planeador semanal. Cria:
 
-- `src/pages/Planner/WeeklyPlanner.tsx` — página principal com:
+- `src/pages/planner/weekly-planner.tsx` — página principal com:
   navegação de semana (botões anterior/próxima semana, botão "Esta semana"),
   cabeçalho com as datas da semana (Seg a Dom), e 7 colunas de dias.
   Os dias activos por defeito são Segunda, Quarta e Sexta (conforme
-  estratégia do documento). Os restantes dias aparecem mas mais subtis.
+  estratégia do documento(README.md)). Os restantes dias aparecem mas mais subtis.
   Cada coluna mostra: dia da semana + data, pilar sugerido para esse dia
   (Seg=P1, Qua=P2, Sex=P3), e lista de items agendados nesse dia
-- `src/hooks/useWeeklyPlan.ts` — hook com `getOrCreateWeekPlan(weekStart)`,
+- `src/hooks/use-weekly-plan.ts` — hook com `getOrCreateWeekPlan(weekStart)`,
   `getPlanItems(weeklyPlanId)`, `addPlanItem()`, `removePlanItem()`,
   `updatePlanItemStatus()`. O `getOrCreateWeekPlan` cria automaticamente
   o registo na BD se não existir para aquela semana
-- `src/components/planner/WeekColumn.tsx` — coluna de um dia com: header
+- `src/components/planner/week-column.tsx` — coluna de um dia com: header
   com data e pilar sugerido, área de drop para items, e botão "+" para
   adicionar item manualmente
 - Usar `date-fns` para toda a manipulação de datas. A semana começa sempre
@@ -482,11 +482,11 @@ será adicionado numa iteração posterior se necessário.
 
 ---
 
-### PROMPT 5.2 — Adicionar e gerir items no planeador
+### [] PROMPT 5.2 — Adicionar e gerir items no planeador
 
 ```markdown
 Antes de implementar qualquer coisa, analisa o que já existe no projecto:
-verifica se o `WeeklyPlanner.tsx` e `useWeeklyPlan.ts` já estão implementados
+verifica se o `weekly-planner.tsx` e `use-weekly-plan.ts` já estão implementados
 e funcionais, se existe método para listar peças aprovadas por canal e pilar,
 se o `ArticleStatusBadge` já está disponível, e se o `ContentPieceCard` tem
 um modo compacto ou preview adequado para o planeador. Confirma os campos
@@ -496,17 +496,17 @@ teres esse contexto completo, implementa o seguinte:
 
 Implementa a adição e gestão de items no planeador. Cria:
 
-- `src/components/planner/AddPlanItemModal.tsx` — modal para adicionar item
+- `src/components/planner/add-plan-item-modal.tsx` — modal para adicionar item
   a um dia específico. Tem duas tabs: "Peça de conteúdo" (lista de
   ContentPieces com status APPROVED, filtráveis por canal e pilar) e
   "Artigo" (lista de artigos publicados ou aprovados para partilha directa).
   Selector de canal alvo e hora de publicação. Campo de notas opcional
-- `src/components/planner/PlanItemCard.tsx` — card dentro da coluna do dia
+- `src/components/planner/plan-item-card.tsx` — card dentro da coluna do dia
   mostrando: ícone do formato, canal (ChannelBadge small), título curto,
   pilar (cor de fundo sutil), e botões de acção: "Marcar publicado",
   "Ver conteúdo", "Remover". Quando status=PUBLISHED, mostrar com
   checkbox marcado e opacidade reduzida
-- `src/components/planner/PublishConfirmModal.tsx` — modal ao marcar como
+- `src/components/planner/publish-confirm-modal.tsx` — modal ao marcar como
   publicado: pede URL do post publicado (opcional) e confirma a data/hora
   real de publicação (pré-preenchida com "agora")
 - Barra lateral do planeador com: contagem da semana (X/Y posts planeados),
@@ -521,11 +521,11 @@ Ao remover um item do planeador, o `ContentPiece` volta para status
 
 ## FASE 6 — Dashboard
 
-### PROMPT 6.1 — Dashboard principal
+### [] PROMPT 6.1 — Dashboard principal
 
 ```markdown
 Antes de implementar qualquer coisa, analisa o que já existe no projecto:
-verifica se existe alguma página de dashboard em `src/pages/Dashboard.tsx`,
+verifica se existe alguma página de dashboard em `src/pages/dashboard.tsx`,
 se todos os hooks estão implementados (`useArticles`, `useContentPieces`,
 `useWeeklyPlan`, `useProducts`, `usePillars`), e quais os dados que cada
 um expõe. Verifica se existe algum componente de stats ou card de métrica
@@ -534,7 +534,7 @@ Só depois de teres esse contexto completo, implementa o seguinte:
 
 Implementa o dashboard principal da aplicação. Cria:
 
-- `src/pages/Dashboard.tsx` — dashboard com as seguintes secções:
+- `src/pages/dashboard.tsx` — dashboard com as seguintes secções:
   1. Header com saudação ("Bom dia, [nome]") e data actual
   2. Cards de métricas da semana: posts planeados vs publicados, artigos
      em rascunho, peças por aprovar, e percentagem de cumprimento do plano
@@ -546,9 +546,9 @@ Implementa o dashboard principal da aplicação. Cria:
   5. Artigos em rascunho — lista dos últimos 3 artigos com link para editar
   6. Distribuição por pilar — barra visual simples mostrando quantos
      artigos existem por pilar (P1/P2/P3/P4) com as cores respectivas
-- `src/components/dashboard/WeekChecklist.tsx` — secção de checklist
+- `src/components/dashboard/week-checklist.tsx` — secção de checklist
   extraída como componente independente para poder ser reutilizada
-- `src/components/dashboard/MetricCard.tsx` — card reutilizável com:
+- `src/components/dashboard/metric-card.tsx` — card reutilizável com:
   label, valor, ícone, e variação opcional (ex: "+2 esta semana")
 
 Todos os dados devem ser carregados em paralelo com Promise.all para
@@ -561,11 +561,11 @@ CSS simples e contagens numéricas.
 
 ## FASE 7 — Layout & Navegação Global
 
-### PROMPT 7.1 — Layout principal da aplicação
+### [] PROMPT 7.1 — Layout principal da aplicação
 
 ```markdown
 Antes de implementar qualquer coisa, analisa o que já existe no projecto:
-verifica como está actualmente configurado o router em `src/App.tsx`, se
+verifica como está actualmente configurado o router em `src/app.tsx`, se
 existe algum layout wrapper ou shell da aplicação, como estão a ser usados
 o `authStore` e `workspaceStore` nas páginas existentes, e se existe algum
 componente de sidebar ou header já criado. Verifica também se todos os ícones
@@ -574,20 +574,20 @@ esse contexto completo, implementa o seguinte:
 
 Implementa o layout principal e navegação da aplicação. Cria:
 
-- `src/components/layout/AppShell.tsx` — layout base com sidebar esquerda
+- `src/components/layout/app-shell.tsx` — layout base com sidebar esquerda
   fixa (260px) e área de conteúdo principal. A sidebar contém: logo/nome
   da app no topo, `WorkspaceSelector` dropdown, navegação principal, e
   no fundo o avatar e nome do utilizador com botão de logout
-- `src/components/layout/Sidebar.tsx` — navegação com grupos:
+- `src/components/layout/sidebar.tsx` — navegação com grupos:
   "Principal" (Dashboard, Planeador), "Conteúdo" (Artigos, Peças,
   Roteiros de Vídeo), "Configurações" (Workspace, Produtos, Pilares,
   Canais). Item activo com destaque visual. Badge com contagem em
   "Peças para aprovar" para criar urgência
-- `src/components/layout/Header.tsx` — header da área de conteúdo com:
+- `src/components/layout/header.tsx` — header da área de conteúdo com:
   título da página actual, breadcrumb opcional, e acções contextuais
   (ex: "Novo Artigo" na página de artigos)
-- Actualizar `src/App.tsx` para envolver todas as rotas protegidas no
-  `AppShell`
+- Actualizar `src/app.tsx` para envolver todas as rotas protegidas no
+  `app-shell`
 - Layout responsivo mínimo: em mobile (<768px) a sidebar colapsa para
   um menu hamburger. Em desktop fica sempre visível
 

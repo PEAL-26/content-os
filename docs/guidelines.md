@@ -10,7 +10,7 @@ Este documento prioriza:
 
 ## ⚡ Regra de Ouro — Analisa Antes de Implementar
 
-Antes de qualquer implementação, procura o que já existe e reusa:
+Antes de qualquer implementação, verifica os padrões que estão a ser usados, procura o que já existe e reusa:
 
 ```bash
 # mapear componentes e hooks existentes
@@ -40,6 +40,7 @@ src/
 ├── helpers/           # funções puras e utilitárias
 ├── types/             # tipos e interfaces globais
 ├── data/              # dados estáticos
+├── services/          # Funcionalidades internas ou externas usadas no projecto
 └── styles/            # tokens e utilitários CSS
 ```
 

@@ -35,6 +35,11 @@ enum SocialChannel {
   TIKTOK
   YOUTUBE
   TWITTER
+  FACEBOOK
+  THREADS
+  PINTEREST
+  TELEGRAM
+  WHATSAPP
 }
 
 enum ContentFormat {

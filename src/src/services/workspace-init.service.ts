@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { pillarService } from './pillar.service'
+import { channelService } from './channel.service'
 import { v4 as uuidv4 } from 'uuid'
 
 export interface WorkspaceInitResult {
@@ -25,7 +26,7 @@ export const workspaceInitService = {
         }
 
         try {
-            results.channelsCreated = await this.ensureDefaultChannels(workspaceId)
+            results.channelsCreated = await channelService.checkAndCreateChannels(workspaceId)
         } catch (error) {
             console.error('Erro ao inicializar canais:', error)
         }
@@ -37,35 +38,6 @@ export const workspaceInitService = {
         }
 
         return results
-    },
-
-    async ensureDefaultChannels(workspaceId: string): Promise<boolean> {
-        const { data: existing } = await supabase
-            .from('channel_configs')
-            .select('id')
-            .eq('workspaceId', workspaceId)
-            .limit(1)
-
-        if (existing && existing.length > 0) {
-            return false
-        }
-
-        const defaultChannels = [
-            { channel: 'LINKEDIN', isActive: true, isPrimary: true },
-            { channel: 'INSTAGRAM', isActive: true, isPrimary: false },
-            { channel: 'TIKTOK', isActive: true, isPrimary: false },
-            { channel: 'YOUTUBE', isActive: false, isPrimary: false },
-        ]
-
-        const channelsToInsert = defaultChannels.map((ch) => ({
-            id: uuidv4(),
-            workspaceId,
-            ...ch,
-        }))
-
-        await supabase.from('channel_configs').insert(channelsToInsert)
-
-        return true
     },
 
     async ensureDefaultTags(workspaceId: string): Promise<boolean> {

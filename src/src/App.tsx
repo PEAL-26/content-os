@@ -6,6 +6,7 @@ import { RegisterPage } from '@/pages/auth/register'
 import { CreateWorkspacePage } from '@/pages/onboarding/create-workspace'
 import { PillarsPage } from '@/pages/settings/pillars'
 import { ProductsPage } from '@/pages/settings/products'
+import { ChannelsPage } from '@/pages/settings/channels'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 
 function DashboardHome() {
@@ -111,6 +112,19 @@ export function App() {
                             <DashboardLayout>
                                 <SettingsLayout>
                                     <PillarsPage />
+                                </SettingsLayout>
+                            </DashboardLayout>
+                        </ProtectedWorkspaceRoute>
+                    }
+                />
+
+                <Route
+                    path="/dashboard/settings/channels"
+                    element={
+                        <ProtectedWorkspaceRoute>
+                            <DashboardLayout>
+                                <SettingsLayout>
+                                    <ChannelsPage />
                                 </SettingsLayout>
                             </DashboardLayout>
                         </ProtectedWorkspaceRoute>
