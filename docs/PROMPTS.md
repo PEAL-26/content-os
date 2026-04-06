@@ -286,7 +286,7 @@ Usar `sessionStorage` para persistir rascunho local não guardado.
 
 ---
 
-### [] PROMPT 3.3 — Gerador de artigos com IA
+### [x] PROMPT 3.3 — Gerador de artigos com IA
 
 ```markdown
 Antes de implementar qualquer coisa, analisa o que já existe no projecto:
@@ -594,6 +594,220 @@ Implementa o layout principal e navegação da aplicação. Cria:
 A sidebar não deve causar layout shift ao carregar. O estado
 collapsed/expanded da sidebar deve ser persistido no `localStorage`.
 ```
+
+---
+
+Antes de implementar qualquer coisa, analisa com atenção o que já existe
+no projecto nas seguintes áreas:
+
+1. **Configuração de IA actual** — abre `src/lib/ai.ts` e verifica como o
+   modelo está a ser referenciado (se está hardcoded como string, se já existe
+   alguma variável ou constante para o nome do modelo, e se a `VITE_ANTHROPIC_API_KEY`
+   já está a ser consumida correctamente). Verifica também o `.env.example` para
+   ver quais as variáveis de ambiente já documentadas.
+
+2. **Estado de geração actual** — abre `src/hooks/useAI.ts` e analisa como
+   o estado `isGenerating` está implementado: se é um booleano simples ou se já
+   tem alguma estrutura de fila. Verifica se existe algum mecanismo de
+   cancelamento de pedidos em curso ou se a geração bloqueia a UI enquanto
+   corre.
+
+3. **Web Workers no projecto** — verifica se já existe algum ficheiro `.worker.ts`
+   ou configuração de Web Worker em `vite.config.ts` (plugin `vite-plugin-worker`
+   ou configuração nativa do Vite para workers). Confirma se o projecto usa Vite
+   e qual a versão, pois o suporte nativo a workers difere entre versões.
+
+4. **Stores Zustand existentes** — lista todos os ficheiros em `src/stores/` e
+   entende a estrutura de cada um (especialmente `workspaceStore` e `authStore`),
+   para que o novo store de geração siga o mesmo padrão já estabelecido no
+   projecto.
+
+5. **Tipos existentes** — abre `src/types/index.ts` e verifica se já existem
+   tipos relacionados com jobs de geração, filas, ou estados assíncronos de IA.
+
+Só depois de teres esse contexto completo em todas as áreas acima, implementa
+o seguinte:
+
+---
+
+## MELHORIA 1 — Modelo configurável via variável de ambiente
+
+Actualiza a configuração de IA para que o modelo da Anthropic seja definido
+por variável de ambiente em vez de estar hardcoded no código:
+
+- Adiciona `VITE_AI_MODEL` ao `.env.example` com o valor padrão
+  `claude-sonnet-4-20250514` e um comentário a explicar que aceita qualquer
+  modelo válido da Anthropic (ex: `claude-opus-4-20250514`,
+  `claude-haiku-4-5-20251001`)
+- Em `src/lib/ai.ts`, substitui qualquer string hardcoded do modelo por
+  `import.meta.env.VITE_AI_MODEL ?? 'claude-sonnet-4-20250514'`. O fallback
+  garante que a app não quebra se a variável não estiver definida
+- Em `src/lib/constants.ts`, adiciona uma constante exportada `AI_MODEL` que
+  lê `import.meta.env.VITE_AI_MODEL ?? 'claude-sonnet-4-20250514'` — é esta
+  constante que deve ser usada em todo o código, nunca o `import.meta.env`
+  directamente nos ficheiros de serviço
+- Se já existir algum painel de settings de workspace, adiciona um campo
+  informativo (só leitura) que mostra qual o modelo actualmente activo, para
+  que o utilizador saiba o que está configurado sem ter de abrir o `.env`
+
+---
+
+## MELHORIA 2 — Worker de geração em background com fila de jobs
+
+Implementa um sistema de geração assíncrona em background usando Web Worker,
+com fila FIFO para múltiplos pedidos concorrentes. O utilizador deve poder
+submeter N gerações e continuar a usar a aplicação normalmente enquanto os
+jobs correm em background.
+
+### 2.1 — Tipos e estrutura de dados
+
+Cria ou expande `src/types/index.ts` com os seguintes tipos:
+
+```typescript
+type GenerationJobStatus = 'pending' | 'running' | 'completed' | 'failed'
+
+type GenerationJobType = 'article' | 'content_pieces' | 'video_script'
+
+interface GenerationJob {
+  id: string                    // UUID gerado no cliente
+  type: GenerationJobType
+  status: GenerationJobStatus
+  payload: GenerationPayload    // Input necessário para a geração
+  result?: GenerationResult     // Output após conclusão
+  error?: string                // Mensagem de erro se falhar
+  createdAt: Date
+  startedAt?: Date
+  completedAt?: Date
+  workspaceId: string
+}
+
+// Discriminated union para os diferentes tipos de payload
+type GenerationPayload =
+  | { type: 'article'; topic: string; pillarId: string; productId?: string; workspace: WorkspaceContext }
+  | { type: 'content_pieces'; articleId: string; formats: ContentFormat[]; workspace: WorkspaceContext }
+  | { type: 'video_script'; articleId: string; targetChannel: SocialChannel; workspace: WorkspaceContext }
+```
+
+### 2.2 — Web Worker
+
+Cria `src/workers/generation.worker.ts` — este ficheiro corre numa thread
+separada e é o único ponto que faz chamadas à API Anthropic:
+
+- O worker recebe mensagens do tipo `{ type: 'START_JOB', job: GenerationJob }`
+- Usa a `AI_MODEL` constante e a `VITE_ANTHROPIC_API_KEY` para fazer a chamada
+  à API (as variáveis `import.meta.env` estão disponíveis dentro de workers
+  no Vite — confirma isto na análise inicial)
+- Durante a execução envia mensagens de progresso de volta para a thread
+  principal: `{ type: 'JOB_PROGRESS', jobId, message: string }`
+- Ao terminar envia: `{ type: 'JOB_COMPLETED', jobId, result: GenerationResult }`
+- Em caso de erro envia: `{ type: 'JOB_FAILED', jobId, error: string }`
+- O worker processa **um job de cada vez** — a gestão de fila e concorrência
+  é responsabilidade do store, não do worker. O worker apenas executa o job
+  que lhe é enviado e reporta o resultado
+
+Instanciar o worker em Vite com a sintaxe nativa:
+
+```typescript
+const worker = new Worker(
+  new URL('../workers/generation.worker.ts', import.meta.url),
+  { type: 'module' }
+)
+```
+
+### 2.3 — Generation Queue Store
+
+Cria `src/stores/generationStore.ts` (Zustand) — este store é o orquestrador
+central da fila e do ciclo de vida dos jobs:
+
+**Estado:**
+
+```typescript
+interface GenerationState {
+  jobs: GenerationJob[]           // Todos os jobs (histórico completo)
+  queue: string[]                 // IDs dos jobs em 'pending', por ordem FIFO
+  currentJobId: string | null     // ID do job actualmente a correr no worker
+  worker: Worker | null           // Instância do Web Worker
+}
+```
+
+**Acções:**
+
+- `initWorker()` — inicializa o Web Worker uma única vez e regista os
+  listeners de mensagens (`onmessage`). Deve ser chamado uma única vez no
+  ponto de entrada da app (ex: `App.tsx`), não em cada componente
+- `enqueue(payload: GenerationPayload): string` — cria um novo `GenerationJob`
+  com status `'pending'`, adiciona ao array `jobs` e ao array `queue`,
+  e retorna o `jobId`. Se não houver nenhum job a correr (`currentJobId === null`),
+  dispara imediatamente `processNext()`
+- `processNext()` — pega no primeiro ID da `queue`, actualiza o job para
+  status `'running'`, define `currentJobId`, e envia a mensagem `START_JOB`
+  ao worker. Se a `queue` estiver vazia, define `currentJobId = null`
+- `handleWorkerMessage(event: MessageEvent)` — handler dos eventos vindos
+  do worker: actualiza o status do job correspondente, e quando recebe
+  `JOB_COMPLETED` ou `JOB_FAILED` chama `processNext()` para avançar
+  para o próximo job da fila
+- `cancelJob(jobId: string)` — se o job estiver `'pending'`, remove-o
+  da fila. Se estiver `'running'`, não cancela (o worker não suporta
+  cancelamento mid-request — apenas marca como ignorado após conclusão)
+- `clearCompleted()` — remove da lista todos os jobs com status
+  `'completed'` ou `'failed'`
+
+### 2.4 — Hook de interface
+
+Cria `src/hooks/useGeneration.ts` — interface simplificada para os
+componentes usarem, sem exporem directamente o store:
+
+- `generateArticle(params)` — chama `enqueue` com payload de artigo e
+  retorna o `jobId`
+- `generateContentPieces(params)` — idem para peças de conteúdo
+- `generateVideoScript(params)` — idem para roteiro de vídeo
+- `jobsInProgress` — array de jobs com status `'pending'` ou `'running'`
+- `completedJobs` — array de jobs com status `'completed'`
+- `failedJobs` — array de jobs com status `'failed'`
+- `queueLength` — número de jobs em `'pending'`
+- `isWorkerReady` — boolean que indica se o worker foi inicializado
+
+### 2.5 — UI: Painel de fila de geração
+
+Cria `src/components/ai/GenerationQueue.tsx` — componente flutuante fixo
+no canto inferior direito do ecrã (acima de qualquer outro elemento flutuante),
+visível apenas quando existem jobs activos ou recentemente concluídos:
+
+- Aparece automaticamente quando `jobsInProgress.length > 0` ou quando
+  há jobs concluídos nos últimos 30 segundos. Desaparece após 5 segundos
+  sem actividade (com animação de saída suave)
+- Mostra uma lista compacta de jobs com:
+  - Job a correr: spinner animado + label do tipo ("A gerar artigo...",
+    "A gerar peças de conteúdo...", "A gerar roteiro...") + mensagem de
+    progresso mais recente
+  - Jobs na fila: ícone de relógio + label + posição na fila ("Na fila #2")
+  - Jobs concluídos: ícone de check verde + label + link directo para o
+    resultado ("Ver artigo gerado →")
+  - Jobs falhados: ícone de erro vermelho + mensagem de erro truncada +
+    botão "Tentar novamente"
+- Badge no ícone da sidebar (ou no header) com o número de jobs activos,
+  para que o utilizador saiba que há geração em curso mesmo que feche o painel
+
+### 2.6 — Migração dos pontos de chamada existentes
+
+Actualiza todos os locais onde `useAI.ts` era chamado directamente para
+passarem a usar `useGeneration.ts`:
+
+- `src/components/articles/ArticleGeneratorModal.tsx` — em vez de bloquear
+  a UI até a geração terminar, chamar `generateArticle()`, fechar o modal
+  imediatamente com feedback ("Artigo adicionado à fila de geração"), e
+  quando o job completar, notificar o utilizador via `GenerationQueue`
+  com link para abrir o artigo no editor
+- `src/components/content/ContentGeneratorPanel.tsx` — idem para peças,
+  fechar o painel de geração imediatamente após submeter
+- Quando um job de artigo completa, guardar automaticamente o resultado
+  na BD (como DRAFT) e actualizar a lista de artigos em tempo real —
+  este é o único caso em que se guarda automaticamente, porque o utilizador
+  já não está no contexto do modal para confirmar
+
+Garante retrocompatibilidade: se o `useAI.ts` ainda for necessário para
+casos síncronos (ex: geração de slug), mantê-lo intacto mas sem duplicar
+lógica de chamada à API.
 
 ---
 

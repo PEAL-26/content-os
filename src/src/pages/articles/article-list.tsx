@@ -1,3 +1,4 @@
+import { ArticleGeneratorModal } from '@/components/articles/article-generator-modal'
 import { ArticleStatusBadge } from '@/components/articles/article-status-badge'
 import { PillarBadge } from '@/components/content/pillar-badge'
 import { ProductSelector } from '@/components/products/product-selector'
@@ -238,7 +239,13 @@ function ArticleCard({
     )
 }
 
-function EmptyState({ onCreate }: { onCreate: () => void }) {
+function EmptyState({
+    onCreate,
+    onGenerate,
+}: {
+    onCreate: () => void
+    onGenerate: () => void
+}) {
     return (
         <div className="flex flex-col items-center justify-center py-16 text-center">
             <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gray-100">
@@ -283,9 +290,12 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
                     </svg>
                     Criar artigo
                 </button>
-                <button className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                <button
+                    onClick={onGenerate}
+                    className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
                     <svg
-                        className="h-4 w-4"
+                        className="h-4 w-4 text-purple-600"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -491,7 +501,7 @@ function ArticleFilters({
 
     return (
         <div className="flex flex-wrap items-center gap-3">
-            <div className="relative min-w-[200px] flex-1">
+            <div className="relative min-w-50 flex-1">
                 <svg
                     className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400"
                     fill="none"
@@ -610,6 +620,7 @@ function ArticleListContent({
     } = useArticles({ filters })
 
     const [showCreateModal, setShowCreateModal] = useState(false)
+    const [showGenerateModal, setShowGenerateModal] = useState(false)
     const [actionFeedback, setActionFeedback] = useState<{
         type: 'success' | 'error'
         message: string
@@ -672,25 +683,46 @@ function ArticleListContent({
                         {!isLoading && hasMore && ' (mais disponíveis)'}
                     </p>
                 </div>
-                <button
-                    onClick={() => setShowCreateModal(true)}
-                    className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-                >
-                    <svg
-                        className="h-4 w-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
+                <div className="flex gap-3">
+                    <button
+                        onClick={() => setShowGenerateModal(true)}
+                        className="inline-flex items-center gap-2 rounded-md border border-purple-300 bg-white px-4 py-2 text-sm font-medium text-purple-700 hover:bg-purple-50"
                     >
-                        <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M12 4v16m8-8H4"
-                        />
-                    </svg>
-                    Criar artigo
-                </button>
+                        <svg
+                            className="h-4 w-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                            />
+                        </svg>
+                        Gerar com IA
+                    </button>
+                    <button
+                        onClick={() => setShowCreateModal(true)}
+                        className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                    >
+                        <svg
+                            className="h-4 w-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M12 4v16m8-8H4"
+                            />
+                        </svg>
+                        Criar artigo
+                    </button>
+                </div>
             </div>
 
             {actionFeedback && (
@@ -712,7 +744,10 @@ function ArticleListContent({
                     <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
                 </div>
             ) : articles.length === 0 ? (
-                <EmptyState onCreate={() => setShowCreateModal(true)} />
+                <EmptyState
+                    onCreate={() => setShowCreateModal(true)}
+                    onGenerate={() => setShowGenerateModal(true)}
+                />
             ) : (
                 <>
                     <div className="space-y-3">
@@ -770,6 +805,14 @@ function ArticleListContent({
                 onClose={() => setShowCreateModal(false)}
                 onCreate={handleCreate}
                 pillars={pillarOptions}
+            />
+
+            <ArticleGeneratorModal
+                isOpen={showGenerateModal}
+                onClose={() => setShowGenerateModal(false)}
+                onGenerated={(articleId) => {
+                    navigate(`/dashboard/articles/${articleId}/edit`)
+                }}
             />
         </div>
     )

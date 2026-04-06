@@ -3,7 +3,7 @@ import { z } from 'zod'
 export const createArticleSchema = z.object({
     title: z
         .string()
-        .min(3, 'Título é obrigatório')
+        .min(1, 'Título é obrigatório')
         .max(200, 'Título demasiado longo'),
     slug: z
         .string()
@@ -18,10 +18,13 @@ export const createArticleSchema = z.object({
     seoTitle: z.string().max(100).optional(),
     seoDescription: z.string().max(200).optional(),
     keywords: z.array(z.string()).optional(),
+    aiGenerated: z.boolean().optional(),
+    aiPromptUsed: z.string().optional(),
+    readingTimeMin: z.number().optional(),
 })
 
 export const updateArticleSchema = z.object({
-    title: z.string().min(3).max(200).optional(),
+    title: z.string().min(1).max(200).optional(),
     slug: z
         .string()
         .min(2)
@@ -37,6 +40,8 @@ export const updateArticleSchema = z.object({
     keywords: z.array(z.string()).optional(),
     status: z.enum(['DRAFT', 'REVIEW', 'APPROVED', 'PUBLISHED']).optional(),
     publishedUrl: z.string().url().optional().nullable(),
+    aiPromptUsed: z.string().optional().nullable(),
+    readingTimeMin: z.number().optional().nullable(),
 })
 
 export const articleFiltersSchema = z.object({

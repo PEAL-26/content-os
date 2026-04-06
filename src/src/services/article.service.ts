@@ -186,7 +186,9 @@ export const articleService = {
                 seoDescription: input.seoDescription || null,
                 keywords: input.keywords || [],
                 status: 'DRAFT',
-                aiGenerated: false,
+                aiGenerated: input.aiGenerated || false,
+                aiPromptUsed: input.aiPromptUsed || null,
+                readingTimeMin: input.readingTimeMin || null,
                 createdBy: userId || null,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
@@ -229,6 +231,10 @@ export const articleService = {
         }
         if (input.publishedUrl !== undefined)
             updateData.publishedUrl = input.publishedUrl
+        if (input.aiPromptUsed !== undefined)
+            updateData.aiPromptUsed = input.aiPromptUsed
+        if (input.readingTimeMin !== undefined)
+            updateData.readingTimeMin = input.readingTimeMin
 
         updateData.updatedAt = new Date().toISOString()
 
