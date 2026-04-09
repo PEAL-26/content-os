@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from 'zod';
 
 export const createProductSchema = z.object({
     name: z
@@ -17,9 +17,9 @@ export const createProductSchema = z.object({
     targetAudience: z.string().max(200).optional(),
     problemSolved: z.string().max(500).optional(),
     isActive: z.boolean(),
-})
+});
 
-export const updateProductSchema = createProductSchema.partial()
+export const updateProductSchema = createProductSchema.partial();
 
-export type CreateProductInput = z.infer<typeof createProductSchema>
-export type UpdateProductInput = z.infer<typeof updateProductSchema>
+export type CreateProductInput = z.infer<typeof createProductSchema>;
+export type UpdateProductInput = z.infer<typeof updateProductSchema>;

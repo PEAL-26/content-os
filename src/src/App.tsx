@@ -1,16 +1,16 @@
-import { ProtectedWorkspaceRoute } from '@/components/auth/protected-workspace-route'
-import { DashboardLayout } from '@/layouts/dashboard-layout'
-import { SettingsLayout } from '@/layouts/settings-layout'
-import { ArticleEditor } from '@/pages/articles/article-editor'
-import { ArticleList } from '@/pages/articles/article-list'
-import { LoginPage } from '@/pages/auth/login'
-import { RegisterPage } from '@/pages/auth/register'
-import { CreateWorkspacePage } from '@/pages/onboarding/create-workspace'
-import { ChannelsPage } from '@/pages/settings/channels'
-import { PillarsPage } from '@/pages/settings/pillars'
-import { ProductsPage } from '@/pages/settings/products'
-import { NuqsAdapter } from 'nuqs/adapters/react-router/v7'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { ProtectedWorkspaceRoute } from '@/components/auth/protected-workspace-route';
+import { DashboardLayout } from '@/layouts/dashboard-layout';
+import { SettingsLayout } from '@/layouts/settings-layout';
+import { ArticleEditor } from '@/pages/articles/article-editor';
+import { ArticleList } from '@/pages/articles/article-list';
+import { LoginPage } from '@/pages/auth/login';
+import { RegisterPage } from '@/pages/auth/register';
+import { CreateWorkspacePage } from '@/pages/onboarding/create-workspace';
+import { ChannelsPage } from '@/pages/settings/channels';
+import { PillarsPage } from '@/pages/settings/pillars';
+import { ProductsPage } from '@/pages/settings/products';
+import { NuqsAdapter } from 'nuqs/adapters/react-router/v7';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 
 function DashboardHome() {
     return (
@@ -20,7 +20,7 @@ function DashboardHome() {
                 Bem-vindo ao ContentOS! Selecione uma opção no menu lateral.
             </p>
         </div>
-    )
+    );
 }
 
 function PlaceholderPage({ title }: { title: string }) {
@@ -29,7 +29,7 @@ function PlaceholderPage({ title }: { title: string }) {
             <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
             <p className="mt-2 text-gray-600">Página em desenvolvimento...</p>
         </div>
-    )
+    );
 }
 
 function SettingsHome() {
@@ -39,7 +39,7 @@ function SettingsHome() {
                 Selecione uma categoria de configurações no menu acima.
             </p>
         </div>
-    )
+    );
 }
 
 export function App() {
@@ -187,5 +187,5 @@ export function App() {
                 </Routes>
             </NuqsAdapter>
         </BrowserRouter>
-    )
+    );
 }

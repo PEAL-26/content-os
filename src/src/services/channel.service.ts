@@ -1,19 +1,19 @@
-import { supabase } from '@/lib/supabase'
-import type { ChannelConfig, SocialChannel } from '@/types/database'
-import { v4 as uuidv4 } from 'uuid'
+import { supabase } from '@/lib/supabase';
+import type { ChannelConfig, SocialChannel } from '@/types/database';
+import { v4 as uuidv4 } from 'uuid';
 
 export interface CreateChannelInput {
-    channel: SocialChannel
-    isActive?: boolean
-    isPrimary?: boolean
+    channel: SocialChannel;
+    isActive?: boolean;
+    isPrimary?: boolean;
 }
 
 export interface UpdateChannelInput {
-    isActive?: boolean
-    handle?: string | null
-    isPrimary?: boolean
-    defaultTone?: string | null
-    notes?: string | null
+    isActive?: boolean;
+    handle?: string | null;
+    isPrimary?: boolean;
+    defaultTone?: string | null;
+    notes?: string | null;
 }
 
 export const channelService = {
@@ -22,13 +22,13 @@ export const channelService = {
             .from('channel_configs')
             .select('*')
             .eq('workspaceId', workspaceId)
-            .order('channel', { ascending: true })
+            .order('channel', { ascending: true });
 
         if (error) {
-            throw new Error(`Erro ao buscar canais: ${error.message}`)
+            throw new Error(`Erro ao buscar canais: ${error.message}`);
         }
 
-        return (data ?? []) as ChannelConfig[]
+        return (data ?? []) as ChannelConfig[];
     },
 
     async getActiveChannels(workspaceId: string): Promise<ChannelConfig[]> {
@@ -37,13 +37,13 @@ export const channelService = {
             .select('*')
             .eq('workspaceId', workspaceId)
             .eq('isActive', true)
-            .order('channel', { ascending: true })
+            .order('channel', { ascending: true });
 
         if (error) {
-            throw new Error(`Erro ao buscar canais ativos: ${error.message}`)
+            throw new Error(`Erro ao buscar canais ativos: ${error.message}`);
         }
 
-        return (data ?? []) as ChannelConfig[]
+        return (data ?? []) as ChannelConfig[];
     },
 
     async getChannel(id: string): Promise<ChannelConfig | null> {
@@ -51,16 +51,16 @@ export const channelService = {
             .from('channel_configs')
             .select('*')
             .eq('id', id)
-            .single()
+            .single();
 
         if (error) {
             if (error.code === 'PGRST116') {
-                return null
+                return null;
             }
-            throw new Error(`Erro ao buscar canal: ${error.message}`)
+            throw new Error(`Erro ao buscar canal: ${error.message}`);
         }
 
-        return data as ChannelConfig
+        return data as ChannelConfig;
     },
 
     async getChannelByType(
@@ -72,16 +72,16 @@ export const channelService = {
             .select('*')
             .eq('workspaceId', workspaceId)
             .eq('channel', channel)
-            .single()
+            .single();
 
         if (error) {
             if (error.code === 'PGRST116') {
-                return null
+                return null;
             }
-            throw new Error(`Erro ao buscar canal: ${error.message}`)
+            throw new Error(`Erro ao buscar canal: ${error.message}`);
         }
 
-        return data as ChannelConfig
+        return data as ChannelConfig;
     },
 
     async getPrimaryChannel(
@@ -92,28 +92,31 @@ export const channelService = {
             .select('*')
             .eq('workspaceId', workspaceId)
             .eq('isPrimary', true)
-            .single()
+            .single();
 
         if (error) {
             if (error.code === 'PGRST116') {
-                return null
+                return null;
             }
-            throw new Error(`Erro ao buscar canal principal: ${error.message}`)
+            throw new Error(`Erro ao buscar canal principal: ${error.message}`);
         }
 
-        return data as ChannelConfig
+        return data as ChannelConfig;
     },
 
     async createChannel(
         workspaceId: string,
         input: CreateChannelInput
     ): Promise<ChannelConfig> {
-        const existing = await this.getChannelByType(workspaceId, input.channel)
+        const existing = await this.getChannelByType(
+            workspaceId,
+            input.channel
+        );
         if (existing) {
-            throw new Error('Este canal já existe')
+            throw new Error('Este canal já existe');
         }
 
-        const id = uuidv4()
+        const id = uuidv4();
 
         const { data, error } = await supabase
             .from('channel_configs')
@@ -128,13 +131,13 @@ export const channelService = {
                 notes: null,
             })
             .select()
-            .single()
+            .single();
 
         if (error) {
-            throw new Error(`Erro ao criar canal: ${error.message}`)
+            throw new Error(`Erro ao criar canal: ${error.message}`);
         }
 
-        return data as ChannelConfig
+        return data as ChannelConfig;
     },
 
     async updateChannel(
@@ -142,16 +145,16 @@ export const channelService = {
         input: UpdateChannelInput
     ): Promise<ChannelConfig> {
         if (input.isPrimary === true) {
-            const channel = await this.getChannel(id)
+            const channel = await this.getChannel(id);
             if (channel && !channel.isPrimary) {
                 const currentPrimary = await this.getPrimaryChannel(
                     channel.workspaceId
-                )
+                );
                 if (currentPrimary && currentPrimary.id !== id) {
                     await supabase
                         .from('channel_configs')
                         .update({ isPrimary: false })
-                        .eq('id', currentPrimary.id)
+                        .eq('id', currentPrimary.id);
                 }
             }
         }
@@ -163,23 +166,23 @@ export const channelService = {
             })
             .eq('id', id)
             .select()
-            .single()
+            .single();
 
         if (error) {
-            throw new Error(`Erro ao atualizar canal: ${error.message}`)
+            throw new Error(`Erro ao atualizar canal: ${error.message}`);
         }
 
-        return data as ChannelConfig
+        return data as ChannelConfig;
     },
 
     async deleteChannel(id: string): Promise<void> {
         const { error } = await supabase
             .from('channel_configs')
             .delete()
-            .eq('id', id)
+            .eq('id', id);
 
         if (error) {
-            throw new Error(`Erro ao eliminar canal: ${error.message}`)
+            throw new Error(`Erro ao eliminar canal: ${error.message}`);
         }
     },
 
@@ -189,7 +192,7 @@ export const channelService = {
             { channel: 'INSTAGRAM', isActive: true, isPrimary: false },
             { channel: 'TIKTOK', isActive: true, isPrimary: false },
             { channel: 'YOUTUBE', isActive: false, isPrimary: false },
-        ]
+        ];
 
         const channelsToInsert = defaultChannels.map((ch) => ({
             id: uuidv4(),
@@ -200,27 +203,27 @@ export const channelService = {
             handle: null,
             defaultTone: null,
             notes: null,
-        }))
+        }));
 
         const { error } = await supabase
             .from('channel_configs')
-            .insert(channelsToInsert)
+            .insert(channelsToInsert);
 
         if (error) {
             throw new Error(
                 `Erro ao criar canais por defeito: ${error.message}`
-            )
+            );
         }
     },
 
     async checkAndCreateChannels(workspaceId: string): Promise<boolean> {
-        const existing = await this.getChannels(workspaceId)
+        const existing = await this.getChannels(workspaceId);
 
         if (existing.length === 0) {
-            await this.createDefaultChannels(workspaceId)
-            return true
+            await this.createDefaultChannels(workspaceId);
+            return true;
         }
 
-        return false
+        return false;
     },
-}
+};

@@ -1,9 +1,9 @@
-import { supabase } from '@/lib/supabase'
-import type { Session, User } from '@supabase/supabase-js'
+import { supabase } from '@/lib/supabase';
+import type { Session, User } from '@supabase/supabase-js';
 
 export interface AuthResult {
-    success: boolean
-    error?: string
+    success: boolean;
+    error?: string;
 }
 
 function mapAuthError(message: string): string {
@@ -16,9 +16,9 @@ function mapAuthError(message: string): string {
             'A password deve ter pelo menos 6 caracteres',
         'Unable to validate email address: invalid format':
             'Formato de email inválido',
-    }
+    };
 
-    return errorMap[message] || message
+    return errorMap[message] || message;
 }
 
 export const authService = {
@@ -29,7 +29,7 @@ export const authService = {
         const { data, error } = await supabase.auth.signInWithPassword({
             email,
             password,
-        })
+        });
 
         if (error) {
             return {
@@ -37,14 +37,14 @@ export const authService = {
                 error: mapAuthError(error.message),
                 session: null,
                 user: null,
-            }
+            };
         }
 
         return {
             success: true,
             session: data.session,
             user: data.user,
-        }
+        };
     },
 
     async signUp(
@@ -60,42 +60,42 @@ export const authService = {
                     full_name: name,
                 },
             },
-        })
+        });
 
         if (error) {
             return {
                 success: false,
                 error: mapAuthError(error.message),
                 user: null,
-            }
+            };
         }
 
         return {
             success: true,
             user: data.user,
-        }
+        };
     },
 
     async signOut(): Promise<void> {
-        await supabase.auth.signOut()
+        await supabase.auth.signOut();
     },
 
     async getSession(): Promise<Session | null> {
         const {
             data: { session },
-        } = await supabase.auth.getSession()
-        return session
+        } = await supabase.auth.getSession();
+        return session;
     },
 
     onAuthStateChange(callback: (session: Session | null) => void) {
         const {
             data: { subscription },
         } = supabase.auth.onAuthStateChange((_event, session) => {
-            callback(session)
-        })
+            callback(session);
+        });
 
         return () => {
-            subscription.unsubscribe()
-        }
+            subscription.unsubscribe();
+        };
     },
-}
+};

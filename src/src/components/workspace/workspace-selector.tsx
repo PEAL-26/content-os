@@ -1,10 +1,10 @@
-import { useWorkspace } from '@/hooks/use-workspace'
-import { useEffect, useRef, useState } from 'react'
+import { useWorkspace } from '@/hooks/use-workspace';
+import { useEffect, useRef, useState } from 'react';
 
 export function WorkspaceSelector() {
-    const { currentWorkspace, workspaces, setWorkspace } = useWorkspace()
-    const [isOpen, setIsOpen] = useState(false)
-    const dropdownRef = useRef<HTMLDivElement>(null)
+    const { currentWorkspace, workspaces, setWorkspace } = useWorkspace();
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
@@ -12,14 +12,14 @@ export function WorkspaceSelector() {
                 dropdownRef.current &&
                 !dropdownRef.current.contains(event.target as Node)
             ) {
-                setIsOpen(false)
+                setIsOpen(false);
             }
         }
 
-        document.addEventListener('mousedown', handleClickOutside)
+        document.addEventListener('mousedown', handleClickOutside);
         return () =>
-            document.removeEventListener('mousedown', handleClickOutside)
-    }, [])
+            document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     if (workspaces.length <= 1) {
         return (
@@ -39,7 +39,7 @@ export function WorkspaceSelector() {
                 </svg>
                 <span>{currentWorkspace?.name || 'Workspace'}</span>
             </div>
-        )
+        );
     }
 
     return (
@@ -91,8 +91,8 @@ export function WorkspaceSelector() {
                                 key={workspace.id}
                                 type="button"
                                 onClick={() => {
-                                    setWorkspace(workspace)
-                                    setIsOpen(false)
+                                    setWorkspace(workspace);
+                                    setIsOpen(false);
                                 }}
                                 className={`flex w-full items-center justify-between px-3 py-2 text-sm ${
                                     workspace.id === currentWorkspace?.id
@@ -114,5 +114,5 @@ export function WorkspaceSelector() {
                 </div>
             )}
         </div>
-    )
+    );
 }

@@ -1,10 +1,10 @@
 import type {
     CreateProductInput,
     UpdateProductInput,
-} from '@/lib/schemas/product'
-import { supabase } from '@/lib/supabase'
-import type { Product } from '@/types/database'
-import { v4 as uuidv4 } from 'uuid'
+} from '@/lib/schemas/product';
+import { supabase } from '@/lib/supabase';
+import type { Product } from '@/types/database';
+import { v4 as uuidv4 } from 'uuid';
 
 export const productService = {
     async getProducts(workspaceId: string): Promise<Product[]> {
@@ -12,13 +12,13 @@ export const productService = {
             .from('products')
             .select('*')
             .eq('workspaceId', workspaceId)
-            .order('createdAt', { ascending: false })
+            .order('createdAt', { ascending: false });
 
         if (error) {
-            throw new Error(`Erro ao buscar produtos: ${error.message}`)
+            throw new Error(`Erro ao buscar produtos: ${error.message}`);
         }
 
-        return (data ?? []) as Product[]
+        return (data ?? []) as Product[];
     },
 
     async getActiveProducts(workspaceId: string): Promise<Product[]> {
@@ -27,13 +27,13 @@ export const productService = {
             .select('*')
             .eq('workspaceId', workspaceId)
             .eq('isActive', true)
-            .order('createdAt', { ascending: false })
+            .order('createdAt', { ascending: false });
 
         if (error) {
-            throw new Error(`Erro ao buscar produtos ativos: ${error.message}`)
+            throw new Error(`Erro ao buscar produtos ativos: ${error.message}`);
         }
 
-        return (data ?? []) as Product[]
+        return (data ?? []) as Product[];
     },
 
     async getProduct(id: string): Promise<Product | null> {
@@ -41,23 +41,23 @@ export const productService = {
             .from('products')
             .select('*')
             .eq('id', id)
-            .single()
+            .single();
 
         if (error) {
             if (error.code === 'PGRST116') {
-                return null
+                return null;
             }
-            throw new Error(`Erro ao buscar produto: ${error.message}`)
+            throw new Error(`Erro ao buscar produto: ${error.message}`);
         }
 
-        return data as Product
+        return data as Product;
     },
 
     async createProduct(
         workspaceId: string,
         input: CreateProductInput
     ): Promise<Product> {
-        const id = uuidv4()
+        const id = uuidv4();
 
         const { data, error } = await supabase
             .from('products')
@@ -76,16 +76,16 @@ export const productService = {
                 updatedAt: new Date().toISOString(),
             })
             .select()
-            .single()
+            .single();
 
         if (error) {
             if (error.code === '23505') {
-                throw new Error('Já existe um produto com este slug')
+                throw new Error('Já existe um produto com este slug');
             }
-            throw new Error(`Erro ao criar produto: ${error.message}`)
+            throw new Error(`Erro ao criar produto: ${error.message}`);
         }
 
-        return data as Product
+        return data as Product;
     },
 
     async updateProduct(
@@ -108,23 +108,23 @@ export const productService = {
             })
             .eq('id', id)
             .select()
-            .single()
+            .single();
 
         if (error) {
             if (error.code === '23505') {
-                throw new Error('Já existe um produto com este slug')
+                throw new Error('Já existe um produto com este slug');
             }
-            throw new Error(`Erro ao atualizar produto: ${error.message}`)
+            throw new Error(`Erro ao atualizar produto: ${error.message}`);
         }
 
-        return data as Product
+        return data as Product;
     },
 
     async toggleActive(id: string): Promise<Product> {
-        const product = await this.getProduct(id)
+        const product = await this.getProduct(id);
 
         if (!product) {
-            throw new Error('Produto não encontrado')
+            throw new Error('Produto não encontrado');
         }
 
         const { data, error } = await supabase
@@ -135,15 +135,15 @@ export const productService = {
             })
             .eq('id', id)
             .select()
-            .single()
+            .single();
 
         if (error) {
             throw new Error(
                 `Erro ao alternar estado do produto: ${error.message}`
-            )
+            );
         }
 
-        return data as Product
+        return data as Product;
     },
 
     generateSlug(name: string): string {
@@ -153,8 +153,8 @@ export const productService = {
             .replace(/[\u0300-\u036f]/g, '')
             .replace(/[^a-z0-9\s-]/g, '')
             .trim()
-            .replace(/\s+/g, '-')
+            .replace(/\s+/g, '-');
 
-        return base
+        return base;
     },
-}
+};

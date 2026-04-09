@@ -1,22 +1,22 @@
-import type { Product, Workspace } from '@/types/database'
-import type { PillarConfig } from '@/types/pillar'
+import type { Product, Workspace } from '@/types/database';
+import type { PillarConfig } from '@/types/pillar';
 
 export interface AIGeneratedArticle {
-    title: string
-    slug: string
-    summary: string
-    body: string
-    seoTitle: string
-    seoDescription: string
-    keywords: string[]
-    readingTimeMin: number
+    title: string;
+    slug: string;
+    summary: string;
+    body: string;
+    seoTitle: string;
+    seoDescription: string;
+    keywords: string[];
+    readingTimeMin: number;
 }
 
 export interface GenerateArticleParams {
-    topic: string
-    pillar?: PillarConfig
-    product?: Product
-    workspace: Workspace
+    topic: string;
+    pillar?: PillarConfig;
+    product?: Product;
+    workspace: Workspace;
 }
 
 export type AIProviderId =
@@ -28,40 +28,40 @@ export type AIProviderId =
     | 'cerebras'
     | 'together'
     | 'openrouter'
-    | 'ollama'
+    | 'ollama';
 
 export interface AIProviderConfig {
-    id: AIProviderId
-    name: string
-    apiKeyEnvVar: string
-    apiUrlEnvVar?: string
+    id: AIProviderId;
+    name: string;
+    apiKeyEnvVar: string;
+    apiUrlEnvVar?: string;
     models: {
-        primary: string
-        fallback: string
-    }
-    priority: number
-    isFree: boolean
-    description?: string
+        primary: string;
+        fallback: string;
+    };
+    priority: number;
+    isFree: boolean;
+    description?: string;
 }
 
 export interface AIProviderResult {
-    success: boolean
-    provider?: AIProviderId
-    error?: string
+    success: boolean;
+    provider?: AIProviderId;
+    error?: string;
     code?:
         | 'NO_API_KEY'
         | 'RATE_LIMIT'
         | 'TIMEOUT'
         | 'INVALID_RESPONSE'
         | 'API_ERROR'
-        | 'NO_CREDITS'
+        | 'NO_CREDITS';
 }
 
 export type GenerateArticleResult =
     | {
-          success: true
-          article: AIGeneratedArticle
-          provider: AIProviderId
-          prompt: string
+          success: true;
+          article: AIGeneratedArticle;
+          provider: AIProviderId;
+          prompt: string;
       }
-    | { success: false; error: string; code: AIProviderResult['code'] }
+    | { success: false; error: string; code: AIProviderResult['code'] };

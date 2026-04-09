@@ -16,5 +16,5 @@ export function envConfig() {
         OLLAMA_URL: import.meta.env.VITE_OLLAMA_URL,
         AI_PROVIDER_PRIORITY: import.meta.env.VITE_AI_PROVIDER_PRIORITY,
         AI_DEFAULT_MODEL: import.meta.env.VITE_AI_DEFAULT_MODEL,
-    }
+    };
 }

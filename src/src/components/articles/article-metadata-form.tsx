@@ -1,28 +1,28 @@
-import { PillarBadge } from '@/components/content/pillar-badge'
-import { ProductSelector } from '@/components/products/product-selector'
-import { generateSlug } from '@/types/article'
-import { PlusIcon } from 'lucide-react'
-import type { KeyboardEvent } from 'react'
-import { useState } from 'react'
+import { PillarBadge } from '@/components/content/pillar-badge';
+import { ProductSelector } from '@/components/products/product-selector';
+import { generateSlug } from '@/types/article';
+import { PlusIcon } from 'lucide-react';
+import type { KeyboardEvent } from 'react';
+import { useState } from 'react';
 
 interface ArticleMetadata {
-    title: string
-    slug: string
-    summary: string | null
-    pillarId: string | null
-    productId: string | null
-    seoTitle: string | null
-    seoDescription: string | null
-    keywords: string[]
+    title: string;
+    slug: string;
+    summary: string | null;
+    pillarId: string | null;
+    productId: string | null;
+    seoTitle: string | null;
+    seoDescription: string | null;
+    keywords: string[];
 }
 
 interface ArticleMetadataFormProps {
-    metadata: ArticleMetadata
-    onChange: (updates: Partial<ArticleMetadata>) => void
-    pillars: Array<{ id: string; name: string; pillar: string }>
-    slugError?: string | null
-    onSlugBlur?: () => void
-    isCheckingSlug?: boolean
+    metadata: ArticleMetadata;
+    onChange: (updates: Partial<ArticleMetadata>) => void;
+    pillars: Array<{ id: string; name: string; pillar: string }>;
+    slugError?: string | null;
+    onSlugBlur?: () => void;
+    isCheckingSlug?: boolean;
 }
 
 export function ArticleMetadataForm({
@@ -33,32 +33,32 @@ export function ArticleMetadataForm({
     onSlugBlur,
     isCheckingSlug,
 }: ArticleMetadataFormProps) {
-    const [keywordInput, setKeywordInput] = useState('')
+    const [keywordInput, setKeywordInput] = useState('');
 
     const handleAddKeyword = () => {
-        const trimmed = keywordInput.trim()
+        const trimmed = keywordInput.trim();
         if (trimmed && !metadata.keywords.includes(trimmed)) {
-            onChange({ keywords: [...metadata.keywords, trimmed] })
-            setKeywordInput('')
+            onChange({ keywords: [...metadata.keywords, trimmed] });
+            setKeywordInput('');
         }
-    }
+    };
 
     const handleKeywordKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Enter') {
-            e.preventDefault()
-            handleAddKeyword()
+            e.preventDefault();
+            handleAddKeyword();
         }
-    }
+    };
 
     const handleRemoveKeyword = (keyword: string) => {
-        onChange({ keywords: metadata.keywords.filter((k) => k !== keyword) })
-    }
+        onChange({ keywords: metadata.keywords.filter((k) => k !== keyword) });
+    };
 
     const handleRegenerateSlug = () => {
-        onChange({ slug: generateSlug(metadata.title) })
-    }
+        onChange({ slug: generateSlug(metadata.title) });
+    };
 
-    const pillar = pillars.find((p) => p.id === metadata.pillarId)
+    const pillar = pillars.find((p) => p.id === metadata.pillarId);
 
     return (
         <div className="space-y-5">
@@ -254,5 +254,5 @@ export function ArticleMetadataForm({
                 </div>
             </div>
         </div>
-    )
+    );
 }

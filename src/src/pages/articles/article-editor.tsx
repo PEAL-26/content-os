@@ -1,50 +1,54 @@
-import { ArticleMetadataForm } from '@/components/articles/article-metadata-form'
-import { ArticleStatusBadge } from '@/components/articles/article-status-badge'
-import { useDebounce } from '@/hooks/use-debounce'
-import { usePillars } from '@/hooks/use-pillars'
-import { cn } from '@/lib/utils'
-import { articleService } from '@/services/article.service'
-import { useWorkspaceStore } from '@/stores/workspace-store'
+import { ArticleMetadataForm } from '@/components/articles/article-metadata-form';
+import { ArticleStatusBadge } from '@/components/articles/article-status-badge';
+import { ContentGeneratorPanel } from '@/components/content/content-generator-panel';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useDebounce } from '@/hooks/use-debounce';
+import { usePillars } from '@/hooks/use-pillars';
+import { useProducts } from '@/hooks/use-products';
+import { cn } from '@/lib/utils';
+import { articleService } from '@/services/article.service';
+import { useWorkspaceStore } from '@/stores/workspace-store';
 import {
     calculateReadingTime,
     canTransitionTo,
     STATUS_TRANSITION_LABELS,
     STATUS_TRANSITIONS,
-} from '@/types/article'
-import type { ArticleStatus, ArticleWithRelations } from '@/types/database'
-import { PanelLeftClose, PanelLeftOpen } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+} from '@/types/article';
+import type { ArticleStatus, ArticleWithRelations } from '@/types/database';
+import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 
-const SESSION_STORAGE_KEY = 'article-editor-draft-'
+const SESSION_STORAGE_KEY = 'article-editor-draft-';
 
 interface EditorState {
-    title: string
-    slug: string
-    summary: string | null
-    body: string
-    pillarId: string | null
-    productId: string | null
-    seoTitle: string | null
-    seoDescription: string | null
-    keywords: string[]
+    title: string;
+    slug: string;
+    summary: string | null;
+    body: string;
+    pillarId: string | null;
+    productId: string | null;
+    seoTitle: string | null;
+    seoDescription: string | null;
+    keywords: string[];
 }
 
 export function ArticleEditor() {
-    const { id } = useParams<{ id: string }>()
-    const navigate = useNavigate()
-    const { currentWorkspace } = useWorkspaceStore()
-    const { pillars } = usePillars()
+    const { id } = useParams<{ id: string }>();
+    const navigate = useNavigate();
+    const { currentWorkspace } = useWorkspaceStore();
+    const { pillars } = usePillars();
+    const { activeProducts } = useProducts();
 
-    const [article, setArticle] = useState<ArticleWithRelations | null>(null)
-    const [isLoading, setIsLoading] = useState(true)
-    const [isSaving, setIsSaving] = useState(false)
-    const [lastSaved, setLastSaved] = useState<Date | null>(null)
-    const [saveError, setSaveError] = useState<string | null>(null)
-    const [slugError, setSlugError] = useState<string | null>(null)
-    const [isCheckingSlug, setIsCheckingSlug] = useState(false)
-    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
-    const [showMetadata, setShowMetadata] = useState(true)
+    const [article, setArticle] = useState<ArticleWithRelations | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isSaving, setIsSaving] = useState(false);
+    const [lastSaved, setLastSaved] = useState<Date | null>(null);
+    const [saveError, setSaveError] = useState<string | null>(null);
+    const [slugError, setSlugError] = useState<string | null>(null);
+    const [isCheckingSlug, setIsCheckingSlug] = useState(false);
+    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+    const [showMetadata, setShowMetadata] = useState(true);
 
     const [state, setState] = useState<EditorState>({
         title: '',
@@ -56,27 +60,27 @@ export function ArticleEditor() {
         seoTitle: null,
         seoDescription: null,
         keywords: [],
-    })
+    });
 
     const pillarOptions = useMemo(() => {
         return pillars.map((p) => ({
             id: p.id,
             name: p.name,
             pillar: p.pillar,
-        }))
-    }, [pillars])
+        }));
+    }, [pillars]);
 
-    const debouncedState = useDebounce(state, 3000)
+    const debouncedState = useDebounce(state, 3000);
 
     useEffect(() => {
-        if (!id) return
+        if (!id) return;
 
         const loadArticle = async () => {
-            setIsLoading(true)
+            setIsLoading(true);
             try {
-                const data = await articleService.getArticleWithRelations(id)
+                const data = await articleService.getArticleWithRelations(id);
                 if (data) {
-                    setArticle(data)
+                    setArticle(data);
                     setState({
                         title: data.title,
                         slug: data.slug,
@@ -87,89 +91,89 @@ export function ArticleEditor() {
                         seoTitle: data.seoTitle,
                         seoDescription: data.seoDescription,
                         keywords: data.keywords || [],
-                    })
+                    });
                 } else {
-                    navigate('/dashboard/articles')
+                    navigate('/dashboard/articles');
                 }
             } catch (err) {
-                console.error('Error loading article:', err)
-                navigate('/dashboard/articles')
+                console.error('Error loading article:', err);
+                navigate('/dashboard/articles');
             } finally {
-                setIsLoading(false)
+                setIsLoading(false);
             }
-        }
+        };
 
-        loadArticle()
-    }, [id, navigate])
+        loadArticle();
+    }, [id, navigate]);
 
     useEffect(() => {
-        if (!id) return
+        if (!id) return;
 
-        const savedDraft = sessionStorage.getItem(SESSION_STORAGE_KEY + id)
+        const savedDraft = sessionStorage.getItem(SESSION_STORAGE_KEY + id);
         if (savedDraft) {
             try {
-                const draft = JSON.parse(savedDraft) as EditorState
+                const draft = JSON.parse(savedDraft) as EditorState;
                 if (draft.body && draft.body !== state.body) {
-                    setState((prev) => ({ ...prev, body: draft.body }))
-                    setHasUnsavedChanges(true)
+                    setState((prev) => ({ ...prev, body: draft.body }));
+                    setHasUnsavedChanges(true);
                 }
             } catch {
-                sessionStorage.removeItem(SESSION_STORAGE_KEY + id)
+                sessionStorage.removeItem(SESSION_STORAGE_KEY + id);
             }
         }
-    }, [id])
+    }, [id]);
 
     useEffect(() => {
-        if (!id || !hasUnsavedChanges) return
+        if (!id || !hasUnsavedChanges) return;
 
         sessionStorage.setItem(
             SESSION_STORAGE_KEY + id,
             JSON.stringify({
                 body: state.body,
             })
-        )
-    }, [state.body, id, hasUnsavedChanges])
+        );
+    }, [state.body, id, hasUnsavedChanges]);
 
     const checkSlugExists = useCallback(
         async (slug: string, excludeId?: string) => {
-            if (!currentWorkspace?.id) return false
+            if (!currentWorkspace?.id) return false;
 
-            setIsCheckingSlug(true)
-            setSlugError(null)
+            setIsCheckingSlug(true);
+            setSlugError(null);
 
             try {
                 const articles = await articleService.getArticles(
                     currentWorkspace.id,
                     { search: slug }
-                )
+                );
                 const exists = articles.some(
                     (a) => a.slug === slug && a.id !== excludeId
-                )
+                );
 
                 if (exists) {
                     setSlugError(
                         'Este slug já está a ser usado por outro artigo'
-                    )
-                    return true
+                    );
+                    return true;
                 }
 
-                setSlugError(null)
-                return false
+                setSlugError(null);
+                return false;
             } catch (err) {
-                console.error('Error checking slug:', err)
-                return false
+                console.error('Error checking slug:', err);
+                return false;
             } finally {
-                setIsCheckingSlug(false)
+                setIsCheckingSlug(false);
             }
         },
         [currentWorkspace?.id]
-    )
+    );
 
     const saveArticle = useCallback(async () => {
-        if (!id || !currentWorkspace?.id || slugError) return
+        if (!id || !currentWorkspace?.id || slugError) return;
 
-        setIsSaving(true)
-        setSaveError(null)
+        setIsSaving(true);
+        setSaveError(null);
 
         try {
             await articleService.updateArticle(id, {
@@ -182,71 +186,75 @@ export function ArticleEditor() {
                 seoTitle: state.seoTitle,
                 seoDescription: state.seoDescription,
                 keywords: state.keywords,
-            })
+            });
 
-            sessionStorage.removeItem(SESSION_STORAGE_KEY + id)
-            setLastSaved(new Date())
-            setHasUnsavedChanges(false)
+            sessionStorage.removeItem(SESSION_STORAGE_KEY + id);
+            setLastSaved(new Date());
+            setHasUnsavedChanges(false);
         } catch (err) {
-            console.error('Error saving article:', err)
-            setSaveError(err instanceof Error ? err.message : 'Erro ao guardar')
+            console.error('Error saving article:', err);
+            setSaveError(
+                err instanceof Error ? err.message : 'Erro ao guardar'
+            );
         } finally {
-            setIsSaving(false)
+            setIsSaving(false);
         }
-    }, [id, currentWorkspace?.id, slugError, state])
+    }, [id, currentWorkspace?.id, slugError, state]);
 
     useEffect(() => {
-        if (!hasUnsavedChanges || !id || slugError) return
+        if (!hasUnsavedChanges || !id || slugError) return;
 
         const timer = setTimeout(() => {
-            saveArticle()
-        }, 3000)
+            saveArticle();
+        }, 3000);
 
-        return () => clearTimeout(timer)
-    }, [debouncedState, hasUnsavedChanges, saveArticle])
+        return () => clearTimeout(timer);
+    }, [debouncedState, hasUnsavedChanges, saveArticle]);
 
     const handleUpdateState = (updates: Partial<EditorState>) => {
-        setState((prev) => ({ ...prev, ...updates }))
-        setHasUnsavedChanges(true)
-    }
+        setState((prev) => ({ ...prev, ...updates }));
+        setHasUnsavedChanges(true);
+    };
 
     const handleSlugBlur = () => {
         if (state.slug && article) {
-            checkSlugExists(state.slug, article.id)
+            checkSlugExists(state.slug, article.id);
         }
-    }
+    };
 
     const handleStatusChange = async (newStatus: ArticleStatus) => {
-        if (!id || !article) return
+        if (!id || !article) return;
 
         if (!canTransitionTo(article.status, newStatus)) {
-            return
+            return;
         }
 
-        setIsSaving(true)
+        setIsSaving(true);
         try {
-            await articleService.updateStatus(id, newStatus)
-            setArticle((prev) => (prev ? { ...prev, status: newStatus } : null))
+            await articleService.updateStatus(id, newStatus);
+            setArticle((prev) =>
+                prev ? { ...prev, status: newStatus } : null
+            );
         } catch (err) {
-            console.error('Error updating status:', err)
+            console.error('Error updating status:', err);
             setSaveError(
                 err instanceof Error ? err.message : 'Erro ao atualizar status'
-            )
+            );
         } finally {
-            setIsSaving(false)
+            setIsSaving(false);
         }
-    }
+    };
 
     const handleSaveNow = () => {
-        saveArticle()
-    }
+        saveArticle();
+    };
 
     if (isLoading) {
         return (
             <div className="flex items-center justify-center py-12">
                 <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
             </div>
-        )
+        );
     }
 
     if (!article) {
@@ -260,12 +268,12 @@ export function ArticleEditor() {
                     Voltar à lista
                 </Link>
             </div>
-        )
+        );
     }
 
-    const availableTransitions = STATUS_TRANSITIONS[article.status] || []
+    const availableTransitions = STATUS_TRANSITIONS[article.status] || [];
 
-    const readingTime = calculateReadingTime(state.body)
+    const readingTime = calculateReadingTime(state.body);
 
     return (
         <div className="flex h-full flex-col">
@@ -356,7 +364,7 @@ export function ArticleEditor() {
                         showMetadata ? 'w-[70%]' : 'w-full'
                     )}
                 >
-                    <div className="flex items-center justify-between border-b px-4 py-2">
+                    <div className="flex h-12 items-center justify-between border-b px-4 py-2">
                         <div className="flex items-center gap-4">
                             <span className="text-xs text-gray-500">
                                 {readingTime} min de leitura
@@ -411,23 +419,54 @@ export function ArticleEditor() {
                 </div>
 
                 {showMetadata && (
-                    <div className="w-[30%] overflow-y-auto bg-gray-50 p-4">
-                        <h2 className="mb-4 text-sm font-medium text-gray-700">
-                            Metadados
-                        </h2>
-                        <ArticleMetadataForm
-                            metadata={state}
-                            onChange={handleUpdateState}
-                            pillars={pillarOptions}
-                            slugError={slugError}
-                            onSlugBlur={handleSlugBlur}
-                            isCheckingSlug={isCheckingSlug}
-                        />
+                    <div className="w-[30%] overflow-y-auto border-r border-b bg-gray-50">
+                        <Tabs
+                            defaultValue="metadata"
+                            className="flex h-full flex-col"
+                        >
+                            <TabsList className="h-12 w-full justify-start rounded-none border-b bg-gray-50 px-4">
+                                <TabsTrigger value="metadata">
+                                    Metadados
+                                </TabsTrigger>
+                                <TabsTrigger value="content">
+                                    Conteúdo
+                                </TabsTrigger>
+                            </TabsList>
+
+                            <TabsContent
+                                value="metadata"
+                                className="flex-1 overflow-y-auto p-4"
+                            >
+                                <ArticleMetadataForm
+                                    metadata={state}
+                                    onChange={handleUpdateState}
+                                    pillars={pillarOptions}
+                                    slugError={slugError}
+                                    onSlugBlur={handleSlugBlur}
+                                    isCheckingSlug={isCheckingSlug}
+                                />
+                            </TabsContent>
+
+                            <TabsContent
+                                value="content"
+                                className="flex-1 overflow-y-auto p-4"
+                            >
+                                <ContentGeneratorPanel
+                                    article={article}
+                                    product={activeProducts.find(
+                                        (p) => p.id === state.productId
+                                    )}
+                                    pillar={pillars.find(
+                                        (p) => p.id === state.pillarId
+                                    )}
+                                />
+                            </TabsContent>
+                        </Tabs>
                     </div>
                 )}
             </div>
         </div>
-    )
+    );
 }
 
-import MDEditor from '@uiw/react-md-editor'
+import MDEditor from '@uiw/react-md-editor';

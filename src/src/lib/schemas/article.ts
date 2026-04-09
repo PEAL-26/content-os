@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from 'zod';
 
 export const createArticleSchema = z.object({
     title: z
@@ -21,7 +21,7 @@ export const createArticleSchema = z.object({
     aiGenerated: z.boolean().optional(),
     aiPromptUsed: z.string().optional(),
     readingTimeMin: z.number().optional(),
-})
+});
 
 export const updateArticleSchema = z.object({
     title: z.string().min(1).max(200).optional(),
@@ -42,7 +42,7 @@ export const updateArticleSchema = z.object({
     publishedUrl: z.string().url().optional().nullable(),
     aiPromptUsed: z.string().optional().nullable(),
     readingTimeMin: z.number().optional().nullable(),
-})
+});
 
 export const articleFiltersSchema = z.object({
     status: z
@@ -53,8 +53,8 @@ export const articleFiltersSchema = z.object({
     search: z.string().optional(),
     limit: z.number().min(1).max(100).optional(),
     offset: z.number().min(0).optional(),
-})
+});
 
-export type CreateArticleInput = z.infer<typeof createArticleSchema>
-export type UpdateArticleInput = z.infer<typeof updateArticleSchema>
-export type ArticleFiltersInput = z.infer<typeof articleFiltersSchema>
+export type CreateArticleInput = z.infer<typeof createArticleSchema>;
+export type UpdateArticleInput = z.infer<typeof updateArticleSchema>;
+export type ArticleFiltersInput = z.infer<typeof articleFiltersSchema>;

@@ -1,6 +1,6 @@
-import { PillarCard } from '@/components/content/pillar-card'
-import { usePillars } from '@/hooks/use-pillars'
-import { PILLAR_LABELS } from '@/types/pillar'
+import { PillarCard } from '@/components/content/pillar-card';
+import { usePillars } from '@/hooks/use-pillars';
+import { PILLAR_LABELS } from '@/types/pillar';
 
 export function PillarsPage() {
     const {
@@ -11,7 +11,7 @@ export function PillarsPage() {
         initMessage,
         updatePillar,
         getUpdateState,
-    } = usePillars()
+    } = usePillars();
 
     if (isLoading || isInitializing) {
         return (
@@ -23,7 +23,7 @@ export function PillarsPage() {
                     </p>
                 )}
             </div>
-        )
+        );
     }
 
     if (error) {
@@ -31,7 +31,7 @@ export function PillarsPage() {
             <div className="rounded-md bg-red-50 p-4">
                 <p className="text-sm text-red-800">{error}</p>
             </div>
-        )
+        );
     }
 
     if (pillars.length === 0) {
@@ -41,7 +41,7 @@ export function PillarsPage() {
                     Ainda não existem pilares configurados.
                 </p>
             </div>
-        )
+        );
     }
 
     return (
@@ -80,7 +80,7 @@ export function PillarsPage() {
 
             <div className="grid gap-6 lg:grid-cols-2">
                 {pillars.map((pillar) => {
-                    const state = getUpdateState(pillar.pillar)
+                    const state = getUpdateState(pillar.pillar);
                     return (
                         <PillarCard
                             key={pillar.pillar}
@@ -90,7 +90,7 @@ export function PillarsPage() {
                             isSuccess={state.isSuccess}
                             error={state.error}
                         />
-                    )
+                    );
                 })}
             </div>
 
@@ -128,5 +128,5 @@ export function PillarsPage() {
                 </div>
             </div>
         </div>
-    )
+    );
 }

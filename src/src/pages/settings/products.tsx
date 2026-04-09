@@ -1,16 +1,16 @@
-import { ProductCard } from '@/components/products/product-card'
-import { ProductForm } from '@/components/products/product-form'
-import { ConfirmModal, Modal } from '@/components/ui/modal'
-import { useProducts, type ProductSortBy } from '@/hooks/use-products'
-import type { CreateProductInput } from '@/lib/schemas/product'
-import type { Product } from '@/types/database'
-import { useState } from 'react'
+import { ProductCard } from '@/components/products/product-card';
+import { ProductForm } from '@/components/products/product-form';
+import { ConfirmModal, Modal } from '@/components/ui/modal';
+import { useProducts, type ProductSortBy } from '@/hooks/use-products';
+import type { CreateProductInput } from '@/lib/schemas/product';
+import type { Product } from '@/types/database';
+import { useState } from 'react';
 
 const sortOptions: { value: ProductSortBy; label: string }[] = [
     { value: 'createdAt', label: 'Data de criação' },
     { value: 'name', label: 'Nome' },
     { value: 'isActive', label: 'Estado' },
-]
+];
 
 export function ProductsPage() {
     const {
@@ -26,93 +26,93 @@ export function ProductsPage() {
         createProduct,
         updateProduct,
         toggleActive,
-    } = useProducts()
+    } = useProducts();
 
-    const [isModalOpen, setIsModalOpen] = useState(false)
-    const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false)
-    const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+    const [editingProduct, setEditingProduct] = useState<Product | null>(null);
     const [productToArchive, setProductToArchive] = useState<Product | null>(
         null
-    )
-    const [isSaving, setIsSaving] = useState(false)
-    const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null)
+    );
+    const [isSaving, setIsSaving] = useState(false);
+    const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
 
     const showFeedback = (message: string) => {
-        setFeedbackMessage(message)
-        setTimeout(() => setFeedbackMessage(null), 3000)
-    }
+        setFeedbackMessage(message);
+        setTimeout(() => setFeedbackMessage(null), 3000);
+    };
 
     const handleOpenCreate = () => {
-        setEditingProduct(null)
-        setIsModalOpen(true)
-    }
+        setEditingProduct(null);
+        setIsModalOpen(true);
+    };
 
     const handleOpenEdit = (product: Product) => {
-        setEditingProduct(product)
-        setIsModalOpen(true)
-    }
+        setEditingProduct(product);
+        setIsModalOpen(true);
+    };
 
     const handleArchive = (product: Product) => {
-        setProductToArchive(product)
-        setIsConfirmModalOpen(true)
-    }
+        setProductToArchive(product);
+        setIsConfirmModalOpen(true);
+    };
 
     const handleConfirmArchive = async () => {
-        if (!productToArchive) return
+        if (!productToArchive) return;
 
-        setIsSaving(true)
-        const result = await toggleActive(productToArchive.id)
-        setIsSaving(false)
+        setIsSaving(true);
+        const result = await toggleActive(productToArchive.id);
+        setIsSaving(false);
 
         if (result.success) {
             showFeedback(
                 productToArchive.isActive
                     ? 'Produto arquivado com sucesso'
                     : 'Produto ativado com sucesso'
-            )
+            );
         } else {
-            showFeedback(result.error || 'Erro ao processar produto')
+            showFeedback(result.error || 'Erro ao processar produto');
         }
 
-        setIsConfirmModalOpen(false)
-        setProductToArchive(null)
-    }
+        setIsConfirmModalOpen(false);
+        setProductToArchive(null);
+    };
 
     const handleSubmit = async (data: CreateProductInput) => {
-        setIsSaving(true)
+        setIsSaving(true);
 
-        let result
+        let result;
         if (editingProduct) {
-            result = await updateProduct(editingProduct.id, data)
+            result = await updateProduct(editingProduct.id, data);
         } else {
-            result = await createProduct(data)
+            result = await createProduct(data);
         }
 
-        setIsSaving(false)
+        setIsSaving(false);
 
         if (result.success) {
             showFeedback(
                 editingProduct
                     ? 'Produto atualizado com sucesso'
                     : 'Produto criado com sucesso'
-            )
-            setIsModalOpen(false)
-            setEditingProduct(null)
+            );
+            setIsModalOpen(false);
+            setEditingProduct(null);
         } else {
-            showFeedback(result.error || 'Erro ao guardar produto')
+            showFeedback(result.error || 'Erro ao guardar produto');
         }
-    }
+    };
 
     const toggleSortOrder = () => {
-        setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
-    }
+        setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    };
 
     if (isLoading) {
         return (
             <div className="flex h-64 items-center justify-center">
                 <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
             </div>
-        )
+        );
     }
 
     return (
@@ -329,8 +329,8 @@ export function ProductsPage() {
             <Modal
                 isOpen={isModalOpen}
                 onClose={() => {
-                    setIsModalOpen(false)
-                    setEditingProduct(null)
+                    setIsModalOpen(false);
+                    setEditingProduct(null);
                 }}
                 title={editingProduct ? 'Editar Produto' : 'Novo Produto'}
                 size="lg"
@@ -339,8 +339,8 @@ export function ProductsPage() {
                     product={editingProduct ?? undefined}
                     onSubmit={handleSubmit}
                     onCancel={() => {
-                        setIsModalOpen(false)
-                        setEditingProduct(null)
+                        setIsModalOpen(false);
+                        setEditingProduct(null);
                     }}
                     isLoading={isSaving}
                 />
@@ -349,8 +349,8 @@ export function ProductsPage() {
             <ConfirmModal
                 isOpen={isConfirmModalOpen}
                 onClose={() => {
-                    setIsConfirmModalOpen(false)
-                    setProductToArchive(null)
+                    setIsConfirmModalOpen(false);
+                    setProductToArchive(null);
                 }}
                 onConfirm={handleConfirmArchive}
                 title={
@@ -368,5 +368,5 @@ export function ProductsPage() {
                 isLoading={isSaving}
             />
         </div>
-    )
+    );
 }

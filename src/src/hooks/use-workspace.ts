@@ -1,28 +1,28 @@
-import { useAuthContext } from '@/context/auth-context'
-import { workspaceInitService } from '@/services/workspace-init.service'
-import { useWorkspaceStore } from '@/stores/workspace-store'
-import { useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useAuthContext } from '@/context/auth-context';
+import { workspaceInitService } from '@/services/workspace-init.service';
+import { useWorkspaceStore } from '@/stores/workspace-store';
+import { useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 export function useWorkspace() {
-    const { user, isLoading: authLoading } = useAuthContext()
-    const navigate = useNavigate()
-    const store = useWorkspaceStore()
-    const hasCheckedRef = useRef(false)
-    const initializedWorkspacesRef = useRef<Set<string>>(new Set())
+    const { user, isLoading: authLoading } = useAuthContext();
+    const navigate = useNavigate();
+    const store = useWorkspaceStore();
+    const hasCheckedRef = useRef(false);
+    const initializedWorkspacesRef = useRef<Set<string>>(new Set());
 
     useEffect(() => {
         if (user && !authLoading && !hasCheckedRef.current) {
-            hasCheckedRef.current = true
-            store.fetchWorkspaces(user.id)
+            hasCheckedRef.current = true;
+            store.fetchWorkspaces(user.id);
         }
 
         if (!user && !authLoading) {
-            hasCheckedRef.current = false
-            store.clearWorkspace()
-            initializedWorkspacesRef.current.clear()
+            hasCheckedRef.current = false;
+            store.clearWorkspace();
+            initializedWorkspacesRef.current.clear();
         }
-    }, [user, authLoading])
+    }, [user, authLoading]);
 
     useEffect(() => {
         if (
@@ -31,22 +31,22 @@ export function useWorkspace() {
             user &&
             !authLoading
         ) {
-            navigate('/onboarding', { replace: true })
+            navigate('/onboarding', { replace: true });
         }
-    }, [store.isLoading, store.workspaces.length, user, authLoading, navigate])
+    }, [store.isLoading, store.workspaces.length, user, authLoading, navigate]);
 
     useEffect(() => {
-        const workspaceId = store.currentWorkspace?.id
+        const workspaceId = store.currentWorkspace?.id;
 
         if (
             workspaceId &&
             !initializedWorkspacesRef.current.has(workspaceId) &&
             !store.isLoading
         ) {
-            initializedWorkspacesRef.current.add(workspaceId)
-            workspaceInitService.ensureDefaultConfigs(workspaceId)
+            initializedWorkspacesRef.current.add(workspaceId);
+            workspaceInitService.ensureDefaultConfigs(workspaceId);
         }
-    }, [store.currentWorkspace?.id, store.isLoading])
+    }, [store.currentWorkspace?.id, store.isLoading]);
 
     return {
         currentWorkspace: store.currentWorkspace,
@@ -57,5 +57,5 @@ export function useWorkspace() {
         createWorkspace: store.createWorkspace,
         updateWorkspace: store.updateWorkspace,
         clearWorkspace: store.clearWorkspace,
-    }
+    };
 }

@@ -1,23 +1,23 @@
-import { ChannelIconOnly } from '@/components/channels/channel-badge'
-import { useChannels } from '@/hooks/use-channels'
-import type { ChannelConfig, SocialChannel } from '@/types/database'
-import { ALL_CHANNELS, CHANNEL_LABELS, VOICE_TONES } from '@/types/database'
-import { useCallback, useState } from 'react'
+import { ChannelIconOnly } from '@/components/channels/channel-badge';
+import { useChannels } from '@/hooks/use-channels';
+import type { ChannelConfig, SocialChannel } from '@/types/database';
+import { ALL_CHANNELS, CHANNEL_LABELS, VOICE_TONES } from '@/types/database';
+import { useCallback, useState } from 'react';
 
 interface ChannelFormData {
-    handle: string
-    defaultTone: string
-    customTone: string
-    notes: string
-    isActive: boolean
-    isPrimary: boolean
+    handle: string;
+    defaultTone: string;
+    customTone: string;
+    notes: string;
+    isActive: boolean;
+    isPrimary: boolean;
 }
 
 function createInitialFormData(channel: ChannelConfig): ChannelFormData {
-    const defaultToneValue = channel.defaultTone || ''
+    const defaultToneValue = channel.defaultTone || '';
     const isCustomTone =
         defaultToneValue !== '' &&
-        !VOICE_TONES.some((t) => t.value === defaultToneValue)
+        !VOICE_TONES.some((t) => t.value === defaultToneValue);
     return {
         handle: channel.handle || '',
         defaultTone: isCustomTone ? 'custom' : defaultToneValue,
@@ -25,7 +25,7 @@ function createInitialFormData(channel: ChannelConfig): ChannelFormData {
         notes: channel.notes || '',
         isActive: channel.isActive,
         isPrimary: channel.isPrimary,
-    }
+    };
 }
 
 function ChannelCard({
@@ -34,25 +34,25 @@ function ChannelCard({
     onDelete,
     isSaving,
 }: {
-    channel: ChannelConfig
-    onUpdate: (id: string, data: Partial<ChannelConfig>) => Promise<boolean>
-    onDelete: (id: string) => Promise<boolean>
-    isSaving: boolean
+    channel: ChannelConfig;
+    onUpdate: (id: string, data: Partial<ChannelConfig>) => Promise<boolean>;
+    onDelete: (id: string) => Promise<boolean>;
+    isSaving: boolean;
 }) {
     const [formData, setFormData] = useState<ChannelFormData>(() =>
         createInitialFormData(channel)
-    )
-    const [hasChanges, setHasChanges] = useState(false)
-    const [isDeleting, setIsDeleting] = useState(false)
-    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+    );
+    const [hasChanges, setHasChanges] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
     const updateField = <K extends keyof ChannelFormData>(
         field: K,
         value: ChannelFormData[K]
     ) => {
-        setFormData((prev) => ({ ...prev, [field]: value }))
-        setHasChanges(true)
-    }
+        setFormData((prev) => ({ ...prev, [field]: value }));
+        setHasChanges(true);
+    };
 
     const handleSave = async () => {
         const dataToSave: Partial<ChannelConfig> = {
@@ -64,22 +64,22 @@ function ChannelCard({
                 formData.defaultTone === 'custom'
                     ? formData.customTone || null
                     : formData.defaultTone || null,
-        }
+        };
 
-        const success = await onUpdate(channel.id, dataToSave)
+        const success = await onUpdate(channel.id, dataToSave);
         if (success) {
-            setHasChanges(false)
+            setHasChanges(false);
         }
-    }
+    };
 
     const handleDelete = async () => {
-        setIsDeleting(true)
-        const success = await onDelete(channel.id)
+        setIsDeleting(true);
+        const success = await onDelete(channel.id);
         if (!success) {
-            setIsDeleting(false)
-            setShowDeleteConfirm(false)
+            setIsDeleting(false);
+            setShowDeleteConfirm(false);
         }
-    }
+    };
 
     return (
         <div
@@ -293,7 +293,7 @@ function ChannelCard({
                 </div>
             )}
         </div>
-    )
+    );
 }
 
 export function ChannelsPage() {
@@ -304,50 +304,50 @@ export function ChannelsPage() {
         updateChannel,
         createChannel,
         deleteChannel,
-    } = useChannels()
-    const [savingIds, setSavingIds] = useState<Set<string>>(new Set())
-    const [showAddModal, setShowAddModal] = useState(false)
+    } = useChannels();
+    const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
+    const [showAddModal, setShowAddModal] = useState(false);
 
-    const usedChannelTypes = channels.map((ch) => ch.channel)
+    const usedChannelTypes = channels.map((ch) => ch.channel);
     const availableChannels = ALL_CHANNELS.filter(
         (ch) => !usedChannelTypes.includes(ch)
-    )
+    );
 
     const handleUpdate = useCallback(
         async (
             channelId: string,
             data: Partial<ChannelConfig>
         ): Promise<boolean> => {
-            setSavingIds((prev) => new Set(prev).add(channelId))
+            setSavingIds((prev) => new Set(prev).add(channelId));
             try {
-                const success = await updateChannel(channelId, data)
-                return success
+                const success = await updateChannel(channelId, data);
+                return success;
             } finally {
                 setSavingIds((prev) => {
-                    const next = new Set(prev)
-                    next.delete(channelId)
-                    return next
-                })
+                    const next = new Set(prev);
+                    next.delete(channelId);
+                    return next;
+                });
             }
         },
         [updateChannel]
-    )
+    );
 
     const handleAddChannel = async (channelType: SocialChannel) => {
-        await createChannel(channelType)
-        setShowAddModal(false)
-    }
+        await createChannel(channelType);
+        setShowAddModal(false);
+    };
 
     const handleDeleteChannel = async (channelId: string): Promise<boolean> => {
-        return await deleteChannel(channelId)
-    }
+        return await deleteChannel(channelId);
+    };
 
     if (isLoading) {
         return (
             <div className="flex h-64 items-center justify-center">
                 <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
             </div>
-        )
+        );
     }
 
     if (error) {
@@ -355,7 +355,7 @@ export function ChannelsPage() {
             <div className="rounded-md bg-red-50 p-4">
                 <p className="text-sm text-red-800">{error}</p>
             </div>
-        )
+        );
     }
 
     return (
@@ -488,5 +488,5 @@ export function ChannelsPage() {
                 </div>
             )}
         </div>
-    )
+    );
 }

@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from 'zod';
 
 const sectorOptions = [
     'SaaS',
@@ -13,14 +13,14 @@ const sectorOptions = [
     'Restaurantes',
     'Retail',
     'Outro',
-] as const
+] as const;
 
 const languageOptions = [
     { value: 'pt', label: 'Português' },
     { value: 'en', label: 'English' },
     { value: 'es', label: 'Español' },
     { value: 'fr', label: 'Français' },
-] as const
+] as const;
 
 export const createWorkspaceSchema = z.object({
     name: z
@@ -41,14 +41,14 @@ export const createWorkspaceSchema = z.object({
         .optional(),
     contentLanguage: z.string().default('pt'),
     valueRatio: z.number().min(0).max(100).default(70),
-})
+});
 
-export const updateWorkspaceSchema = createWorkspaceSchema.partial()
+export const updateWorkspaceSchema = createWorkspaceSchema.partial();
 
-export type CreateWorkspaceFormData = z.infer<typeof createWorkspaceSchema>
-export type UpdateWorkspaceFormData = z.infer<typeof updateWorkspaceSchema>
-export type Sector = (typeof sectorOptions)[number]
-export type Language = (typeof languageOptions)[number]['value']
+export type CreateWorkspaceFormData = z.infer<typeof createWorkspaceSchema>;
+export type UpdateWorkspaceFormData = z.infer<typeof updateWorkspaceSchema>;
+export type Sector = (typeof sectorOptions)[number];
+export type Language = (typeof languageOptions)[number]['value'];
 
-export const SECTOR_OPTIONS = sectorOptions
-export const LANGUAGE_OPTIONS = languageOptions
+export const SECTOR_OPTIONS = sectorOptions;
+export const LANGUAGE_OPTIONS = languageOptions;

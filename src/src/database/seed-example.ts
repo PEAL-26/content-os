@@ -8,11 +8,11 @@ import {
     ContentPillar,
     FunnelStage,
     SocialChannel,
-} from '../generated/prisma/client'
-import { prisma } from '../lib/prisma'
+} from '../generated/prisma/client';
+import { prisma } from '../lib/prisma';
 
 async function main() {
-    console.log('🌱 A iniciar seed...')
+    console.log('🌱 A iniciar seed...');
 
     // ---------------------------------------------------------------------------
     // 1. Workspace de exemplo
@@ -36,9 +36,9 @@ async function main() {
             postsPerWeek: 3,
             articlesPerWeek: 1,
         },
-    })
+    });
 
-    console.log(`✅ Workspace criado: ${workspace.name}`)
+    console.log(`✅ Workspace criado: ${workspace.name}`);
 
     // ---------------------------------------------------------------------------
     // 2. Pilares de conteúdo (baseados no documento SOCIAL_MEDIA.md)
@@ -104,7 +104,7 @@ async function main() {
             ],
             sortOrder: 4,
         },
-    ]
+    ];
 
     for (const pillarData of pillars) {
         await prisma.pillarConfig.upsert({
@@ -119,10 +119,10 @@ async function main() {
                 workspaceId: workspace.id,
                 ...pillarData,
             },
-        })
+        });
     }
 
-    console.log(`✅ ${pillars.length} pilares de conteúdo criados`)
+    console.log(`✅ ${pillars.length} pilares de conteúdo criados`);
 
     // ---------------------------------------------------------------------------
     // 3. Canais de distribuição
@@ -153,7 +153,7 @@ async function main() {
             defaultTone: 'Mais elaborado. Tutoriais e casos de uso.',
             notes: 'Opcional. Só criar se houver capacidade de consistência.',
         },
-    ]
+    ];
 
     for (const channelData of channels) {
         await prisma.channelConfig.upsert({
@@ -169,10 +169,10 @@ async function main() {
                 isActive: channelData.channel !== SocialChannel.YOUTUBE, // YouTube inactivo por defeito
                 ...channelData,
             },
-        })
+        });
     }
 
-    console.log(`✅ ${channels.length} canais configurados`)
+    console.log(`✅ ${channels.length} canais configurados`);
 
     // ---------------------------------------------------------------------------
     // 4. Produto de exemplo
@@ -198,9 +198,9 @@ async function main() {
             problemSolved:
                 'Perda de pedidos, erros de comunicação interna e falta de visibilidade sobre o estado das encomendas',
         },
-    })
+    });
 
-    console.log(`✅ Produto de exemplo criado`)
+    console.log(`✅ Produto de exemplo criado`);
 
     // ---------------------------------------------------------------------------
     // 5. Tags de exemplo
@@ -212,7 +212,7 @@ async function main() {
         { name: 'caso-real', color: '#ef4444' },
         { name: 'bastidores', color: '#8b5cf6' },
         { name: 'tendências', color: '#06b6d4' },
-    ]
+    ];
 
     for (const tag of tags) {
         await prisma.tag.upsert({
@@ -227,19 +227,19 @@ async function main() {
                 workspaceId: workspace.id,
                 ...tag,
             },
-        })
+        });
     }
 
-    console.log(`✅ ${tags.length} tags criadas`)
-    console.log('\n🎉 Seed concluído com sucesso!')
-    console.log(`   Workspace ID: ${workspace.id}`)
+    console.log(`✅ ${tags.length} tags criadas`);
+    console.log('\n🎉 Seed concluído com sucesso!');
+    console.log(`   Workspace ID: ${workspace.id}`);
 }
 
 main()
     .catch((e) => {
-        console.error('❌ Erro no seed:', e)
-        process.exit(1)
+        console.error('❌ Erro no seed:', e);
+        process.exit(1);
     })
     .finally(async () => {
-        await prisma.$disconnect()
-    })
+        await prisma.$disconnect();
+    });

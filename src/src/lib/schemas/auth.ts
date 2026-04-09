@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from 'zod';
 
 export const loginSchema = z.object({
     email: z.email('Email inválido').min(1, 'Email é obrigatório'),
@@ -6,7 +6,7 @@ export const loginSchema = z.object({
         .string()
         .min(1, 'Password é obrigatória')
         .min(6, 'Password deve ter pelo menos 6 caracteres'),
-})
+});
 
 export const registerSchema = z
     .object({
@@ -26,7 +26,7 @@ export const registerSchema = z
     .refine((data) => data.password === data.confirmPassword, {
         message: 'As passwords não coincidem',
         path: ['confirmPassword'],
-    })
+    });
 
-export type LoginFormData = z.infer<typeof loginSchema>
-export type RegisterFormData = z.infer<typeof registerSchema>
+export type LoginFormData = z.infer<typeof loginSchema>;
+export type RegisterFormData = z.infer<typeof registerSchema>;

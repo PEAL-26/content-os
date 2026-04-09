@@ -1,12 +1,12 @@
-import { useProducts } from '@/hooks/use-products'
-import { useEffect, useRef, useState } from 'react'
+import { useProducts } from '@/hooks/use-products';
+import { useEffect, useRef, useState } from 'react';
 
 interface ProductSelectorProps {
-    value: string | null
-    onChange: (productId: string | null) => void
-    excludeId?: string
-    placeholder?: string
-    className?: string
+    value: string | null;
+    onChange: (productId: string | null) => void;
+    excludeId?: string;
+    placeholder?: string;
+    className?: string;
 }
 
 export function ProductSelector({
@@ -16,15 +16,15 @@ export function ProductSelector({
     placeholder = 'Selecionar produto',
     className = '',
 }: ProductSelectorProps) {
-    const { activeProducts } = useProducts()
-    const [isOpen, setIsOpen] = useState(false)
-    const dropdownRef = useRef<HTMLDivElement>(null)
+    const { activeProducts } = useProducts();
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
 
     const products = excludeId
         ? activeProducts.filter((p) => p.id !== excludeId)
-        : activeProducts
+        : activeProducts;
 
-    const selectedProduct = products.find((p) => p.id === value)
+    const selectedProduct = products.find((p) => p.id === value);
 
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
@@ -32,14 +32,14 @@ export function ProductSelector({
                 dropdownRef.current &&
                 !dropdownRef.current.contains(event.target as Node)
             ) {
-                setIsOpen(false)
+                setIsOpen(false);
             }
         }
 
-        document.addEventListener('mousedown', handleClickOutside)
+        document.addEventListener('mousedown', handleClickOutside);
         return () =>
-            document.removeEventListener('mousedown', handleClickOutside)
-    }, [])
+            document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     return (
         <div className={`relative ${className}`} ref={dropdownRef}>
@@ -84,8 +84,8 @@ export function ProductSelector({
                                 <button
                                     type="button"
                                     onClick={() => {
-                                        onChange(null)
-                                        setIsOpen(false)
+                                        onChange(null);
+                                        setIsOpen(false);
                                     }}
                                     className={`flex w-full items-center px-4 py-2 text-sm ${
                                         !value
@@ -101,8 +101,8 @@ export function ProductSelector({
                                     <button
                                         type="button"
                                         onClick={() => {
-                                            onChange(product.id)
-                                            setIsOpen(false)
+                                            onChange(product.id);
+                                            setIsOpen(false);
                                         }}
                                         className={`flex w-full items-center justify-between px-4 py-2 text-sm ${
                                             product.id === value
@@ -128,5 +128,5 @@ export function ProductSelector({
                 </div>
             )}
         </div>
-    )
+    );
 }

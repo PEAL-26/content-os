@@ -1,17 +1,17 @@
-import { ArticleGeneratorModal } from '@/components/articles/article-generator-modal'
-import { ArticleStatusBadge } from '@/components/articles/article-status-badge'
-import { PillarBadge } from '@/components/content/pillar-badge'
-import { ProductSelector } from '@/components/products/product-selector'
-import { Modal } from '@/components/ui/modal'
-import { useArticles, type ArticlesFilters } from '@/hooks/use-articles'
-import { useDebounce } from '@/hooks/use-debounce'
-import { usePillars } from '@/hooks/use-pillars'
-import { useProducts } from '@/hooks/use-products'
-import type { CreateArticleInput } from '@/lib/schemas/article'
-import type { ArticleStatus, ArticleWithRelations } from '@/types/database'
-import { useQueryState } from 'nuqs'
-import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { ArticleGeneratorModal } from '@/components/articles/article-generator-modal';
+import { ArticleStatusBadge } from '@/components/articles/article-status-badge';
+import { PillarBadge } from '@/components/content/pillar-badge';
+import { ProductSelector } from '@/components/products/product-selector';
+import { Modal } from '@/components/ui/modal';
+import { useArticles, type ArticlesFilters } from '@/hooks/use-articles';
+import { useDebounce } from '@/hooks/use-debounce';
+import { usePillars } from '@/hooks/use-pillars';
+import { useProducts } from '@/hooks/use-products';
+import type { CreateArticleInput } from '@/lib/schemas/article';
+import type { ArticleStatus, ArticleWithRelations } from '@/types/database';
+import { useQueryState } from 'nuqs';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 
 const STATUS_OPTIONS: Array<{ value: ArticleStatus | 'ALL'; label: string }> = [
     { value: 'ALL', label: 'Todos' },
@@ -19,15 +19,15 @@ const STATUS_OPTIONS: Array<{ value: ArticleStatus | 'ALL'; label: string }> = [
     { value: 'REVIEW', label: 'Em revisão' },
     { value: 'APPROVED', label: 'Aprovado' },
     { value: 'PUBLISHED', label: 'Publicado' },
-]
+];
 
 function formatDate(dateString: string): string {
-    const date = new Date(dateString)
+    const date = new Date(dateString);
     return date.toLocaleDateString('pt-PT', {
         day: 'numeric',
         month: 'short',
         year: 'numeric',
-    })
+    });
 }
 
 function ArticleCard({
@@ -35,19 +35,19 @@ function ArticleCard({
     onDuplicate,
     onDelete,
 }: {
-    article: ArticleWithRelations
-    onDuplicate: () => void
-    onDelete: () => void
+    article: ArticleWithRelations;
+    onDuplicate: () => void;
+    onDelete: () => void;
 }) {
-    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-    const [isDeleting, setIsDeleting] = useState(false)
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     const handleDelete = async () => {
-        setIsDeleting(true)
-        await onDelete()
-        setShowDeleteConfirm(false)
-        setIsDeleting(false)
-    }
+        setIsDeleting(true);
+        await onDelete();
+        setShowDeleteConfirm(false);
+        setIsDeleting(false);
+    };
 
     return (
         <>
@@ -236,15 +236,15 @@ function ArticleCard({
                 </div>
             )}
         </>
-    )
+    );
 }
 
 function EmptyState({
     onCreate,
     onGenerate,
 }: {
-    onCreate: () => void
-    onGenerate: () => void
+    onCreate: () => void;
+    onGenerate: () => void;
 }) {
     return (
         <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -311,7 +311,7 @@ function EmptyState({
                 </button>
             </div>
         </div>
-    )
+    );
 }
 
 function CreateArticleModal({
@@ -320,53 +320,53 @@ function CreateArticleModal({
     onCreate,
     pillars,
 }: {
-    isOpen: boolean
-    onClose: () => void
+    isOpen: boolean;
+    onClose: () => void;
     onCreate: (
         data: CreateArticleInput
-    ) => Promise<{ success: boolean; error?: string }>
-    pillars: Array<{ id: string; name: string; pillar: string }>
+    ) => Promise<{ success: boolean; error?: string }>;
+    pillars: Array<{ id: string; name: string; pillar: string }>;
 }) {
-    const [title, setTitle] = useState('')
-    const [pillarId, setPillarId] = useState<string | null>(null)
-    const [productId, setProductId] = useState<string | null>(null)
-    const [isCreating, setIsCreating] = useState(false)
-    const [error, setError] = useState<string | null>(null)
+    const [title, setTitle] = useState('');
+    const [pillarId, setPillarId] = useState<string | null>(null);
+    const [productId, setProductId] = useState<string | null>(null);
+    const [isCreating, setIsCreating] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     const handleCreate = async () => {
         if (!title.trim()) {
-            setError('O título é obrigatório')
-            return
+            setError('O título é obrigatório');
+            return;
         }
 
-        setIsCreating(true)
-        setError(null)
+        setIsCreating(true);
+        setError(null);
 
         const result = await onCreate({
             title: title.trim(),
             pillarId: pillarId || undefined,
             productId: productId || undefined,
-        })
+        });
 
-        setIsCreating(false)
+        setIsCreating(false);
 
         if (result.success) {
-            setTitle('')
-            setPillarId(null)
-            setProductId(null)
-            onClose()
+            setTitle('');
+            setPillarId(null);
+            setProductId(null);
+            onClose();
         } else {
-            setError(result.error || 'Erro ao criar artigo')
+            setError(result.error || 'Erro ao criar artigo');
         }
-    }
+    };
 
     const handleClose = () => {
-        setTitle('')
-        setPillarId(null)
-        setProductId(null)
-        setError(null)
-        onClose()
-    }
+        setTitle('');
+        setPillarId(null);
+        setProductId(null);
+        setError(null);
+        onClose();
+    };
 
     return (
         <Modal isOpen={isOpen} onClose={handleClose} title="Criar artigo">
@@ -462,7 +462,7 @@ function CreateArticleModal({
                 </button>
             </div>
         </Modal>
-    )
+    );
 }
 
 function ArticleFilters({
@@ -470,34 +470,34 @@ function ArticleFilters({
     onFilterChange,
     onClear,
 }: {
-    filters: ArticlesFilters
-    onFilterChange: (updates: Partial<ArticlesFilters>) => void
-    onClear: () => void
+    filters: ArticlesFilters;
+    onFilterChange: (updates: Partial<ArticlesFilters>) => void;
+    onClear: () => void;
 }) {
-    const { pillars } = usePillars()
-    const { activeProducts } = useProducts()
-    const [searchInput, setSearchInput] = useState(filters.search)
-    const debouncedSearch = useDebounce(searchInput, 300)
+    const { pillars } = usePillars();
+    const { activeProducts } = useProducts();
+    const [searchInput, setSearchInput] = useState(filters.search);
+    const debouncedSearch = useDebounce(searchInput, 300);
 
     const pillarOptions = useMemo(() => {
         return pillars.map((p) => ({
             id: p.id,
             name: p.name,
             pillar: p.pillar,
-        }))
-    }, [pillars])
+        }));
+    }, [pillars]);
 
     const hasActiveFilters =
         filters.status !== 'ALL' ||
         filters.pillarId !== null ||
         filters.productId !== null ||
-        filters.search !== ''
+        filters.search !== '';
 
     useEffect(() => {
         if (debouncedSearch !== filters.search) {
-            onFilterChange({ search: debouncedSearch })
+            onFilterChange({ search: debouncedSearch });
         }
-    }, [debouncedSearch, filters.search, onFilterChange])
+    }, [debouncedSearch, filters.search, onFilterChange]);
 
     return (
         <div className="flex flex-wrap items-center gap-3">
@@ -592,7 +592,7 @@ function ArticleFilters({
                 </button>
             )}
         </div>
-    )
+    );
 }
 
 function ArticleListContent({
@@ -601,12 +601,12 @@ function ArticleListContent({
     onClearFilters,
     pillarOptions,
 }: {
-    filters: ArticlesFilters
-    onFilterChange: (updates: Partial<ArticlesFilters>) => void
-    onClearFilters: () => void
-    pillarOptions: Array<{ id: string; name: string; pillar: string }>
+    filters: ArticlesFilters;
+    onFilterChange: (updates: Partial<ArticlesFilters>) => void;
+    onClearFilters: () => void;
+    pillarOptions: Array<{ id: string; name: string; pillar: string }>;
 }) {
-    const navigate = useNavigate()
+    const navigate = useNavigate();
     const {
         articles,
         isLoading,
@@ -617,57 +617,63 @@ function ArticleListContent({
         createArticle,
         duplicateArticle,
         deleteArticle,
-    } = useArticles({ filters })
+    } = useArticles({ filters });
 
-    const [showCreateModal, setShowCreateModal] = useState(false)
-    const [showGenerateModal, setShowGenerateModal] = useState(false)
+    const [showCreateModal, setShowCreateModal] = useState(false);
+    const [showGenerateModal, setShowGenerateModal] = useState(false);
     const [actionFeedback, setActionFeedback] = useState<{
-        type: 'success' | 'error'
-        message: string
-    } | null>(null)
+        type: 'success' | 'error';
+        message: string;
+    } | null>(null);
 
     const handleCreate = async (data: CreateArticleInput) => {
-        const result = await createArticle(data)
+        const result = await createArticle(data);
         if (result.success && result.articleId) {
-            navigate(`/dashboard/articles/${result.articleId}/edit`)
+            navigate(`/dashboard/articles/${result.articleId}/edit`);
         }
-        return result
-    }
+        return result;
+    };
 
     const handleDuplicate = async (id: string) => {
-        const result = await duplicateArticle(id)
+        const result = await duplicateArticle(id);
         if (result.success) {
-            setActionFeedback({ type: 'success', message: 'Artigo duplicado!' })
-            setTimeout(() => setActionFeedback(null), 3000)
+            setActionFeedback({
+                type: 'success',
+                message: 'Artigo duplicado!',
+            });
+            setTimeout(() => setActionFeedback(null), 3000);
         } else {
             setActionFeedback({
                 type: 'error',
                 message: result.error || 'Erro ao duplicar',
-            })
-            setTimeout(() => setActionFeedback(null), 3000)
+            });
+            setTimeout(() => setActionFeedback(null), 3000);
         }
-    }
+    };
 
     const handleDelete = async (id: string) => {
-        const result = await deleteArticle(id)
+        const result = await deleteArticle(id);
         if (result.success) {
-            setActionFeedback({ type: 'success', message: 'Artigo eliminado!' })
-            setTimeout(() => setActionFeedback(null), 3000)
+            setActionFeedback({
+                type: 'success',
+                message: 'Artigo eliminado!',
+            });
+            setTimeout(() => setActionFeedback(null), 3000);
         } else {
             setActionFeedback({
                 type: 'error',
                 message: result.error || 'Erro ao eliminar',
-            })
-            setTimeout(() => setActionFeedback(null), 3000)
+            });
+            setTimeout(() => setActionFeedback(null), 3000);
         }
-    }
+    };
 
     if (error) {
         return (
             <div className="rounded-md bg-red-50 p-4">
                 <p className="text-sm text-red-800">{error}</p>
             </div>
-        )
+        );
     }
 
     return (
@@ -811,62 +817,62 @@ function ArticleListContent({
                 isOpen={showGenerateModal}
                 onClose={() => setShowGenerateModal(false)}
                 onGenerated={(articleId) => {
-                    navigate(`/dashboard/articles/${articleId}/edit`)
+                    navigate(`/dashboard/articles/${articleId}/edit`);
                 }}
             />
         </div>
-    )
+    );
 }
 
 export function ArticleList() {
-    const { pillars } = usePillars()
+    const { pillars } = usePillars();
 
     const [status, setStatus] = useQueryState('status', {
         defaultValue: 'ALL',
         shallow: false,
-    })
+    });
     const [pillarId, setPillarId] = useQueryState('pillar', {
         defaultValue: '',
         shallow: false,
-    })
+    });
     const [productId, setProductId] = useQueryState('product', {
         defaultValue: '',
         shallow: false,
-    })
+    });
     const [search, setSearch] = useQueryState('q', {
         defaultValue: '',
         shallow: false,
-    })
+    });
 
     const pillarOptions = useMemo(() => {
         return pillars.map((p) => ({
             id: p.id,
             name: p.name,
             pillar: p.pillar,
-        }))
-    }, [pillars])
+        }));
+    }, [pillars]);
 
     const filters: ArticlesFilters = {
         status: (status as ArticleStatus | 'ALL') || 'ALL',
         pillarId: pillarId || null,
         productId: productId || null,
         search: search || '',
-    }
+    };
 
     const handleFilterChange = (updates: Partial<ArticlesFilters>) => {
-        if (updates.status !== undefined) setStatus(updates.status)
-        if (updates.pillarId !== undefined) setPillarId(updates.pillarId || '')
+        if (updates.status !== undefined) setStatus(updates.status);
+        if (updates.pillarId !== undefined) setPillarId(updates.pillarId || '');
         if (updates.productId !== undefined)
-            setProductId(updates.productId || '')
-        if (updates.search !== undefined) setSearch(updates.search)
-    }
+            setProductId(updates.productId || '');
+        if (updates.search !== undefined) setSearch(updates.search);
+    };
 
     const handleClearFilters = () => {
-        setStatus('ALL')
-        setPillarId('')
-        setProductId('')
-        setSearch('')
-    }
+        setStatus('ALL');
+        setPillarId('');
+        setProductId('');
+        setSearch('');
+    };
 
     return (
         <ArticleListContent
@@ -875,5 +881,5 @@ export function ArticleList() {
             onClearFilters={handleClearFilters}
             pillarOptions={pillarOptions}
         />
-    )
+    );
 }

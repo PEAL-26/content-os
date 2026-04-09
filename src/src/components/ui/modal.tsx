@@ -1,12 +1,12 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react';
 
 interface ModalProps {
-    isOpen: boolean
-    onClose: () => void
-    title: string
-    children: React.ReactNode
-    size?: 'sm' | 'md' | 'lg' | 'xl'
-    showCloseButton?: boolean
+    isOpen: boolean;
+    onClose: () => void;
+    title: string;
+    children: React.ReactNode;
+    size?: 'sm' | 'md' | 'lg' | 'xl';
+    showCloseButton?: boolean;
 }
 
 const sizeClasses = {
@@ -14,7 +14,7 @@ const sizeClasses = {
     md: 'max-w-lg',
     lg: 'max-w-2xl',
     xl: 'max-w-4xl',
-}
+};
 
 export function Modal({
     isOpen,
@@ -24,27 +24,27 @@ export function Modal({
     size = 'md',
     showCloseButton = true,
 }: ModalProps) {
-    const modalRef = useRef<HTMLDivElement>(null)
+    const modalRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         const handleEscape = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
-                onClose()
+                onClose();
             }
-        }
+        };
 
         if (isOpen) {
-            document.addEventListener('keydown', handleEscape)
-            document.body.style.overflow = 'hidden'
+            document.addEventListener('keydown', handleEscape);
+            document.body.style.overflow = 'hidden';
         }
 
         return () => {
-            document.removeEventListener('keydown', handleEscape)
-            document.body.style.overflow = 'unset'
-        }
-    }, [isOpen, onClose])
+            document.removeEventListener('keydown', handleEscape);
+            document.body.style.overflow = 'unset';
+        };
+    }, [isOpen, onClose]);
 
-    if (!isOpen) return null
+    if (!isOpen) return null;
 
     return (
         <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -90,19 +90,19 @@ export function Modal({
                 </div>
             </div>
         </div>
-    )
+    );
 }
 
 interface ConfirmModalProps {
-    isOpen: boolean
-    onClose: () => void
-    onConfirm: () => void
-    title: string
-    message: string
-    confirmText?: string
-    cancelText?: string
-    variant?: 'danger' | 'warning' | 'info'
-    isLoading?: boolean
+    isOpen: boolean;
+    onClose: () => void;
+    onConfirm: () => void;
+    title: string;
+    message: string;
+    confirmText?: string;
+    cancelText?: string;
+    variant?: 'danger' | 'warning' | 'info';
+    isLoading?: boolean;
 }
 
 const variantStyles = {
@@ -121,7 +121,7 @@ const variantStyles = {
         icon: 'text-blue-600',
         bg: 'bg-blue-50',
     },
-}
+};
 
 export function ConfirmModal({
     isOpen,
@@ -134,7 +134,7 @@ export function ConfirmModal({
     variant = 'warning',
     isLoading = false,
 }: ConfirmModalProps) {
-    const styles = variantStyles[variant]
+    const styles = variantStyles[variant];
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={title} size="sm">
@@ -201,5 +201,5 @@ export function ConfirmModal({
                 </div>
             </div>
         </Modal>
-    )
+    );
 }

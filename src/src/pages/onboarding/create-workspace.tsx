@@ -1,27 +1,27 @@
-import { useAuthContext } from '@/context/auth-context'
-import { useWorkspace } from '@/hooks/use-workspace'
+import { useAuthContext } from '@/context/auth-context';
+import { useWorkspace } from '@/hooks/use-workspace';
 import {
     createWorkspaceSchema,
     LANGUAGE_OPTIONS,
     SECTOR_OPTIONS,
     type CreateWorkspaceFormData,
-} from '@/lib/schemas/workspace'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { useEffect } from 'react'
-import { useForm } from 'react-hook-form'
-import { useNavigate } from 'react-router-dom'
+} from '@/lib/schemas/workspace';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { useNavigate } from 'react-router-dom';
 
 export function CreateWorkspacePage() {
-    const navigate = useNavigate()
-    const { user } = useAuthContext()
+    const navigate = useNavigate();
+    const { user } = useAuthContext();
     const { createWorkspace, isLoading, error, currentWorkspace } =
-        useWorkspace()
+        useWorkspace();
 
     useEffect(() => {
         if (currentWorkspace) {
-            navigate('/dashboard', { replace: true })
+            navigate('/dashboard', { replace: true });
         }
-    }, [currentWorkspace, navigate])
+    }, [currentWorkspace, navigate]);
 
     const {
         register,
@@ -34,14 +34,14 @@ export function CreateWorkspacePage() {
             contentLanguage: 'pt',
             valueRatio: 70,
         },
-    })
+    });
 
-    const valueRatio = watch('valueRatio')
+    const valueRatio = watch('valueRatio');
 
     const onSubmit = async (data: unknown) => {
-        if (!user) return
+        if (!user) return;
 
-        const formData = data as CreateWorkspaceFormData
+        const formData = data as CreateWorkspaceFormData;
 
         const result = await createWorkspace(user.id, {
             name: formData.name,
@@ -54,12 +54,12 @@ export function CreateWorkspacePage() {
             contentLanguage: formData.contentLanguage,
             valueRatio: formData.valueRatio,
             productRatio: 100 - (formData.valueRatio ?? 70),
-        })
+        });
 
         if (result.success) {
-            navigate('/dashboard', { replace: true })
+            navigate('/dashboard', { replace: true });
         }
-    }
+    };
 
     return (
         <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12">
@@ -334,5 +334,5 @@ export function CreateWorkspacePage() {
                 </div>
             </div>
         </div>
-    )
+    );
 }

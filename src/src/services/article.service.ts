@@ -1,22 +1,22 @@
 import type {
     CreateArticleInput,
     UpdateArticleInput,
-} from '@/lib/schemas/article'
-import { supabase } from '@/lib/supabase'
+} from '@/lib/schemas/article';
+import { supabase } from '@/lib/supabase';
 import type {
     Article,
     ArticleStatus,
     ArticleWithRelations,
-} from '@/types/database'
-import { v4 as uuidv4 } from 'uuid'
+} from '@/types/database';
+import { v4 as uuidv4 } from 'uuid';
 
 export interface GetArticlesFilters {
-    status?: ArticleStatus | 'ALL'
-    pillarId?: string | null
-    productId?: string | null
-    search?: string
-    limit?: number
-    offset?: number
+    status?: ArticleStatus | 'ALL';
+    pillarId?: string | null;
+    productId?: string | null;
+    search?: string;
+    limit?: number;
+    offset?: number;
 }
 
 export const articleService = {
@@ -33,22 +33,22 @@ export const articleService = {
                 pillar:pillar_configs(id, pillar, name)
             `
             )
-            .eq('workspaceId', workspaceId)
+            .eq('workspaceId', workspaceId);
 
         if (filters?.status && filters.status !== 'ALL') {
-            query = query.eq('status', filters.status)
+            query = query.eq('status', filters.status);
         }
 
         if (filters?.pillarId) {
-            query = query.eq('pillarId', filters.pillarId)
+            query = query.eq('pillarId', filters.pillarId);
         }
 
         if (filters?.productId) {
-            query = query.eq('productId', filters.productId)
+            query = query.eq('productId', filters.productId);
         }
 
         if (filters?.search) {
-            query = query.ilike('title', `%${filters.search}%`)
+            query = query.ilike('title', `%${filters.search}%`);
         }
 
         query = query
@@ -56,30 +56,30 @@ export const articleService = {
             .range(
                 filters?.offset ?? 0,
                 (filters?.offset ?? 0) + (filters?.limit ?? 20) - 1
-            )
+            );
 
-        const { data, error } = await query
+        const { data, error } = await query;
 
         if (error) {
-            throw new Error(`Erro ao buscar artigos: ${error.message}`)
+            throw new Error(`Erro ao buscar artigos: ${error.message}`);
         }
 
-        const articles = (data ?? []) as ArticleWithRelations[]
+        const articles = (data ?? []) as ArticleWithRelations[];
 
         if (articles.length > 0) {
-            const articleIds = articles.map((a) => a.id)
+            const articleIds = articles.map((a) => a.id);
             const counts = await this.getContentPieceCounts(
                 workspaceId,
                 articleIds
-            )
+            );
 
             return articles.map((article) => ({
                 ...article,
                 _count: { contentPieces: counts[article.id] || 0 },
-            }))
+            }));
         }
 
-        return articles
+        return articles;
     },
 
     async getContentPieceCounts(
@@ -90,25 +90,25 @@ export const articleService = {
             .from('content_pieces')
             .select('articleId')
             .eq('workspaceId', workspaceId)
-            .in('articleId', articleIds)
+            .in('articleId', articleIds);
 
         if (error) {
-            console.error('Error fetching content piece counts:', error)
-            return {}
+            console.error('Error fetching content piece counts:', error);
+            return {};
         }
 
-        const counts: Record<string, number> = {}
+        const counts: Record<string, number> = {};
         articleIds.forEach((id) => {
-            counts[id] = 0
-        })
+            counts[id] = 0;
+        });
 
         data?.forEach((piece) => {
             if (counts[piece.articleId] !== undefined) {
-                counts[piece.articleId]++
+                counts[piece.articleId]++;
             }
-        })
+        });
 
-        return counts
+        return counts;
     },
 
     async getArticle(id: string): Promise<Article | null> {
@@ -116,16 +116,16 @@ export const articleService = {
             .from('articles')
             .select('*')
             .eq('id', id)
-            .single()
+            .single();
 
         if (error) {
             if (error.code === 'PGRST116') {
-                return null
+                return null;
             }
-            throw new Error(`Erro ao buscar artigo: ${error.message}`)
+            throw new Error(`Erro ao buscar artigo: ${error.message}`);
         }
 
-        return data as Article
+        return data as Article;
     },
 
     async getArticleWithRelations(
@@ -141,26 +141,26 @@ export const articleService = {
             `
             )
             .eq('id', id)
-            .single()
+            .single();
 
         if (error) {
             if (error.code === 'PGRST116') {
-                return null
+                return null;
             }
-            throw new Error(`Erro ao buscar artigo: ${error.message}`)
+            throw new Error(`Erro ao buscar artigo: ${error.message}`);
         }
 
-        if (!data) return null
+        if (!data) return null;
 
-        const article = data as ArticleWithRelations
+        const article = data as ArticleWithRelations;
         const counts = await this.getContentPieceCounts(article.workspaceId, [
             id,
-        ])
+        ]);
 
         return {
             ...article,
             _count: { contentPieces: counts[id] || 0 },
-        }
+        };
     },
 
     async createArticle(
@@ -168,8 +168,8 @@ export const articleService = {
         input: CreateArticleInput,
         userId?: string
     ): Promise<Article> {
-        const id = uuidv4()
-        const slug = input.slug || generateSlug(input.title)
+        const id = uuidv4();
+        const slug = input.slug || generateSlug(input.title);
 
         const { data, error } = await supabase
             .from('articles')
@@ -194,83 +194,83 @@ export const articleService = {
                 updatedAt: new Date().toISOString(),
             })
             .select()
-            .single()
+            .single();
 
         if (error) {
             if (error.code === '23505') {
-                throw new Error('Já existe um artigo com este slug')
+                throw new Error('Já existe um artigo com este slug');
             }
-            throw new Error(`Erro ao criar artigo: ${error.message}`)
+            throw new Error(`Erro ao criar artigo: ${error.message}`);
         }
 
-        return data as Article
+        return data as Article;
     },
 
     async updateArticle(
         id: string,
         input: UpdateArticleInput
     ): Promise<Article> {
-        const updateData: Record<string, unknown> = {}
+        const updateData: Record<string, unknown> = {};
 
-        if (input.title !== undefined) updateData.title = input.title
-        if (input.slug !== undefined) updateData.slug = input.slug
-        if (input.summary !== undefined) updateData.summary = input.summary
-        if (input.body !== undefined) updateData.body = input.body
-        if (input.pillarId !== undefined) updateData.pillarId = input.pillarId
+        if (input.title !== undefined) updateData.title = input.title;
+        if (input.slug !== undefined) updateData.slug = input.slug;
+        if (input.summary !== undefined) updateData.summary = input.summary;
+        if (input.body !== undefined) updateData.body = input.body;
+        if (input.pillarId !== undefined) updateData.pillarId = input.pillarId;
         if (input.productId !== undefined)
-            updateData.productId = input.productId
-        if (input.seoTitle !== undefined) updateData.seoTitle = input.seoTitle
+            updateData.productId = input.productId;
+        if (input.seoTitle !== undefined) updateData.seoTitle = input.seoTitle;
         if (input.seoDescription !== undefined)
-            updateData.seoDescription = input.seoDescription
-        if (input.keywords !== undefined) updateData.keywords = input.keywords
+            updateData.seoDescription = input.seoDescription;
+        if (input.keywords !== undefined) updateData.keywords = input.keywords;
         if (input.status !== undefined) {
-            updateData.status = input.status
+            updateData.status = input.status;
             if (input.status === 'PUBLISHED') {
-                updateData.publishedAt = new Date().toISOString()
+                updateData.publishedAt = new Date().toISOString();
             }
         }
         if (input.publishedUrl !== undefined)
-            updateData.publishedUrl = input.publishedUrl
+            updateData.publishedUrl = input.publishedUrl;
         if (input.aiPromptUsed !== undefined)
-            updateData.aiPromptUsed = input.aiPromptUsed
+            updateData.aiPromptUsed = input.aiPromptUsed;
         if (input.readingTimeMin !== undefined)
-            updateData.readingTimeMin = input.readingTimeMin
+            updateData.readingTimeMin = input.readingTimeMin;
 
-        updateData.updatedAt = new Date().toISOString()
+        updateData.updatedAt = new Date().toISOString();
 
         const { data, error } = await supabase
             .from('articles')
             .update(updateData)
             .eq('id', id)
             .select()
-            .single()
+            .single();
 
         if (error) {
             if (error.code === '23505') {
-                throw new Error('Já existe um artigo com este slug')
+                throw new Error('Já existe um artigo com este slug');
             }
-            throw new Error(`Erro ao atualizar artigo: ${error.message}`)
+            throw new Error(`Erro ao atualizar artigo: ${error.message}`);
         }
 
-        return data as Article
+        return data as Article;
     },
 
     async deleteArticle(id: string): Promise<void> {
-        const { error } = await supabase.from('articles').delete().eq('id', id)
+        const { error } = await supabase.from('articles').delete().eq('id', id);
 
         if (error) {
-            throw new Error(`Erro ao eliminar artigo: ${error.message}`)
+            throw new Error(`Erro ao eliminar artigo: ${error.message}`);
         }
     },
 
     async duplicateArticle(id: string): Promise<Article> {
-        const original = await this.getArticle(id)
+        const original = await this.getArticle(id);
 
         if (!original) {
-            throw new Error('Artigo não encontrado')
+            throw new Error('Artigo não encontrado');
         }
 
-        const newSlug = `${original.slug}-copy-${Date.now()}`
+        const newSlug = `${original.slug}-copy-${Date.now()}`;
 
         const { data, error } = await supabase
             .from('articles')
@@ -291,13 +291,13 @@ export const articleService = {
                 createdBy: original.createdBy,
             })
             .select()
-            .single()
+            .single();
 
         if (error) {
-            throw new Error(`Erro ao duplicar artigo: ${error.message}`)
+            throw new Error(`Erro ao duplicar artigo: ${error.message}`);
         }
 
-        return data as Article
+        return data as Article;
     },
 
     async updateStatus(id: string, status: ArticleStatus): Promise<Article> {
@@ -306,9 +306,9 @@ export const articleService = {
             ...(status === 'PUBLISHED'
                 ? { publishedAt: new Date().toISOString() }
                 : {}),
-        })
+        });
     },
-}
+};
 
 function generateSlug(title: string): string {
     return title
@@ -318,5 +318,5 @@ function generateSlug(title: string): string {
         .replace(/[^a-z0-9\s-]/g, '')
         .trim()
         .replace(/\s+/g, '-')
-        .substring(0, 100)
+        .substring(0, 100);
 }

@@ -1,12 +1,12 @@
-import { useAuthContext } from '@/context/auth-context'
-import { registerSchema, type RegisterFormData } from '@/lib/schemas/auth'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { useForm } from 'react-hook-form'
-import { Link, useNavigate } from 'react-router-dom'
+import { useAuthContext } from '@/context/auth-context';
+import { registerSchema, type RegisterFormData } from '@/lib/schemas/auth';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm } from 'react-hook-form';
+import { Link, useNavigate } from 'react-router-dom';
 
 export function RegisterPage() {
-    const navigate = useNavigate()
-    const { signUp, isLoading, error, clearError } = useAuthContext()
+    const navigate = useNavigate();
+    const { signUp, isLoading, error, clearError } = useAuthContext();
 
     const {
         register,
@@ -14,14 +14,14 @@ export function RegisterPage() {
         formState: { errors },
     } = useForm<RegisterFormData>({
         resolver: zodResolver(registerSchema),
-    })
+    });
 
     const onSubmit = async (data: RegisterFormData) => {
-        const result = await signUp(data.name, data.email, data.password)
+        const result = await signUp(data.name, data.email, data.password);
         if (result.success) {
-            navigate('/dashboard', { replace: true })
+            navigate('/dashboard', { replace: true });
         }
-    }
+    };
 
     return (
         <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12">
@@ -163,5 +163,5 @@ export function RegisterPage() {
                 </div>
             </div>
         </div>
-    )
+    );
 }

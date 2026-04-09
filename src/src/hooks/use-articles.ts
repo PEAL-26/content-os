@@ -1,55 +1,55 @@
-import { useAuthContext } from '@/context/auth-context'
+import { useAuthContext } from '@/context/auth-context';
 import type {
     CreateArticleInput,
     UpdateArticleInput,
-} from '@/lib/schemas/article'
+} from '@/lib/schemas/article';
 import {
     articleService,
     type GetArticlesFilters,
-} from '@/services/article.service'
-import { useWorkspaceStore } from '@/stores/workspace-store'
-import type { ArticleStatus, ArticleWithRelations } from '@/types/database'
-import { useCallback, useEffect, useState } from 'react'
+} from '@/services/article.service';
+import { useWorkspaceStore } from '@/stores/workspace-store';
+import type { ArticleStatus, ArticleWithRelations } from '@/types/database';
+import { useCallback, useEffect, useState } from 'react';
 
-const DEFAULT_LIMIT = 20
+const DEFAULT_LIMIT = 20;
 
 export interface ArticlesFilters {
-    status: ArticleStatus | 'ALL'
-    pillarId: string | null
-    productId: string | null
-    search: string
+    status: ArticleStatus | 'ALL';
+    pillarId: string | null;
+    productId: string | null;
+    search: string;
 }
 
 export interface UseArticlesOptions {
-    filters: ArticlesFilters
+    filters: ArticlesFilters;
 }
 
 export function useArticles(options: UseArticlesOptions) {
-    const { currentWorkspace } = useWorkspaceStore()
-    const { user } = useAuthContext()
-    const [articles, setArticles] = useState<ArticleWithRelations[]>([])
-    const [isLoading, setIsLoading] = useState(false)
-    const [isLoadingMore, setIsLoadingMore] = useState(false)
-    const [error, setError] = useState<string | null>(null)
-    const [hasMore, setHasMore] = useState(false)
-    const [offset, setOffset] = useState(0)
+    const { currentWorkspace } = useWorkspaceStore();
+    const { user } = useAuthContext();
+    const [articles, setArticles] = useState<ArticleWithRelations[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const [isLoadingMore, setIsLoadingMore] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [hasMore, setHasMore] = useState(false);
+    const [offset, setOffset] = useState(0);
 
-    const workspaceId = currentWorkspace?.id
-    const filters = options.filters
+    const workspaceId = currentWorkspace?.id;
+    const filters = options.filters;
 
     const fetchArticles = useCallback(
         async (loadMore = false) => {
-            if (!workspaceId) return
+            if (!workspaceId) return;
 
             if (loadMore) {
-                setIsLoadingMore(true)
+                setIsLoadingMore(true);
             } else {
-                setIsLoading(true)
+                setIsLoading(true);
             }
-            setError(null)
+            setError(null);
 
             try {
-                const currentOffset = loadMore ? offset : 0
+                const currentOffset = loadMore ? offset : 0;
 
                 const queryFilters: GetArticlesFilters = {
                     status:
@@ -59,60 +59,60 @@ export function useArticles(options: UseArticlesOptions) {
                     search: filters.search || undefined,
                     limit: DEFAULT_LIMIT,
                     offset: currentOffset,
-                }
+                };
 
                 const data = await articleService.getArticles(
                     workspaceId,
                     queryFilters
-                )
+                );
 
                 if (loadMore) {
-                    setArticles((prev) => [...prev, ...data])
-                    setOffset((prev) => prev + data.length)
+                    setArticles((prev) => [...prev, ...data]);
+                    setOffset((prev) => prev + data.length);
                 } else {
-                    setArticles(data)
-                    setOffset(data.length)
+                    setArticles(data);
+                    setOffset(data.length);
                 }
 
-                setHasMore(data.length === DEFAULT_LIMIT)
+                setHasMore(data.length === DEFAULT_LIMIT);
             } catch (err) {
                 setError(
                     err instanceof Error
                         ? err.message
                         : 'Erro ao carregar artigos'
-                )
+                );
             } finally {
-                setIsLoading(false)
-                setIsLoadingMore(false)
+                setIsLoading(false);
+                setIsLoadingMore(false);
             }
         },
         [workspaceId, filters]
-    )
+    );
 
     useEffect(() => {
         if (workspaceId) {
-            setOffset(0)
-            fetchArticles(false)
+            setOffset(0);
+            fetchArticles(false);
         } else {
-            setArticles([])
+            setArticles([]);
         }
-    }, [workspaceId])
+    }, [workspaceId]);
 
     useEffect(() => {
         if (workspaceId) {
-            fetchArticles(false)
+            fetchArticles(false);
         }
-    }, [filters])
+    }, [filters]);
 
     const loadMore = useCallback(async () => {
-        if (!hasMore || isLoadingMore) return
-        await fetchArticles(true)
-    }, [hasMore, isLoadingMore, fetchArticles])
+        if (!hasMore || isLoadingMore) return;
+        await fetchArticles(true);
+    }, [hasMore, isLoadingMore, fetchArticles]);
 
     const createArticle = useCallback(
         async (input: CreateArticleInput) => {
             if (!workspaceId) {
-                return { success: false, error: 'Sem workspace selecionado' }
+                return { success: false, error: 'Sem workspace selecionado' };
             }
 
             try {
@@ -120,15 +120,15 @@ export function useArticles(options: UseArticlesOptions) {
                     workspaceId,
                     input,
                     user?.id
-                )
+                );
                 const articleWithRelations: ArticleWithRelations = {
                     ...article,
                     product: null,
                     pillar: null,
                     _count: { contentPieces: 0 },
-                }
-                setArticles((prev) => [articleWithRelations, ...prev])
-                return { success: true, article, articleId: article.id }
+                };
+                setArticles((prev) => [articleWithRelations, ...prev]);
+                return { success: true, article, articleId: article.id };
             } catch (err) {
                 return {
                     success: false,
@@ -136,20 +136,20 @@ export function useArticles(options: UseArticlesOptions) {
                         err instanceof Error
                             ? err.message
                             : 'Erro ao criar artigo',
-                }
+                };
             }
         },
         [workspaceId, user?.id]
-    )
+    );
 
     const updateArticle = useCallback(
         async (id: string, input: UpdateArticleInput) => {
             try {
-                const updated = await articleService.updateArticle(id, input)
+                const updated = await articleService.updateArticle(id, input);
                 setArticles((prev) =>
                     prev.map((a) => (a.id === id ? { ...a, ...updated } : a))
-                )
-                return { success: true, article: updated }
+                );
+                return { success: true, article: updated };
             } catch (err) {
                 return {
                     success: false,
@@ -157,17 +157,17 @@ export function useArticles(options: UseArticlesOptions) {
                         err instanceof Error
                             ? err.message
                             : 'Erro ao atualizar artigo',
-                }
+                };
             }
         },
         []
-    )
+    );
 
     const deleteArticle = useCallback(async (id: string) => {
         try {
-            await articleService.deleteArticle(id)
-            setArticles((prev) => prev.filter((a) => a.id !== id))
-            return { success: true }
+            await articleService.deleteArticle(id);
+            setArticles((prev) => prev.filter((a) => a.id !== id));
+            return { success: true };
         } catch (err) {
             return {
                 success: false,
@@ -175,22 +175,22 @@ export function useArticles(options: UseArticlesOptions) {
                     err instanceof Error
                         ? err.message
                         : 'Erro ao eliminar artigo',
-            }
+            };
         }
-    }, [])
+    }, []);
 
     const duplicateArticle = useCallback(
         async (id: string) => {
             try {
-                const duplicated = await articleService.duplicateArticle(id)
+                const duplicated = await articleService.duplicateArticle(id);
                 const articleWithRelations: ArticleWithRelations = {
                     ...duplicated,
                     product: articles.find((a) => a.id === id)?.product || null,
                     pillar: articles.find((a) => a.id === id)?.pillar || null,
                     _count: { contentPieces: 0 },
-                }
-                setArticles((prev) => [articleWithRelations, ...prev])
-                return { success: true, article: duplicated }
+                };
+                setArticles((prev) => [articleWithRelations, ...prev]);
+                return { success: true, article: duplicated };
             } catch (err) {
                 return {
                     success: false,
@@ -198,11 +198,11 @@ export function useArticles(options: UseArticlesOptions) {
                         err instanceof Error
                             ? err.message
                             : 'Erro ao duplicar artigo',
-                }
+                };
             }
         },
         [articles]
-    )
+    );
 
     return {
         articles,
@@ -216,5 +216,5 @@ export function useArticles(options: UseArticlesOptions) {
         deleteArticle,
         duplicateArticle,
         refetch: () => fetchArticles(false),
-    }
+    };
 }

@@ -1,9 +1,9 @@
-import { WorkspaceSelector } from '@/components/workspace/workspace-selector'
-import { useAuthContext } from '@/context/auth-context'
-import { Link, useLocation } from 'react-router-dom'
+import { WorkspaceSelector } from '@/components/workspace/workspace-selector';
+import { useAuthContext } from '@/context/auth-context';
+import { Link, useLocation } from 'react-router-dom';
 
 interface DashboardLayoutProps {
-    children: React.ReactNode
+    children: React.ReactNode;
 }
 
 const navigation = [
@@ -12,11 +12,11 @@ const navigation = [
     { name: 'Conteúdo', href: '/dashboard/content' },
     { name: 'Planeamento', href: '/dashboard/planning' },
     { name: 'Configurações', href: '/dashboard/settings' },
-]
+];
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
-    const location = useLocation()
-    const { user, signOut } = useAuthContext()
+    const location = useLocation();
+    const { user, signOut } = useAuthContext();
 
     return (
         <div className="flex min-h-screen bg-gray-50">
@@ -33,7 +33,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
                 <nav className="mt-4 px-2">
                     {navigation.map((item) => {
-                        const isActive = location.pathname === item.href
+                        const isActive = location.pathname === item.href;
                         return (
                             <Link
                                 key={item.name}
@@ -46,7 +46,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                             >
                                 {item.name}
                             </Link>
-                        )
+                        );
                     })}
                 </nav>
 
@@ -94,5 +94,5 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 <div className="p-8">{children}</div>
             </main>
         </div>
-    )
+    );
 }

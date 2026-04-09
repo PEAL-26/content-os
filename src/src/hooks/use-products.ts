@@ -1,71 +1,71 @@
 import type {
     CreateProductInput,
     UpdateProductInput,
-} from '@/lib/schemas/product'
-import { productService } from '@/services/product.service'
-import { useWorkspaceStore } from '@/stores/workspace-store'
-import type { Product } from '@/types/database'
-import { useCallback, useEffect, useRef, useState } from 'react'
+} from '@/lib/schemas/product';
+import { productService } from '@/services/product.service';
+import { useWorkspaceStore } from '@/stores/workspace-store';
+import type { Product } from '@/types/database';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-export type ProductSortBy = 'createdAt' | 'name' | 'isActive'
-export type SortOrder = 'asc' | 'desc'
+export type ProductSortBy = 'createdAt' | 'name' | 'isActive';
+export type SortOrder = 'asc' | 'desc';
 
 export function useProducts() {
-    const { currentWorkspace } = useWorkspaceStore()
-    const [products, setProducts] = useState<Product[]>([])
-    const [isLoading, setIsLoading] = useState(false)
-    const [error, setError] = useState<string | null>(null)
-    const [sortBy, setSortBy] = useState<ProductSortBy>('createdAt')
-    const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
-    const hasFetchedRef = useRef(false)
+    const { currentWorkspace } = useWorkspaceStore();
+    const [products, setProducts] = useState<Product[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [sortBy, setSortBy] = useState<ProductSortBy>('createdAt');
+    const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+    const hasFetchedRef = useRef(false);
 
-    const workspaceId = currentWorkspace?.id
+    const workspaceId = currentWorkspace?.id;
 
     const fetchProducts = useCallback(async () => {
-        if (!workspaceId) return
+        if (!workspaceId) return;
 
-        setIsLoading(true)
-        setError(null)
+        setIsLoading(true);
+        setError(null);
 
         try {
-            const data = await productService.getProducts(workspaceId)
-            setProducts(data)
-            hasFetchedRef.current = true
+            const data = await productService.getProducts(workspaceId);
+            setProducts(data);
+            hasFetchedRef.current = true;
         } catch (err) {
             setError(
                 err instanceof Error ? err.message : 'Erro ao carregar produtos'
-            )
+            );
         } finally {
-            setIsLoading(false)
+            setIsLoading(false);
         }
-    }, [workspaceId])
+    }, [workspaceId]);
 
     useEffect(() => {
         if (workspaceId && !hasFetchedRef.current) {
-            fetchProducts()
+            fetchProducts();
         }
 
         return () => {
             if (!workspaceId) {
-                hasFetchedRef.current = false
-                setProducts([])
+                hasFetchedRef.current = false;
+                setProducts([]);
             }
-        }
-    }, [workspaceId, fetchProducts])
+        };
+    }, [workspaceId, fetchProducts]);
 
     const createProduct = useCallback(
         async (input: CreateProductInput) => {
             if (!workspaceId) {
-                return { success: false, error: 'Sem workspace selecionado' }
+                return { success: false, error: 'Sem workspace selecionado' };
             }
 
             try {
                 const product = await productService.createProduct(
                     workspaceId,
                     input
-                )
-                setProducts((prev) => [product, ...prev])
-                return { success: true, product }
+                );
+                setProducts((prev) => [product, ...prev]);
+                return { success: true, product };
             } catch (err) {
                 return {
                     success: false,
@@ -73,20 +73,20 @@ export function useProducts() {
                         err instanceof Error
                             ? err.message
                             : 'Erro ao criar produto',
-                }
+                };
             }
         },
         [workspaceId]
-    )
+    );
 
     const updateProduct = useCallback(
         async (id: string, input: UpdateProductInput) => {
             try {
-                const product = await productService.updateProduct(id, input)
+                const product = await productService.updateProduct(id, input);
                 setProducts((prev) =>
                     prev.map((p) => (p.id === id ? product : p))
-                )
-                return { success: true, product }
+                );
+                return { success: true, product };
             } catch (err) {
                 return {
                     success: false,
@@ -94,17 +94,17 @@ export function useProducts() {
                         err instanceof Error
                             ? err.message
                             : 'Erro ao atualizar produto',
-                }
+                };
             }
         },
         []
-    )
+    );
 
     const toggleActive = useCallback(async (id: string) => {
         try {
-            const product = await productService.toggleActive(id)
-            setProducts((prev) => prev.map((p) => (p.id === id ? product : p)))
-            return { success: true, product }
+            const product = await productService.toggleActive(id);
+            setProducts((prev) => prev.map((p) => (p.id === id ? product : p)));
+            return { success: true, product };
         } catch (err) {
             return {
                 success: false,
@@ -112,32 +112,33 @@ export function useProducts() {
                     err instanceof Error
                         ? err.message
                         : 'Erro ao arquivar produto',
-            }
+            };
         }
-    }, [])
+    }, []);
 
     const sortedProducts = [...products].sort((a, b) => {
-        let comparison = 0
+        let comparison = 0;
 
         switch (sortBy) {
             case 'createdAt':
                 comparison =
                     new Date(a.createdAt).getTime() -
-                    new Date(b.createdAt).getTime()
-                break
+                    new Date(b.createdAt).getTime();
+                break;
             case 'name':
-                comparison = a.name.localeCompare(b.name)
-                break
+                comparison = a.name.localeCompare(b.name);
+                break;
             case 'isActive':
-                comparison = a.isActive === b.isActive ? 0 : a.isActive ? -1 : 1
-                break
+                comparison =
+                    a.isActive === b.isActive ? 0 : a.isActive ? -1 : 1;
+                break;
         }
 
-        return sortOrder === 'asc' ? comparison : -comparison
-    })
+        return sortOrder === 'asc' ? comparison : -comparison;
+    });
 
-    const activeProducts = sortedProducts.filter((p) => p.isActive)
-    const archivedProducts = sortedProducts.filter((p) => !p.isActive)
+    const activeProducts = sortedProducts.filter((p) => p.isActive);
+    const archivedProducts = sortedProducts.filter((p) => !p.isActive);
 
     return {
         products: sortedProducts,
@@ -153,5 +154,5 @@ export function useProducts() {
         updateProduct,
         toggleActive,
         refetch: fetchProducts,
-    }
+    };
 }

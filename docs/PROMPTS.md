@@ -327,7 +327,7 @@ Tratar erros de rate limit e timeout com mensagens claras em português.
 
 ## FASE 4 — Distribuição de Conteúdo
 
-### [] PROMPT 4.1 — Gerador de peças de conteúdo derivadas
+### [x] PROMPT 4.1 — Gerador de peças de conteúdo derivadas
 
 ```markdown
 Antes de implementar qualquer coisa, analisa o que já existe no projecto:
@@ -380,15 +380,15 @@ implementa o seguinte:
 
 Implementa a visualização e edição das peças de conteúdo geradas. Cria:
 
-- `src/pages/content/content-pieces.tsx` — lista de todas as peças do
+- `src/src/pages/content/content-pieces.tsx` — lista de todas as peças do
   workspace com filtros por formato, canal, status e artigo de origem.
   Cada item mostra: formato (ícone), canal alvo (ChannelBadge), status,
   gancho (hookText truncado), e acções. Vista em lista ou grid (toggle)
-- `src/components/content/content-piece-card.tsx` — card de preview que
+- `src/src/components/content/content-piece-card.tsx` — card de preview que
   simula visualmente o formato: post LinkedIn com caixa de texto longa,
   post Instagram com hashtags em baixo, carrossel com navegação entre
   slides (anterior/próximo), CTA com botão destacado
-- `src/components/content/content-piece-editor.tsx` — editor inline para
+- `src/src/components/content/content-piece-editor.tsx` — editor inline para
   editar qualquer campo da peça (body, hookText, ctaText, hashtags,
   slides individuais). Edição de slides do carrossel: lista reordenável
   com drag-and-drop simples (não precisa de biblioteca externa — reorder

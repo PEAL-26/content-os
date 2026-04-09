@@ -1,7 +1,7 @@
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom';
 
 interface SettingsLayoutProps {
-    children: React.ReactNode
+    children: React.ReactNode;
 }
 
 const settingsNav = [
@@ -10,10 +10,10 @@ const settingsNav = [
     { name: 'Canais', href: '/dashboard/settings/channels' },
     { name: 'Produtos', href: '/dashboard/settings/products' },
     { name: 'Membros', href: '/dashboard/settings/members' },
-]
+];
 
 export function SettingsLayout({ children }: SettingsLayoutProps) {
-    const location = useLocation()
+    const location = useLocation();
 
     return (
         <div className="space-y-6">
@@ -29,7 +29,7 @@ export function SettingsLayout({ children }: SettingsLayoutProps) {
             <div className="border-b border-gray-200">
                 <nav className="-mb-px flex space-x-8">
                     {settingsNav.map((item) => {
-                        const isActive = location.pathname === item.href
+                        const isActive = location.pathname === item.href;
                         return (
                             <Link
                                 key={item.name}
@@ -42,12 +42,12 @@ export function SettingsLayout({ children }: SettingsLayoutProps) {
                             >
                                 {item.name}
                             </Link>
-                        )
+                        );
                     })}
                 </nav>
             </div>
 
             <div>{children}</div>
         </div>
-    )
+    );
 }

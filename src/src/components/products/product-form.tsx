@@ -1,18 +1,18 @@
 import {
     createProductSchema,
     type CreateProductInput,
-} from '@/lib/schemas/product'
-import { productService } from '@/services/product.service'
-import type { Product } from '@/types/database'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { useEffect } from 'react'
-import { useForm } from 'react-hook-form'
+} from '@/lib/schemas/product';
+import { productService } from '@/services/product.service';
+import type { Product } from '@/types/database';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useEffect } from 'react';
+import { useForm } from 'react-hook-form';
 
 interface ProductFormProps {
-    product?: Product
-    onSubmit: (data: CreateProductInput) => Promise<void>
-    onCancel: () => void
-    isLoading?: boolean
+    product?: Product;
+    onSubmit: (data: CreateProductInput) => Promise<void>;
+    onCancel: () => void;
+    isLoading?: boolean;
 }
 
 export function ProductForm({
@@ -41,18 +41,18 @@ export function ProductForm({
             problemSolved: product?.problemSolved || '',
             isActive: product?.isActive ?? true,
         },
-    })
+    });
 
-    const name = watch('name')
-    const slug = watch('slug')
-    const isActive = watch('isActive')
+    const name = watch('name');
+    const slug = watch('slug');
+    const isActive = watch('isActive');
 
     useEffect(() => {
         if (name && !product && slug === '') {
-            const generatedSlug = productService.generateSlug(name)
-            setValue('slug', generatedSlug)
+            const generatedSlug = productService.generateSlug(name);
+            setValue('slug', generatedSlug);
         }
-    }, [name, product, slug, setValue])
+    }, [name, product, slug, setValue]);
 
     const handleReset = () => {
         reset({
@@ -65,14 +65,14 @@ export function ProductForm({
             targetAudience: product?.targetAudience || '',
             problemSolved: product?.problemSolved || '',
             isActive: product?.isActive ?? true,
-        })
-    }
+        });
+    };
 
     const regenerateSlug = () => {
         if (name) {
-            setValue('slug', productService.generateSlug(name))
+            setValue('slug', productService.generateSlug(name));
         }
-    }
+    };
 
     return (
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -266,8 +266,8 @@ export function ProductForm({
                 <button
                     type="button"
                     onClick={() => {
-                        handleReset()
-                        onCancel()
+                        handleReset();
+                        onCancel();
                     }}
                     className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
                 >
@@ -309,5 +309,5 @@ export function ProductForm({
                 </button>
             </div>
         </form>
-    )
+    );
 }

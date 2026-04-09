@@ -1,28 +1,28 @@
-import { ContentPillar, FunnelStage } from '@/generated/prisma/enums'
+import { ContentPillar, FunnelStage } from '@/generated/prisma/enums';
 
-export type { ContentPillar, FunnelStage }
+export type { ContentPillar, FunnelStage };
 
 export interface PillarConfig {
-    id: string
-    workspaceId: string
-    pillar: ContentPillar
-    name: string
-    objective: string | null
-    funnelStage: FunnelStage
-    description: string | null
-    examples: string[]
-    isActive: boolean
-    sortOrder: number
+    id: string;
+    workspaceId: string;
+    pillar: ContentPillar;
+    name: string;
+    objective: string | null;
+    funnelStage: FunnelStage;
+    description: string | null;
+    examples: string[];
+    isActive: boolean;
+    sortOrder: number;
 }
 
 export interface PillarConfigInput {
-    name?: string
-    objective?: string
-    funnelStage?: FunnelStage
-    description?: string
-    examples?: string[]
-    isActive?: boolean
-    sortOrder?: number
+    name?: string;
+    objective?: string;
+    funnelStage?: FunnelStage;
+    description?: string;
+    examples?: string[];
+    isActive?: boolean;
+    sortOrder?: number;
 }
 
 export const PILLAR_COLORS = {
@@ -54,21 +54,21 @@ export const PILLAR_COLORS = {
         light: 'bg-purple-50',
         hover: 'hover:bg-purple-50',
     },
-} as const
+} as const;
 
 export const PILLAR_LABELS = {
     P1_EDUCATION: 'Educação',
     P2_USE_CASES: 'Casos de Uso',
     P3_CONVERSION: 'Conversão',
     P4_AUTHORITY: 'Autoridade',
-} as const
+} as const;
 
 export const PILLAR_DESCRIPTIONS = {
     P1_EDUCATION: 'Topo — Atrair',
     P2_USE_CASES: 'Meio — Mostrar valor',
     P3_CONVERSION: 'Fundo — Vender',
     P4_AUTHORITY: 'Bastidores — Confiança',
-} as const
+} as const;
 
 export const DEFAULT_PILLARS = [
     {
@@ -131,10 +131,10 @@ export const DEFAULT_PILLARS = [
         ],
         sortOrder: 4,
     },
-]
+];
 
 export const FUNNEL_STAGE_LABELS = {
     TOP: 'Topo (Atração)',
     MIDDLE: 'Meio (Consideração)',
     BOTTOM: 'Fundo (Conversão)',
-} as const
+} as const;

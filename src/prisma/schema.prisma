@@ -46,7 +46,7 @@ enum ContentFormat {
   CAROUSEL // Carrossel (slides)
   SHORT_VIDEO // TikTok / Reels
   LINKEDIN_POST // Post opinativo LinkedIn
-  INSTAGRAM_POST
+  IMAGE
   THREAD // Thread (X/Twitter)
   CTA_POST // Call to Action direto
   VIDEO_SCRIPT // Roteiro de vídeo

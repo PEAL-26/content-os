@@ -3,20 +3,20 @@ import type {
     FunnelStage,
     PillarConfig,
     PillarConfigInput,
-} from '@/types/pillar'
-import { FUNNEL_STAGE_LABELS, PILLAR_COLORS } from '@/types/pillar'
-import { useEffect, useState } from 'react'
-import { PillarBadge } from './pillar-badge'
+} from '@/types/pillar';
+import { FUNNEL_STAGE_LABELS, PILLAR_COLORS } from '@/types/pillar';
+import { useEffect, useState } from 'react';
+import { PillarBadge } from './pillar-badge';
 
 interface PillarCardProps {
-    pillar: PillarConfig
+    pillar: PillarConfig;
     onUpdate: (
         pillar: ContentPillar,
         data: PillarConfigInput
-    ) => Promise<{ success: boolean; error?: string }>
-    isSaving: boolean
-    isSuccess: boolean
-    error: string | null
+    ) => Promise<{ success: boolean; error?: string }>;
+    isSaving: boolean;
+    isSuccess: boolean;
+    error: string | null;
 }
 
 export function PillarCard({
@@ -26,17 +26,17 @@ export function PillarCard({
     isSuccess,
     error,
 }: PillarCardProps) {
-    const [isEditing, setIsEditing] = useState(false)
+    const [isEditing, setIsEditing] = useState(false);
     const [formData, setFormData] = useState({
         name: pillar.name,
         objective: pillar.objective || '',
         funnelStage: pillar.funnelStage,
         description: pillar.description || '',
         examples: [...pillar.examples],
-    })
-    const [newExample, setNewExample] = useState('')
+    });
+    const [newExample, setNewExample] = useState('');
 
-    const colors = PILLAR_COLORS[pillar.pillar]
+    const colors = PILLAR_COLORS[pillar.pillar];
 
     useEffect(() => {
         setFormData({
@@ -45,19 +45,19 @@ export function PillarCard({
             funnelStage: pillar.funnelStage,
             description: pillar.description || '',
             examples: [...pillar.examples],
-        })
-    }, [pillar])
+        });
+    }, [pillar]);
 
     const handleToggleActive = async () => {
-        await onUpdate(pillar.pillar, { isActive: !pillar.isActive })
-    }
+        await onUpdate(pillar.pillar, { isActive: !pillar.isActive });
+    };
 
     const handleSave = async () => {
-        const result = await onUpdate(pillar.pillar, formData)
+        const result = await onUpdate(pillar.pillar, formData);
         if (result.success) {
-            setIsEditing(false)
+            setIsEditing(false);
         }
-    }
+    };
 
     const handleCancel = () => {
         setFormData({
@@ -66,33 +66,33 @@ export function PillarCard({
             funnelStage: pillar.funnelStage,
             description: pillar.description || '',
             examples: [...pillar.examples],
-        })
-        setIsEditing(false)
-    }
+        });
+        setIsEditing(false);
+    };
 
     const handleAddExample = () => {
         if (newExample.trim()) {
             setFormData((prev) => ({
                 ...prev,
                 examples: [...prev.examples, newExample.trim()],
-            }))
-            setNewExample('')
+            }));
+            setNewExample('');
         }
-    }
+    };
 
     const handleRemoveExample = (index: number) => {
         setFormData((prev) => ({
             ...prev,
             examples: prev.examples.filter((_, i) => i !== index),
-        }))
-    }
+        }));
+    };
 
     const hasChanges =
         formData.name !== pillar.name ||
         formData.objective !== (pillar.objective || '') ||
         formData.funnelStage !== pillar.funnelStage ||
         formData.description !== (pillar.description || '') ||
-        JSON.stringify(formData.examples) !== JSON.stringify(pillar.examples)
+        JSON.stringify(formData.examples) !== JSON.stringify(pillar.examples);
 
     return (
         <div
@@ -281,8 +281,8 @@ export function PillarCard({
                                     }
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter') {
-                                            e.preventDefault()
-                                            handleAddExample()
+                                            e.preventDefault();
+                                            handleAddExample();
                                         }
                                     }}
                                     placeholder="Adicionar exemplo..."
@@ -391,5 +391,5 @@ export function PillarCard({
                 </div>
             </div>
         </div>
-    )
+    );
 }

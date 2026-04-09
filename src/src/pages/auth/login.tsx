@@ -1,16 +1,16 @@
-import { useAuthContext } from '@/context/auth-context'
-import { loginSchema, type LoginFormData } from '@/lib/schemas/auth'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { useForm } from 'react-hook-form'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useAuthContext } from '@/context/auth-context';
+import { loginSchema, type LoginFormData } from '@/lib/schemas/auth';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm } from 'react-hook-form';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 export function LoginPage() {
-    const navigate = useNavigate()
-    const location = useLocation()
-    const { signIn, isLoading, error, clearError } = useAuthContext()
+    const navigate = useNavigate();
+    const location = useLocation();
+    const { signIn, isLoading, error, clearError } = useAuthContext();
 
     const from =
-        (location.state as { from?: Location })?.from?.pathname || '/dashboard'
+        (location.state as { from?: Location })?.from?.pathname || '/dashboard';
 
     const {
         register,
@@ -18,14 +18,14 @@ export function LoginPage() {
         formState: { errors },
     } = useForm<LoginFormData>({
         resolver: zodResolver(loginSchema),
-    })
+    });
 
     const onSubmit = async (data: LoginFormData) => {
-        const result = await signIn(data.email, data.password)
+        const result = await signIn(data.email, data.password);
         if (result.success) {
-            navigate(from, { replace: true })
+            navigate(from, { replace: true });
         }
-    }
+    };
 
     return (
         <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12">
@@ -123,5 +123,5 @@ export function LoginPage() {
                 </div>
             </div>
         </div>
-    )
+    );
 }

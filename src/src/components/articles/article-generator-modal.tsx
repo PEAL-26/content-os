@@ -1,13 +1,13 @@
-import { Modal } from '@/components/ui/modal'
-import { useAI } from '@/hooks/use-ai'
-import { usePillars } from '@/hooks/use-pillars'
-import { useProducts } from '@/hooks/use-products'
-import { useEffect, useState } from 'react'
+import { Modal } from '@/components/ui/modal';
+import { useAI } from '@/hooks/use-ai';
+import { usePillars } from '@/hooks/use-pillars';
+import { useProducts } from '@/hooks/use-products';
+import { useEffect, useState } from 'react';
 
 interface ArticleGeneratorModalProps {
-    isOpen: boolean
-    onClose: () => void
-    onGenerated: (articleId: string) => void
+    isOpen: boolean;
+    onClose: () => void;
+    onGenerated: (articleId: string) => void;
 }
 
 export function ArticleGeneratorModal({
@@ -15,57 +15,57 @@ export function ArticleGeneratorModal({
     onClose,
     onGenerated,
 }: ArticleGeneratorModalProps) {
-    const { pillars } = usePillars()
-    const { activeProducts } = useProducts()
-    const { isGenerating, error, generateArticle, clearError } = useAI()
+    const { pillars } = usePillars();
+    const { activeProducts } = useProducts();
+    const { isGenerating, error, generateArticle, clearError } = useAI();
 
-    const [topic, setTopic] = useState('')
-    const [pillarId, setPillarId] = useState<string | null>(null)
-    const [productId, setProductId] = useState<string | null>(null)
-    const [errorMessage, setErrorMessage] = useState<string | null>(null)
+    const [topic, setTopic] = useState('');
+    const [pillarId, setPillarId] = useState<string | null>(null);
+    const [productId, setProductId] = useState<string | null>(null);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
     useEffect(() => {
         if (!isOpen) {
-            setTopic('')
-            setPillarId(null)
-            setProductId(null)
-            setErrorMessage(null)
-            clearError()
+            setTopic('');
+            setPillarId(null);
+            setProductId(null);
+            setErrorMessage(null);
+            clearError();
         }
-    }, [isOpen, clearError])
+    }, [isOpen, clearError]);
 
     const handleGenerate = async () => {
         if (!topic.trim()) {
-            setErrorMessage('O tema é obrigatório')
-            return
+            setErrorMessage('O tema é obrigatório');
+            return;
         }
 
-        setErrorMessage(null)
+        setErrorMessage(null);
 
-        const selectedPillar = pillars.find((p) => p.id === pillarId)
-        const selectedProduct = activeProducts.find((p) => p.id === productId)
+        const selectedPillar = pillars.find((p) => p.id === pillarId);
+        const selectedProduct = activeProducts.find((p) => p.id === productId);
 
         try {
             const result = await generateArticle({
                 topic: topic.trim(),
                 pillar: selectedPillar,
                 product: selectedProduct || undefined,
-            })
+            });
 
             if (result.success && result.articleId) {
-                onGenerated(result.articleId)
-                onClose()
+                onGenerated(result.articleId);
+                onClose();
             }
         } catch (error) {
-            console.error(error)
+            console.error(error);
         }
-    }
+    };
 
     const handleClose = () => {
         if (!isGenerating) {
-            onClose()
+            onClose();
         }
-    }
+    };
 
     return (
         <Modal
@@ -82,8 +82,8 @@ export function ArticleGeneratorModal({
                     <textarea
                         value={topic}
                         onChange={(e) => {
-                            setTopic(e.target.value)
-                            if (errorMessage) setErrorMessage(null)
+                            setTopic(e.target.value);
+                            if (errorMessage) setErrorMessage(null);
                         }}
                         placeholder="Ex: Como automatizar a gestão de pedidos no teu e-commerce usando IA"
                         rows={4}
@@ -257,5 +257,5 @@ export function ArticleGeneratorModal({
                 </div>
             </div>
         </Modal>
-    )
+    );
 }

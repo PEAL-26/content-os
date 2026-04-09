@@ -1,9 +1,9 @@
-import type { Product } from '@/types/database'
+import type { Product } from '@/types/database';
 
 interface ProductCardProps {
-    product: Product
-    onEdit: () => void
-    onArchive: () => void
+    product: Product;
+    onEdit: () => void;
+    onArchive: () => void;
 }
 
 export function ProductCard({ product, onEdit, onArchive }: ProductCardProps) {
@@ -145,5 +145,5 @@ export function ProductCard({ product, onEdit, onArchive }: ProductCardProps) {
                 </div>
             )}
         </div>
-    )
+    );
 }

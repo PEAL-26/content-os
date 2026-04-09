@@ -4,32 +4,32 @@ import {
     type UpdateWorkspaceInput,
     type Workspace,
     type WorkspaceWithRole,
-} from '@/services/workspace.service'
-import { create } from 'zustand'
+} from '@/services/workspace.service';
+import { create } from 'zustand';
 
 interface WorkspaceState {
-    currentWorkspace: Workspace | null
-    workspaces: WorkspaceWithRole[]
-    isLoading: boolean
-    hasFetched: boolean
-    error: string | null
+    currentWorkspace: Workspace | null;
+    workspaces: WorkspaceWithRole[];
+    isLoading: boolean;
+    hasFetched: boolean;
+    error: string | null;
 
-    fetchWorkspaces: (userId: string) => Promise<void>
-    setWorkspace: (workspace: Workspace) => void
+    fetchWorkspaces: (userId: string) => Promise<void>;
+    setWorkspace: (workspace: Workspace) => void;
     createWorkspace: (
         userId: string,
         input: CreateWorkspaceInput
     ) => Promise<{
-        success: boolean
-        error?: string
-        workspace?: Workspace
-    }>
+        success: boolean;
+        error?: string;
+        workspace?: Workspace;
+    }>;
     updateWorkspace: (
         workspaceId: string,
         input: UpdateWorkspaceInput
-    ) => Promise<{ success: boolean; error?: string }>
-    clearWorkspace: () => void
-    clearError: () => void
+    ) => Promise<{ success: boolean; error?: string }>;
+    clearWorkspace: () => void;
+    clearError: () => void;
 }
 
 export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
@@ -41,41 +41,41 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
     fetchWorkspaces: async (userId: string) => {
         if (get().hasFetched && get().workspaces.length > 0) {
-            return
+            return;
         }
 
-        set({ isLoading: true, error: null })
+        set({ isLoading: true, error: null });
 
         try {
             const workspaces =
-                await workspaceService.getWorkspacesByUser(userId)
+                await workspaceService.getWorkspacesByUser(userId);
             set({
                 workspaces,
                 currentWorkspace: workspaces[0] ?? null,
                 isLoading: false,
                 hasFetched: true,
-            })
+            });
         } catch (err) {
             const error =
                 err instanceof Error
                     ? err.message
-                    : 'Erro ao carregar workspaces'
-            set({ isLoading: false, error, hasFetched: true })
+                    : 'Erro ao carregar workspaces';
+            set({ isLoading: false, error, hasFetched: true });
         }
     },
 
     setWorkspace: (workspace: Workspace) => {
-        set({ currentWorkspace: workspace })
+        set({ currentWorkspace: workspace });
     },
 
     createWorkspace: async (userId: string, input: CreateWorkspaceInput) => {
-        set({ isLoading: true, error: null })
+        set({ isLoading: true, error: null });
 
         try {
             const { workspaceId } = await workspaceService.createWorkspace(
                 userId,
                 input
-            )
+            );
 
             const workspace: Workspace = {
                 id: workspaceId,
@@ -95,23 +95,23 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
                 productRatio: input.productRatio ?? 30,
                 postsPerWeek: 3,
                 articlesPerWeek: 1,
-            }
+            };
 
             const workspacesWithRole: WorkspaceWithRole = {
                 ...workspace,
                 memberRole: 'OWNER',
-            }
+            };
             set({
                 workspaces: [...get().workspaces, workspacesWithRole],
                 currentWorkspace: workspace,
                 isLoading: false,
-            })
-            return { success: true, workspace }
+            });
+            return { success: true, workspace };
         } catch (err) {
             const error =
-                err instanceof Error ? err.message : 'Erro ao criar workspace'
-            set({ isLoading: false, error })
-            return { success: false, error }
+                err instanceof Error ? err.message : 'Erro ao criar workspace';
+            set({ isLoading: false, error });
+            return { success: false, error };
         }
     },
 
@@ -119,17 +119,17 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         workspaceId: string,
         input: UpdateWorkspaceInput
     ) => {
-        set({ isLoading: true, error: null })
+        set({ isLoading: true, error: null });
 
         try {
             const workspace = await workspaceService.updateWorkspace(
                 workspaceId,
                 input
-            )
+            );
 
             const workspaces = get().workspaces.map((w) =>
                 w.id === workspaceId ? { ...w, ...workspace } : w
-            )
+            );
 
             set({
                 workspaces,
@@ -138,16 +138,16 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
                         ? workspace
                         : get().currentWorkspace,
                 isLoading: false,
-            })
+            });
 
-            return { success: true }
+            return { success: true };
         } catch (err) {
             const error =
                 err instanceof Error
                     ? err.message
-                    : 'Erro ao atualizar workspace'
-            set({ isLoading: false, error })
-            return { success: false, error }
+                    : 'Erro ao atualizar workspace';
+            set({ isLoading: false, error });
+            return { success: false, error };
         }
     },
 
@@ -157,10 +157,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
             workspaces: [],
             error: null,
             hasFetched: false,
-        })
+        });
     },
 
     clearError: () => {
-        set({ error: null })
+        set({ error: null });
     },
-}))
+}));

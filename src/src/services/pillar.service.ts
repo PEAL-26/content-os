@@ -1,11 +1,11 @@
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase';
 import type {
     ContentPillar,
     PillarConfig,
     PillarConfigInput,
-} from '@/types/pillar'
-import { DEFAULT_PILLARS } from '@/types/pillar'
-import { v4 as uuidv4 } from 'uuid'
+} from '@/types/pillar';
+import { DEFAULT_PILLARS } from '@/types/pillar';
+import { v4 as uuidv4 } from 'uuid';
 
 export const pillarService = {
     async getPillars(workspaceId: string): Promise<PillarConfig[]> {
@@ -13,13 +13,13 @@ export const pillarService = {
             .from('pillar_configs')
             .select('*')
             .eq('workspaceId', workspaceId)
-            .order('sortOrder')
+            .order('sortOrder');
 
         if (error) {
-            throw new Error(`Erro ao buscar pilares: ${error.message}`)
+            throw new Error(`Erro ao buscar pilares: ${error.message}`);
         }
 
-        return (data ?? []) as PillarConfig[]
+        return (data ?? []) as PillarConfig[];
     },
 
     async updatePillar(
@@ -41,13 +41,13 @@ export const pillarService = {
             .eq('workspaceId', workspaceId)
             .eq('pillar', pillar)
             .select()
-            .single()
+            .single();
 
         if (error) {
-            throw new Error(`Erro ao atualizar pilar: ${error.message}`)
+            throw new Error(`Erro ao atualizar pilar: ${error.message}`);
         }
 
-        return data as PillarConfig
+        return data as PillarConfig;
     },
 
     async createDefaultPillars(workspaceId: string): Promise<void> {
@@ -62,27 +62,27 @@ export const pillarService = {
             examples: p.examples,
             isActive: true,
             sortOrder: p.sortOrder,
-        }))
+        }));
 
         const { error } = await supabase
             .from('pillar_configs')
-            .insert(pillarsToInsert)
+            .insert(pillarsToInsert);
 
         if (error) {
             throw new Error(
                 `Erro ao criar pilares por defeito: ${error.message}`
-            )
+            );
         }
     },
 
     async checkAndCreatePillars(workspaceId: string): Promise<boolean> {
-        const existing = await this.getPillars(workspaceId)
+        const existing = await this.getPillars(workspaceId);
 
         if (existing.length === 0) {
-            await this.createDefaultPillars(workspaceId)
-            return true
+            await this.createDefaultPillars(workspaceId);
+            return true;
         }
 
-        return false
+        return false;
     },
-}
+};
