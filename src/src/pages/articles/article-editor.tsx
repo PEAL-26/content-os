@@ -15,6 +15,7 @@ import {
     STATUS_TRANSITIONS,
 } from '@/types/article';
 import type { ArticleStatus, ArticleWithRelations } from '@/types/database';
+import MDEditor from '@uiw/react-md-editor';
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -414,6 +415,7 @@ export function ArticleEditor() {
                             }
                             height="100%"
                             preview="edit"
+                            data-color-mode="light"
                         />
                     </div>
                 </div>
@@ -468,5 +470,3 @@ export function ArticleEditor() {
         </div>
     );
 }
-
-import MDEditor from '@uiw/react-md-editor';

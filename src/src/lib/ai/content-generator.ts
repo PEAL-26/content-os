@@ -282,10 +282,10 @@ export async function generateContentPieces(
     const errors: Array<{ format: ContentFormat; error: string }> = [];
 
     for (const result of results) {
-        if (result.success) {
+        if (result.success && result.piece) {
             pieces.push(result.piece);
         } else {
-            errors.push({ format: result.format, error: result.error });
+            errors.push({ format: result.format, error: result.error || 'Erro desconhecido' });
         }
     }
 

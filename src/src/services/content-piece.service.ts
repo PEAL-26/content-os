@@ -64,6 +64,52 @@ export const contentPieceService = {
         return (data || []) as ContentPieceWithRelations[];
     },
 
+    async getWorkspaceContentPieces(
+        workspaceId: string,
+        filters?: {
+            format?: string;
+            channelId?: string;
+            status?: string;
+            articleId?: string;
+        }
+    ): Promise<ContentPieceWithRelations[]> {
+        let query = supabase
+            .from('content_pieces')
+            .select(
+                `
+                *,
+                article:articles(id, title),
+                product:products(id, name),
+                channel:channel_configs(id, channel, handle)
+            `
+            )
+            .eq('workspaceId', workspaceId)
+            .order('createdAt', { ascending: false });
+
+        if (filters?.format) {
+            query = query.eq('format', filters.format);
+        }
+        if (filters?.channelId) {
+            query = query.eq('channelId', filters.channelId);
+        }
+        if (filters?.status) {
+            query = query.eq('status', filters.status);
+        }
+        if (filters?.articleId) {
+            query = query.eq('articleId', filters.articleId);
+        }
+
+        const { data, error } = await query;
+
+        if (error) {
+            throw new Error(
+                `Erro ao buscar peças de conteúdo: ${error.message}`
+            );
+        }
+
+        return (data || []) as ContentPieceWithRelations[];
+    },
+
     async getContentPiece(
         id: string
     ): Promise<ContentPieceWithRelations | null> {

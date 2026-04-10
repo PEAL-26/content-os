@@ -113,6 +113,8 @@ export function ContentGeneratorPanel({
     const handleGenerate = async () => {
         if (selectedFormats.size === 0) return;
 
+        setErrors([]);
+
         const channelIds: Partial<Record<ContentFormat, string>> = {};
         for (const format of selectedFormats) {
             channelIds[format] =

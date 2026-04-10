@@ -257,7 +257,7 @@ export function createFallbackModel(): LanguageModel | null {
     }
 
     return createFallback({
-        models,
+        models: models as Parameters<typeof createFallback>[0]['models'],
         onError: (error, modelId) => {
             console.warn(`Model ${modelId} failed:`, error);
         },

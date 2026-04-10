@@ -202,6 +202,16 @@ export const CONTENT_FORMAT_LABELS: Record<ContentFormat, string> = {
     VIDEO_SCRIPT: 'Roteiro Vídeo',
 };
 
+export const CONTENT_FORMAT_ICONS: Record<ContentFormat, string> = {
+    CAROUSEL: '📱',
+    SHORT_VIDEO: '🎬',
+    LINKEDIN_POST: '💼',
+    IMAGE: '📸',
+    THREAD: '🧵',
+    CTA_POST: '🔗',
+    VIDEO_SCRIPT: '📝',
+};
+
 export const CONTENT_FORMAT_DEFAULTS: Record<ContentFormat, SocialChannel> = {
     CAROUSEL: 'LINKEDIN',
     SHORT_VIDEO: 'TIKTOK',

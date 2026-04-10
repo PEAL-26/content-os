@@ -5,6 +5,7 @@ import { ArticleEditor } from '@/pages/articles/article-editor';
 import { ArticleList } from '@/pages/articles/article-list';
 import { LoginPage } from '@/pages/auth/login';
 import { RegisterPage } from '@/pages/auth/register';
+import { ContentPiecesPage } from '@/pages/content/content-pieces';
 import { CreateWorkspacePage } from '@/pages/onboarding/create-workspace';
 import { ChannelsPage } from '@/pages/settings/channels';
 import { PillarsPage } from '@/pages/settings/pillars';
@@ -93,7 +94,7 @@ export function App() {
                         element={
                             <ProtectedWorkspaceRoute>
                                 <DashboardLayout>
-                                    <PlaceholderPage title="Conteúdo" />
+                                    <ContentPiecesPage />
                                 </DashboardLayout>
                             </ProtectedWorkspaceRoute>
                         }

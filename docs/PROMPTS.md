@@ -366,7 +366,7 @@ regenerar — criar sempre nova versão.
 
 ---
 
-### [] PROMPT 4.2 — Visualização e edição de peças de conteúdo
+### [x] PROMPT 4.2 — Visualização e edição de peças de conteúdo
 
 ```markdown
 Antes de implementar qualquer coisa, analisa o que já existe no projecto:
@@ -417,7 +417,7 @@ completo, implementa o seguinte:
 
 Implementa o gerador de roteiros de vídeo curto (TikTok/Reels). Cria:
 
-- `src/lib/ai.ts` (expandir) — adicionar `generateVideoScript({ article,
+- `src/src/lib/ai.ts` (expandir) — adicionar `generateVideoScript({ article,
   targetChannel, durationSec, workspace })`. O prompt deve gerar um roteiro
   estruturado com: gancho verbal para os primeiros 3 segundos (hook),
   apresentação do problema (5-10 seg), desenvolvimento/solução (30-40 seg),
@@ -425,14 +425,14 @@ Implementa o gerador de roteiros de vídeo curto (TikTok/Reels). Cria:
   (onScreenText), e sugestões de b-roll (imagens/vídeos de apoio). O
   `fullScript` deve ser o roteiro completo formatado para leitura em voz
   alta, com indicações de pausa e ênfase
-- `src/pages/content/video-scripts.tsx` — lista de roteiros com filtro por
+- `src/src/pages/content/video-scripts.tsx` — lista de roteiros com filtro por
   canal (Instagram/TikTok) e status. Cada item mostra: título, gancho
   (primeiras palavras), duração estimada, canal alvo
-- `src/components/content/video-script-Card.tsx` — card expandível que
+- `src/src/components/content/video-script-Card.tsx` — card expandível que
   mostra o roteiro secção a secção: gancho destacado a negrito, corpo,
   CTA, e no final as sugestões de onScreenText e b-roll em formato de
   checklist. Botão "Copiar roteiro completo" para clipboard
-- `src/hooks/use-video-scripts.ts` — hook com `getVideoScripts(articleId)`,
+- `src/src/hooks/use-video-scripts.ts` — hook com `getVideoScripts(articleId)`,
   `generateScript()`, `updateScript()`
 
 O tempo de leitura estimado deve ser calculado automaticamente:
