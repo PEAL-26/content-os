@@ -234,7 +234,7 @@ function parseGeneratedContent(
             const parsed = parseVideoScriptResponse(text);
             if (!parsed) return null;
 
-            const body = `## Hook\n${parsed.hook || ''}\n\n## Corpo\n${parsed.body || ''}\n\n## CTA\n${parsed.cta || ''}`;
+            const body = `## Hook\n${parsed.hook || ''}\n\n## Problema\n${parsed.problem || ''}\n\n## Solução\n${parsed.solution || ''}\n\n## CTA\n${parsed.cta || ''}`;
 
             return {
                 format,

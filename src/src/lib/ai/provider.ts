@@ -4,6 +4,7 @@ import { createDeepSeek } from '@ai-sdk/deepseek';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createGroq } from '@ai-sdk/groq';
 import { createOpenAI } from '@ai-sdk/openai';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { createTogetherAI } from '@ai-sdk/togetherai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import type { LanguageModel } from 'ai';
@@ -52,6 +53,19 @@ export const PROVIDER_CONFIGS: AIProviderConfig[] = [
         description: 'Gratuito com bons limites, muito rápido',
     },
     {
+        id: 'opencode',
+        name: 'OpenCode Zen',
+        apiKeyEnvVar: 'VITE_OPEN_CODE_ZEN_API_KEY',
+        apiUrlEnvVar: 'VITE_OPEN_CODE_ZEN_API_URL',
+        models: {
+            primary: 'big-pickle',
+            fallback: 'nemotron-3-super-free',
+        },
+        priority: 4,
+        isFree: true,
+        description: '1M tokens gratuito',
+    },
+    {
         id: 'groq',
         name: 'Groq',
         apiKeyEnvVar: 'VITE_GROQ_API_KEY',
@@ -60,7 +74,7 @@ export const PROVIDER_CONFIGS: AIProviderConfig[] = [
             primary: 'llama-3.3-70b-versatile',
             fallback: 'llama-3.1-8b-instant',
         },
-        priority: 4,
+        priority: 5,
         isFree: true,
         description: 'Mais rápido, 30 RPM gratuito',
     },
@@ -73,7 +87,7 @@ export const PROVIDER_CONFIGS: AIProviderConfig[] = [
             primary: 'deepseek-chat',
             fallback: 'deepseek-reasoner',
         },
-        priority: 5,
+        priority: 6,
         isFree: false,
         description: 'Muito barato, bom para tarefas simples',
     },
@@ -86,7 +100,7 @@ export const PROVIDER_CONFIGS: AIProviderConfig[] = [
             primary: 'llama3.3-70b',
             fallback: 'qwen-3-32b',
         },
-        priority: 6,
+        priority: 7,
         isFree: true,
         description: '1M tokens gratuitos por mês',
     },
@@ -99,7 +113,7 @@ export const PROVIDER_CONFIGS: AIProviderConfig[] = [
             primary: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
             fallback: 'mistralai/Mixtral-8x22B-Instruct-v0.1',
         },
-        priority: 7,
+        priority: 8,
         isFree: true,
         description: 'Bom tier gratuito, vários modelos open source',
     },
@@ -112,7 +126,7 @@ export const PROVIDER_CONFIGS: AIProviderConfig[] = [
             primary: 'anthropic/claude-3.5-haiku',
             fallback: 'google/gemini-2.0-flash',
         },
-        priority: 8,
+        priority: 9,
         isFree: false,
         description: 'Unified API para 300+ modelos',
     },
@@ -125,7 +139,7 @@ export const PROVIDER_CONFIGS: AIProviderConfig[] = [
             primary: 'gemma3:4b', //'llama3.3',
             fallback: 'mistral',
         },
-        priority: 9,
+        priority: 10,
         isFree: true,
         description: 'Modelos locais no teu computador',
     },
@@ -169,6 +183,13 @@ export function createProvider(
 
         case 'google':
             return createGoogleGenerativeAI({ apiKey: key });
+
+        case 'opencode':
+            return createOpenAICompatible({
+                apiKey: key,
+                baseURL: url,
+                name: 'OpenCode',
+            });
 
         case 'groq':
             return createGroq({ apiKey: key });

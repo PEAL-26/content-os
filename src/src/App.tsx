@@ -6,6 +6,7 @@ import { ArticleList } from '@/pages/articles/article-list';
 import { LoginPage } from '@/pages/auth/login';
 import { RegisterPage } from '@/pages/auth/register';
 import { ContentPiecesPage } from '@/pages/content/content-pieces';
+import { VideoScriptsPage } from '@/pages/content/video-scripts';
 import { CreateWorkspacePage } from '@/pages/onboarding/create-workspace';
 import { ChannelsPage } from '@/pages/settings/channels';
 import { PillarsPage } from '@/pages/settings/pillars';
@@ -95,6 +96,17 @@ export function App() {
                             <ProtectedWorkspaceRoute>
                                 <DashboardLayout>
                                     <ContentPiecesPage />
+                                </DashboardLayout>
+                            </ProtectedWorkspaceRoute>
+                        }
+                    />
+
+                    <Route
+                        path="/dashboard/video-scripts"
+                        element={
+                            <ProtectedWorkspaceRoute>
+                                <DashboardLayout>
+                                    <VideoScriptsPage />
                                 </DashboardLayout>
                             </ProtectedWorkspaceRoute>
                         }

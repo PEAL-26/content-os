@@ -12,6 +12,7 @@ interface ContentPromptParams {
     workspace: Workspace;
     product?: Product;
     pillar?: PillarConfig;
+    durationSec?: number;
 }
 
 function buildContext(params: ContentPromptParams): string {
@@ -260,34 +261,48 @@ Instruções:
 
 export function buildVideoScriptPrompt(params: ContentPromptParams): string {
     const context = buildContext(params);
+    const durationSec = params.durationSec || 60;
 
     return `${context}
 
 ## Tarefa
-Cria um roteiro de vídeo curto (30-60 segundos) baseado no artigo.
+Cria um roteiro de vídeo curto baseado no artigo.
 
-Requisitos:
-- Hook: Primeiros 3 segundos (gancho visual/verbal)
-- Introdução: 5 segundos
-- Corpo: 30-40 segundos (pontos principais)
-- CTA: 5-10 segundos
-- Formato do output deve ser JSON válido:
+## Estrutura do Roteiro
+1. **Hook (3 segundos)**: Frase impactante que faz o espectador ficar a ver. Pode ser uma pergunta provocadora, dado surpreendente, ou afirmação controversa.
+2. **Problema (5-10 segundos)**: Introduz o problema ou dor que o artigo resolve. Faz o espetador identificar-se.
+3. **Solução (30-40 segundos)**: Desenvolvimento dos pontos principais do artigo. Linguagem conversacional, como se estivesses a falar com um amigo.
+4. **CTA (5-10 segundos)**: Call to action final claro.
+
+## Requisitos Adicionais
+- **onScreenText**: Sugestões de texto a aparecer no ecrã (máximo 5). São curtos, complementam o que dizes.
+- **bRoll**: Sugestões de imagens/vídeos de fundo para cada secção (máximo 5). Descrições de stock footage ou screencasts.
+
+## Output
+O output DEVE ser JSON válido:
 
 \`\`\`json
 {
-  "title": "Título do vídeo",
-  "hook": "Texto do gancho inicial (aparece no ecrã)",
-  "body": "Roteiro do corpo do vídeo...",
-  "cta": "Call to action final",
-  "durationSec": 60
+  "title": "Título cativante para o vídeo (máx 60 caracteres)",
+  "hook": "Texto do gancho - frase de impacto (máx 15 palavras)",
+  "problem": "Descrição do problema ou contexto (5-10 segundos de fala)",
+  "solution": "Desenvolvimento da solução com pontos principais (${Math.round(durationSec * 0.6)} segundos de fala aproximadamente)",
+  "cta": "Call to action final claro (máx 20 palavras)",
+  "fullScript": "Roteiro completo para leitura em voz alta, com indicações de pausa (ex: [PAUSA]), ênfase (ex: *palavra*) e tom (ex: (entusiasmado)). Formato para ser lido diretamente.",
+  "durationSec": ${durationSec},
+  "onScreenText": ["Texto 1", "Texto 2", "Texto 3"],
+  "bRoll": ["Descrição visual 1", "Descrição visual 2"]
 }
 \`\`\`
 
-Instruções:
-- Escreve em ${context.includes('Idioma: português') ? 'português' : 'inglês'}
-- Linguagem natural para ser dita
-- Script deve ser conversacional, não lido
-- Inclui indicações de expressão facial ou tom de voz se relevante
+## Regras de Escrita
+- Escreve em ${params.workspace.contentLanguage === 'pt' ? 'português' : 'inglês'}
+- Linguagem natural e conversacional
+- O fullScript deve ter aproximadamente ${Math.round(durationSec * 2.5)} palavras (150 palavras/minuto)
+- Usa *palavra* para indicar ênfase
+- Usa [PAUSA] para indicar pausas dramáticas
+- O hook deve surpreender ou criar curiosidade
+- O CTA deve ser específico e acionável
 `;
 }
 
@@ -416,13 +431,19 @@ export function parseThreadResponse(text: string): {
     }
 }
 
-export function parseVideoScriptResponse(text: string): {
+export interface ParsedVideoScript {
     title: string | null;
     hook: string | null;
-    body: string | null;
+    problem: string | null;
+    solution: string | null;
     cta: string | null;
-    durationSec: number | null;
-} | null {
+    fullScript: string | null;
+    durationSec: number;
+    onScreenText: string[];
+    bRoll: string[];
+}
+
+export function parseVideoScriptResponse(text: string): ParsedVideoScript | null {
     try {
         const jsonMatch = text.match(/\{[\s\S]*\}/);
         if (!jsonMatch) return null;
@@ -432,9 +453,17 @@ export function parseVideoScriptResponse(text: string): {
         return {
             title: parsed.title || null,
             hook: parsed.hook || null,
-            body: parsed.body || null,
+            problem: parsed.problem || null,
+            solution: parsed.solution || null,
             cta: parsed.cta || null,
+            fullScript: parsed.fullScript || null,
             durationSec: parsed.durationSec || 60,
+            onScreenText: Array.isArray(parsed.onScreenText)
+                ? parsed.onScreenText
+                : [],
+            bRoll: Array.isArray(parsed.bRoll)
+                ? parsed.bRoll
+                : [],
         };
     } catch {
         return null;

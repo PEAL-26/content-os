@@ -10,6 +10,7 @@ const navigation = [
     { name: 'Dashboard', href: '/dashboard' },
     { name: 'Artigos', href: '/dashboard/articles' },
     { name: 'Conteúdo', href: '/dashboard/content' },
+    { name: 'Roteiros', href: '/dashboard/video-scripts' },
     { name: 'Planeamento', href: '/dashboard/planning' },
     { name: 'Configurações', href: '/dashboard/settings' },
 ];

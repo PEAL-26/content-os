@@ -403,7 +403,7 @@ de artigos. Um contador "X peças aprovadas / Y total" visível no topo da lista
 
 ---
 
-### [] PROMPT 4.3 — Gerador de roteiros de vídeo
+### [x] PROMPT 4.3 — Gerador de roteiros de vídeo
 
 ```markdown
 Antes de implementar qualquer coisa, analisa o que já existe no projecto:

@@ -1,4 +1,4 @@
-import type { Product, Workspace } from '@/types/database';
+import type { Product, SocialChannel, Workspace } from '@/types/database';
 import type { PillarConfig } from '@/types/pillar';
 
 export interface AIGeneratedArticle {
@@ -23,6 +23,7 @@ export type AIProviderId =
     | 'anthropic'
     | 'openai'
     | 'google'
+    | 'opencode'
     | 'groq'
     | 'deepseek'
     | 'cerebras'
@@ -65,3 +66,34 @@ export type GenerateArticleResult =
           prompt: string;
       }
     | { success: false; error: string; code: AIProviderResult['code'] };
+
+export interface GeneratedVideoScript {
+    title: string;
+    hook: string;
+    problem: string | null;
+    solution: string | null;
+    cta: string;
+    fullScript: string | null;
+    durationSec: number;
+    onScreenText: string[];
+    bRoll: string[];
+    provider?: AIProviderId;
+}
+
+export interface GenerateVideoScriptParams {
+    article: Article;
+    targetChannel: SocialChannel;
+    durationSec: number;
+    workspace: Workspace;
+}
+
+export type GenerateVideoScriptResult =
+    | {
+          success: true;
+          script: GeneratedVideoScript;
+          provider: AIProviderId;
+          prompt: string;
+      }
+    | { success: false; error: string; code: AIProviderResult['code'] };
+
+type Article = import('@/types/database').Article;
