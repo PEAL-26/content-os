@@ -7,12 +7,13 @@ import { contentPieceService } from '@/services/content-piece.service';
 import { articleService } from '@/services/article.service';
 import { pillarService } from '@/services/pillar.service';
 import { channelService } from '@/services/channel.service';
-import type { ContentPieceWithRelations, SocialChannel, ContentPillar } from '@/types/database';
+import type { ContentPieceWithRelations, ContentPillar } from '@/types/database';
 import type { ArticleWithRelations } from '@/types/database';
 import type { PillarConfig } from '@/types/pillar';
 import type { ChannelConfig } from '@/types/database';
 import { Search, FileText, Image, Check, Clock, Filter, X } from 'lucide-react';
 import { formatFullDate, getPillarLabel } from '@/lib/date-utils';
+import { CONTENT_FORMAT_EMOJIS } from '@/helpers/content-format';
 
 interface AddPlanItemModalProps {
     isOpen: boolean;
@@ -73,6 +74,7 @@ export function AddPlanItemModal({
         if (isOpen) {
             loadData();
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- loadData should only run on open/workspace change
     }, [isOpen, workspaceId]);
 
     useEffect(() => {
@@ -176,16 +178,6 @@ export function AddPlanItemModal({
         setScheduledTime('09:00');
         setNotes('');
         onClose();
-    };
-
-    const formatIcons: Record<string, string> = {
-        CAROUSEL: '📱',
-        SHORT_VIDEO: '🎬',
-        LINKEDIN_POST: '💼',
-        IMAGE: '📸',
-        THREAD: '🧵',
-        CTA_POST: '🔗',
-        VIDEO_SCRIPT: '📝',
     };
 
     const dayNames: Record<number, string> = {
@@ -433,16 +425,6 @@ function ContentPieceItem({
     isSelected,
     onSelect,
 }: ContentPieceItemProps) {
-    const formatIcons: Record<string, string> = {
-        CAROUSEL: '📱',
-        SHORT_VIDEO: '🎬',
-        LINKEDIN_POST: '💼',
-        IMAGE: '📸',
-        THREAD: '🧵',
-        CTA_POST: '🔗',
-        VIDEO_SCRIPT: '📝',
-    };
-
     return (
         <button
             onClick={onSelect}
@@ -452,7 +434,7 @@ function ContentPieceItem({
                     : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
             }`}
         >
-            <span className="text-xl">{formatIcons[piece.format] || '📄'}</span>
+            <span className="text-xl">{CONTENT_FORMAT_EMOJIS[piece.format] || '📄'}</span>
             <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                     <p className="truncate text-sm font-medium text-gray-900">

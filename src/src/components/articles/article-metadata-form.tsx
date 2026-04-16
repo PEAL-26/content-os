@@ -1,6 +1,7 @@
 import { PillarBadge } from '@/components/content/pillar-badge';
 import { ProductSelector } from '@/components/products/product-selector';
 import { generateSlug } from '@/types/article';
+import type { ContentPillar } from '@/types/pillar';
 import { PlusIcon } from 'lucide-react';
 import type { KeyboardEvent } from 'react';
 import { useState } from 'react';
@@ -146,7 +147,7 @@ export function ArticleMetadataForm({
                 </select>
                 {pillar && (
                     <div className="mt-2">
-                        <PillarBadge pillar={pillar.pillar as any} size="sm" />
+                        <PillarBadge pillar={pillar.pillar as ContentPillar} size="sm" />
                     </div>
                 )}
             </div>

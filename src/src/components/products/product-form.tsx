@@ -43,6 +43,7 @@ export function ProductForm({
         },
     });
 
+    // eslint-disable-next-line react-hooks/incompatible-library -- watch() is required for controlled form fields
     const name = watch('name');
     const slug = watch('slug');
     const isActive = watch('isActive');

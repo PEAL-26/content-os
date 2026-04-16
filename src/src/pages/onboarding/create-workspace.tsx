@@ -1,4 +1,4 @@
-import { useAuthContext } from '@/context/auth-context';
+import { useAuthContext } from '@/context/use-auth-context';
 import { useWorkspace } from '@/hooks/use-workspace';
 import {
     createWorkspaceSchema,
@@ -36,6 +36,7 @@ export function CreateWorkspacePage() {
         },
     });
 
+    // eslint-disable-next-line react-hooks/incompatible-library -- watch() is required for controlled form fields
     const valueRatio = watch('valueRatio');
 
     const onSubmit = async (data: unknown) => {

@@ -1,15 +1,16 @@
-import { useAuthContext } from '@/context/auth-context';
+import { useAuthContext } from '@/context/use-auth-context';
 import { MetricCard, SkeletonCard } from '@/components/dashboard/metric-card';
 import { WeekChecklist } from '@/components/dashboard/week-checklist';
 import { PillarBadge } from '@/components/content/pillar-badge';
 import { ChannelBadge } from '@/components/channels/channel-badge';
 import { useDashboard } from '@/hooks/use-dashboard';
+import { getUserDisplayName } from '@/helpers/user';
+import { CONTENT_FORMAT_EMOJIS } from '@/helpers/content-format';
 import {
     Calendar,
     CheckCircle,
     Clock,
     FileText,
-    Image,
     TrendingUp,
     AlertCircle,
     ChevronRight,
@@ -36,20 +37,8 @@ export function DashboardPage() {
     } = useDashboard();
 
     const greeting = 'Olá';
-    const userName = user?.user_metadata?.full_name ||
-        user?.email?.split('@')[0] ||
-        'Utilizador';
+    const userName = getUserDisplayName(user);
     const today = format(new Date(), "EEEE, d 'de' MMMM", { locale: pt });
-
-    const formatIcons: Record<string, string> = {
-        CAROUSEL: '📱',
-        SHORT_VIDEO: '🎬',
-        LINKEDIN_POST: '💼',
-        IMAGE: '📸',
-        THREAD: '🧵',
-        CTA_POST: '🔗',
-        VIDEO_SCRIPT: '📝',
-    };
 
     return (
         <div className="space-y-8">
@@ -196,7 +185,7 @@ export function DashboardPage() {
                                         className="flex items-center gap-3 rounded-lg border border-gray-200 p-3 transition-colors hover:bg-gray-50"
                                     >
                                         <span className="text-xl">
-                                            {formatIcons[piece.format] || '📄'}
+                                            {CONTENT_FORMAT_EMOJIS[piece.format] || '📄'}
                                         </span>
                                         <div className="min-w-0 flex-1">
                                             <p className="truncate text-sm font-medium text-gray-900">

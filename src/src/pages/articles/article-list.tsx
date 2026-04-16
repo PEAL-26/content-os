@@ -9,6 +9,7 @@ import { usePillars } from '@/hooks/use-pillars';
 import { useProducts } from '@/hooks/use-products';
 import type { CreateArticleInput } from '@/lib/schemas/article';
 import type { ArticleStatus, ArticleWithRelations } from '@/types/database';
+import type { ContentPillar } from '@/types/pillar';
 import { useQueryState } from 'nuqs';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -67,7 +68,7 @@ function ArticleCard({
                         <div className="mt-2 flex flex-wrap items-center gap-2">
                             {article.pillar && (
                                 <PillarBadge
-                                    pillar={article.pillar.pillar as any}
+                                    pillar={article.pillar.pillar as ContentPillar}
                                     size="sm"
                                 />
                             )}

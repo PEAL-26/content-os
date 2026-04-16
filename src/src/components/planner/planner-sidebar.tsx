@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { ChannelBadge } from '@/components/channels/channel-badge';
-import { PillarBadge } from '@/components/content/pillar-badge';
 import { contentPieceService } from '@/services/content-piece.service';
 import { useWorkspaceStore } from '@/stores/workspace-store';
-import type { ContentPieceWithRelations, ContentPillar } from '@/types/database';
+import type { ContentPieceWithRelations } from '@/types/database';
 import { formatWeekRange } from '@/lib/date-utils';
+import { CONTENT_FORMAT_EMOJIS } from '@/helpers/content-format';
 import {
     Calendar,
     CheckCircle,
@@ -43,6 +42,7 @@ export function PlannerSidebar({
         if (currentWorkspace?.id) {
             loadUnassignedPieces();
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- loadUnassignedPieces is stable
     }, [currentWorkspace?.id]);
 
     const loadUnassignedPieces = async () => {
@@ -67,17 +67,8 @@ export function PlannerSidebar({
     );
 
     const isOverTarget = stats.totalItems > targetPostsPerWeek;
-    const isOnTrack = stats.publishedItems >= stats.plannedItems * 0.5;
 
-    const formatIcons: Record<string, string> = {
-        CAROUSEL: '📱',
-        SHORT_VIDEO: '🎬',
-        LINKEDIN_POST: '💼',
-        IMAGE: '📸',
-        THREAD: '🧵',
-        CTA_POST: '🔗',
-        VIDEO_SCRIPT: '📝',
-    };
+    const formatIcons = CONTENT_FORMAT_EMOJIS;
 
     return (
         <aside className="w-80 space-y-4 rounded-lg bg-white p-4 shadow-sm">

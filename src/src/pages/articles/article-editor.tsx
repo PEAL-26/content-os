@@ -122,6 +122,7 @@ export function ArticleEditor() {
                 sessionStorage.removeItem(SESSION_STORAGE_KEY + id);
             }
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- state.body intentionally omitted
     }, [id]);
 
     useEffect(() => {
@@ -210,6 +211,7 @@ export function ArticleEditor() {
         }, 3000);
 
         return () => clearTimeout(timer);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- id and slugError intentionally omitted
     }, [debouncedState, hasUnsavedChanges, saveArticle]);
 
     const handleUpdateState = (updates: Partial<EditorState>) => {

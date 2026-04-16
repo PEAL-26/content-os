@@ -14,9 +14,6 @@ import type { ContentPillar } from '@/types/database';
 import {
     getWeekStart,
     getWeekEnd,
-    getDaysOfWeek,
-    getDayOfWeekNumber,
-    isActiveDay,
 } from '@/lib/date-utils';
 
 export interface PillarDistribution {

@@ -146,16 +146,4 @@ export const productService = {
 
         return data as Product;
     },
-
-    generateSlug(name: string): string {
-        const base = name
-            .toLowerCase()
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '')
-            .replace(/[^a-z0-9\s-]/g, '')
-            .trim()
-            .replace(/\s+/g, '-');
-
-        return base;
-    },
 };

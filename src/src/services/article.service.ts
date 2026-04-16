@@ -8,6 +8,7 @@ import type {
     ArticleStatus,
     ArticleWithRelations,
 } from '@/types/database';
+import { generateSlug } from '@/helpers/slug';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface GetArticlesFilters {
@@ -311,14 +312,3 @@ export const articleService = {
         });
     },
 };
-
-function generateSlug(title: string): string {
-    return title
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-z0-9\s-]/g, '')
-        .trim()
-        .replace(/\s+/g, '-')
-        .substring(0, 100);
-}

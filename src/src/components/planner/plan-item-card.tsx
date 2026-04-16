@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { ChannelBadge } from '@/components/channels/channel-badge';
 import { PillarBadge } from '@/components/content/pillar-badge';
 import type { PlanItemWithRelations } from '@/services/weekly-plan.service';
-import type { ContentPillar, SocialChannel } from '@/types/database';
+import type { ContentPillar } from '@/types/database';
 import { formatTime } from '@/lib/date-utils';
+import { CONTENT_FORMAT_EMOJIS } from '@/helpers/content-format';
 import { Check, Eye, Trash2, ExternalLink, X } from 'lucide-react';
 
 interface PlanItemCardProps {
@@ -40,16 +41,7 @@ export function PlanItemCard({
 
     const getFormatIcon = () => {
         if (item.contentPiece?.format) {
-            const icons: Record<string, string> = {
-                CAROUSEL: '📱',
-                SHORT_VIDEO: '🎬',
-                LINKEDIN_POST: '💼',
-                IMAGE: '📸',
-                THREAD: '🧵',
-                CTA_POST: '🔗',
-                VIDEO_SCRIPT: '📝',
-            };
-            return icons[item.contentPiece.format] || '📄';
+            return CONTENT_FORMAT_EMOJIS[item.contentPiece.format] || '📄';
         }
         return '📄';
     };

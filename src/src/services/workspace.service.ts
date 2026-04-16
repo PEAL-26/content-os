@@ -4,6 +4,7 @@ import type {
     WorkspaceMember,
     WorkspaceWithRole,
 } from '@/types/database';
+import { generateSlug } from '@/helpers/slug';
 import { v4 as uuidv4 } from 'uuid';
 import { pillarService } from './pillar.service';
 
@@ -217,15 +218,7 @@ export const workspaceService = {
     },
 
     generateSlug(name: string): string {
-        const base = name
-            .toLowerCase()
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '')
-            .replace(/[^a-z0-9\s-]/g, '')
-            .trim()
-            .replace(/\s+/g, '-');
-
         const timestamp = Date.now().toString(36);
-        return `${base}-${timestamp}`;
+        return `${generateSlug(name)}-${timestamp}`;
     },
 };

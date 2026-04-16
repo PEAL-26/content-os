@@ -3,7 +3,7 @@ import { PillarBadge } from '@/components/content/pillar-badge';
 import { ChannelBadge } from '@/components/channels/channel-badge';
 import type { PlanItemWithRelations } from '@/services/weekly-plan.service';
 import type { ContentPillar } from '@/types/database';
-import { formatFullDate } from '@/lib/date-utils';
+import { CONTENT_FORMAT_EMOJIS } from '@/helpers/content-format';
 
 interface WeekChecklistProps {
     items: PlanItemWithRelations[];
@@ -43,16 +43,7 @@ export function WeekChecklist({
 
     const getItemIcon = (item: PlanItemWithRelations): string => {
         if (item.contentPiece?.format) {
-            const icons: Record<string, string> = {
-                CAROUSEL: '📱',
-                SHORT_VIDEO: '🎬',
-                LINKEDIN_POST: '💼',
-                IMAGE: '📸',
-                THREAD: '🧵',
-                CTA_POST: '🔗',
-                VIDEO_SCRIPT: '📝',
-            };
-            return icons[item.contentPiece.format] || '📄';
+            return CONTENT_FORMAT_EMOJIS[item.contentPiece.format] || '📄';
         }
         return '📄';
     };

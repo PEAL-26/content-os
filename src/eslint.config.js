@@ -12,7 +12,6 @@ export default defineConfig([
     {
         files: ['**/*.{ts,tsx}'],
         extends: [
-            'prettier',
             js.configs.recommended,
             tseslint.configs.recommended,
             reactHooks.configs.flat.recommended,

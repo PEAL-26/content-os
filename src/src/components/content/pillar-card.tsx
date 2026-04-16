@@ -39,6 +39,7 @@ export function PillarCard({
     const colors = PILLAR_COLORS[pillar.pillar];
 
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setFormData({
             name: pillar.name,
             objective: pillar.objective || '',

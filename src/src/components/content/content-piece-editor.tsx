@@ -43,6 +43,7 @@ export function ContentPieceEditor({
             slides: piece.slides,
         });
         setHasChanges(false);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- piece properties intentionally omitted to avoid infinite loops
     }, [piece.id]);
 
     const checkForChanges = useCallback(

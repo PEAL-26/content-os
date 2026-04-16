@@ -1,6 +1,7 @@
 import { ProductCard } from '@/components/products/product-card';
 import { ProductForm } from '@/components/products/product-form';
-import { ConfirmModal, Modal } from '@/components/ui/modal';
+import { Modal } from '@/components/ui/modal';
+import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { useProducts, type ProductSortBy } from '@/hooks/use-products';
 import type { CreateProductInput } from '@/lib/schemas/product';
 import type { Product } from '@/types/database';

@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Check, ExternalLink, Calendar } from 'lucide-react';
-import { formatDateTime } from '@/lib/date-utils';
 
 interface PublishConfirmModalProps {
     isOpen: boolean;
@@ -18,7 +17,6 @@ export function PublishConfirmModal({
     onClose,
     onConfirm,
     itemTitle,
-    scheduledTime,
     isLoading = false,
 }: PublishConfirmModalProps) {
     const [publishedUrl, setPublishedUrl] = useState('');

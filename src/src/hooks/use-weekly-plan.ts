@@ -12,8 +12,6 @@ import {
     addWeeksToDate,
     subtractWeeksFromDate,
     getDaysOfWeek,
-    getDayOfWeekNumber,
-    createDateAtTime,
 } from '@/lib/date-utils';
 
 export interface AddPlanItemParams {
@@ -97,7 +95,7 @@ export function useWeeklyPlan() {
             }
 
             try {
-                const newItem = await weeklyPlanService.createPlanItem({
+                await weeklyPlanService.createPlanItem({
                     weeklyPlanId: weekPlan.id,
                     workspaceId: currentWorkspace.id,
                     articleId: params.articleId,

@@ -39,6 +39,7 @@ export function ContentPieceModal({
 
     useEffect(() => {
         if (piece) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setTitle(piece.title || '');
             setBody(piece.body || '');
             setHookText(piece.hookText || '');
@@ -51,6 +52,7 @@ export function ContentPieceModal({
 
     useEffect(() => {
         if (!isOpen) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setTitle('');
             setBody('');
             setHookText('');

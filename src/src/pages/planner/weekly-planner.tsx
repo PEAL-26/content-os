@@ -25,7 +25,6 @@ export function WeeklyPlannerPage() {
     const {
         currentWeek,
         weekDays,
-        items,
         isLoading,
         error,
         stats,

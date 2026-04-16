@@ -1,4 +1,4 @@
-import { useAuthContext } from '@/context/auth-context';
+import { useAuthContext } from '@/context/use-auth-context';
 import { workspaceInitService } from '@/services/workspace-init.service';
 import { useWorkspaceStore } from '@/stores/workspace-store';
 import { useEffect, useRef } from 'react';
@@ -22,6 +22,7 @@ export function useWorkspace() {
             store.clearWorkspace();
             initializedWorkspacesRef.current.clear();
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- store is stable reference
     }, [user, authLoading]);
 
     useEffect(() => {

@@ -1,4 +1,5 @@
 import type { GenerateArticleParams } from './types';
+import { generateSlug } from '@/helpers/slug';
 
 export function buildArticlePrompt(params: GenerateArticleParams): string {
     const { topic, pillar, product, workspace } = params;
@@ -93,7 +94,7 @@ export function parseArticleResponse(text: string): {
     error?: string;
 } {
     try {
-        let jsonMatch = text.match(/\{[\s\S]*\}/);
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
         if (!jsonMatch) {
             return {
                 article: null,
@@ -136,15 +137,4 @@ export function calculateReadingTime(body: string): number {
     const wordsPerMinute = 200;
     const words = body.trim().split(/\s+/).filter(Boolean).length;
     return Math.max(1, Math.ceil(words / wordsPerMinute));
-}
-
-export function generateSlug(title: string): string {
-    return title
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-z0-9\s-]/g, '')
-        .trim()
-        .replace(/\s+/g, '-')
-        .substring(0, 100);
 }

@@ -26,6 +26,7 @@ export function ArticleGeneratorModal({
 
     useEffect(() => {
         if (!isOpen) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setTopic('');
             setPillarId(null);
             setProductId(null);

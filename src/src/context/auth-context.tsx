@@ -1,6 +1,6 @@
 import type { Session, User } from '@supabase/supabase-js';
-import { createContext, useContext, type ReactNode } from 'react';
-import { initializeAuth, useAuthStore } from '../stores/auth-store';
+import { createContext, type ReactNode } from 'react';
+import { useAuthStore } from '../stores/auth-store';
 
 interface AuthContextValue {
     user: User | null;
@@ -40,13 +40,3 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
     );
 }
-
-export function useAuthContext() {
-    const context = useContext(AuthContext);
-    if (context === undefined) {
-        throw new Error('useAuthContext must be used within an AuthProvider');
-    }
-    return context;
-}
-
-export { initializeAuth };

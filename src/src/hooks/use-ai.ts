@@ -1,4 +1,4 @@
-import { useAuthContext } from '@/context/auth-context';
+import { useAuthContext } from '@/context/use-auth-context';
 import {
     generateArticle,
     type AIGeneratedArticle,

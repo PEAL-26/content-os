@@ -1,6 +1,7 @@
 import { WorkspaceSelector } from '@/components/workspace/workspace-selector';
-import { useAuthContext } from '@/context/auth-context';
+import { useAuthContext } from '@/context/use-auth-context';
 import { useWorkspaceContentPieces } from '@/hooks/use-workspace-content-pieces';
+import { getUserDisplayName, getUserInitial } from '@/helpers/user';
 import { useLocation } from 'react-router-dom';
 import { Link } from 'react-router-dom';
 import {
@@ -101,9 +102,8 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
         setSidebarOpen((prev) => !prev);
     };
 
-    const userName =
-        user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Utilizador';
-    const userInitial = userName.charAt(0).toUpperCase();
+    const userName = getUserDisplayName(user);
+    const userInitial = getUserInitial(user);
 
     return (
         <div className="flex min-h-screen bg-gray-50">

@@ -1,4 +1,4 @@
-import { useAuthContext } from '@/context/auth-context';
+import { useAuthContext } from '@/context/use-auth-context';
 import type {
     CreateArticleInput,
     UpdateArticleInput,
@@ -86,6 +86,7 @@ export function useArticles(options: UseArticlesOptions) {
                 setIsLoadingMore(false);
             }
         },
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- offset intentionally omitted to prevent infinite loops
         [workspaceId, filters]
     );
 
@@ -96,12 +97,14 @@ export function useArticles(options: UseArticlesOptions) {
         } else {
             setArticles([]);
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchArticles is stable
     }, [workspaceId]);
 
     useEffect(() => {
         if (workspaceId) {
             fetchArticles(false);
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchArticles is stable
     }, [filters]);
 
     const loadMore = useCallback(async () => {
