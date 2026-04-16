@@ -1,6 +1,6 @@
 import { ProtectedWorkspaceRoute } from '@/components/auth/protected-workspace-route';
-import { DashboardLayout } from '@/layouts/dashboard-layout';
-import { SettingsLayout } from '@/layouts/settings-layout';
+import { DashboardLayout } from '@/components/layout/dashboard-layout';
+import { SettingsLayout } from '@/components/layout/settings-layout';
 import { ArticleEditor } from '@/pages/articles/article-editor';
 import { ArticleList } from '@/pages/articles/article-list';
 import { DashboardPage } from '@/pages/dashboard';

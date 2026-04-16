@@ -561,7 +561,7 @@ CSS simples e contagens numéricas.
 
 ## FASE 7 — Layout & Navegação Global
 
-### [] PROMPT 7.1 — Layout principal da aplicação
+### [x] PROMPT 7.1 — Layout principal da aplicação
 
 ```markdown
 Antes de implementar qualquer coisa, analisa o que já existe no projecto:
