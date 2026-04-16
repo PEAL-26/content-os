@@ -112,9 +112,18 @@ export function PublishConfirmModal({
                     <Button variant="outline" onClick={onClose}>
                         Cancelar
                     </Button>
-                    <Button onClick={handleConfirm} isLoading={isLoading}>
-                        <Check className="h-4 w-4" />
-                        Confirmar publicação
+                    <Button onClick={handleConfirm} disabled={isLoading}>
+                        {isLoading ? (
+                            <>
+                                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                                A publicar...
+                            </>
+                        ) : (
+                            <>
+                                <Check className="h-4 w-4" />
+                                Confirmar publicação
+                            </>
+                        )}
                     </Button>
                 </div>
             </div>

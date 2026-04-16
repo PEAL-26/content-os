@@ -256,7 +256,7 @@ export function DashboardPage() {
                                             {article.pillar && (
                                                 <div className="mt-1">
                                                     <PillarBadge
-                                                        pillar={article.pillar.pillar}
+                                                        pillar={article.pillar.pillar as import('@/types/pillar').ContentPillar}
                                                         size="sm"
                                                     />
                                                 </div>

@@ -239,6 +239,14 @@ export const CONTENT_PIECE_STATUS_COLORS: Record<
     PUBLISHED: { bg: 'bg-purple-100', text: 'text-purple-700' },
 };
 
+export type PlanItemStatus = 'PLANNED' | 'PUBLISHED' | 'SKIPPED';
+
+export const PLAN_ITEM_STATUS_LABELS: Record<PlanItemStatus, string> = {
+    PLANNED: 'Planeado',
+    PUBLISHED: 'Publicado',
+    SKIPPED: 'Ignorado',
+};
+
 export interface ContentPiece {
     id: string;
     articleId: string;

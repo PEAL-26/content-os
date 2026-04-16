@@ -2,8 +2,8 @@ import {
     createProductSchema,
     type CreateProductInput,
 } from '@/lib/schemas/product';
-import { productService } from '@/services/product.service';
 import type { Product } from '@/types/database';
+import { generateSlug } from '@/helpers/slug';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
@@ -50,7 +50,7 @@ export function ProductForm({
 
     useEffect(() => {
         if (name && !product && slug === '') {
-            const generatedSlug = productService.generateSlug(name);
+            const generatedSlug = generateSlug(name);
             setValue('slug', generatedSlug);
         }
     }, [name, product, slug, setValue]);
@@ -71,7 +71,7 @@ export function ProductForm({
 
     const regenerateSlug = () => {
         if (name) {
-            setValue('slug', productService.generateSlug(name));
+            setValue('slug', generateSlug(name));
         }
     };
 
