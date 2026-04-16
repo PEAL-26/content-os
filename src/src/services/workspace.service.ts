@@ -97,6 +97,7 @@ export const workspaceService = {
             contentLanguage: input.contentLanguage ?? 'pt',
             valueRatio: input.valueRatio ?? 70,
             productRatio: input.productRatio ?? 30,
+            createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
         });
 

@@ -1,7 +1,6 @@
 import { supabase } from '@/lib/supabase';
-import type { ContentPillar } from '@/types/database';
-import type { PillarConfig } from '@/types/pillar';
 import type { PlanItemStatus, SocialChannel } from '@/types/database';
+import type { PillarConfig } from '@/types/pillar';
 import { v4 as uuidv4 } from 'uuid';
 import { contentPieceService } from './content-piece.service';
 
@@ -122,14 +121,21 @@ export const weeklyPlanService = {
         weekStart: Date,
         weekEnd: Date
     ): Promise<WeeklyPlanData> {
+        // Normalizar datas para evitar inconsistências de timezone
+        const normalizeDate = (date: Date): string => {
+            return date.toISOString().split('T')[0] + 'T00:00:00.000Z';
+        };
+
         const { data, error } = await supabase
             .from('weekly_plans')
             .insert({
                 id: uuidv4(),
                 workspaceId,
-                weekStart: weekStart.toISOString(),
-                weekEnd: weekEnd.toISOString(),
+                weekStart: normalizeDate(weekStart),
+                weekEnd: weekEnd.toISOString().split('T')[0] + 'T23:59:59.999Z',
                 isActive: true,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
             })
             .select()
             .single();
@@ -146,11 +152,52 @@ export const weeklyPlanService = {
         weekStart: Date,
         weekEnd: Date
     ): Promise<WeeklyPlanData> {
+        // Normalizar datas para evitar inconsistências de timezone
+        const normalizeDate = (date: Date): string => {
+            return date.toISOString().split('T')[0] + 'T00:00:00.000Z';
+        };
+        const normalizedWeekStart = normalizeDate(weekStart);
+        const normalizedWeekEnd =
+            weekEnd.toISOString().split('T')[0] + 'T23:59:59.999Z';
+
+        // Tentar obter primeiro
         const existing = await this.getWeekPlan(workspaceId, weekStart);
         if (existing) {
             return existing;
         }
-        return this.createWeekPlan(workspaceId, weekStart, weekEnd);
+
+        // Criar novo plano - usar upsert para evitar race conditions
+        const now = new Date().toISOString();
+
+        const { data, error } = await supabase
+            .from('weekly_plans')
+            .upsert(
+                {
+                    id: uuidv4(),
+                    workspaceId,
+                    weekStart: normalizedWeekStart,
+                    weekEnd: normalizedWeekEnd,
+                    isActive: true,
+                    createdAt: now,
+                    updatedAt: now,
+                },
+                {
+                    onConflict: 'workspaceId,weekStart',
+                }
+            )
+            .select()
+            .single();
+
+        if (error) {
+            // Se o upsert falhar por conflito, tentar obter novamente
+            if (error.code === '23505') {
+                const retry = await this.getWeekPlan(workspaceId, weekStart);
+                if (retry) return retry;
+            }
+            throw new Error(`Erro ao criar plano semanal: ${error.message}`);
+        }
+
+        return data as WeeklyPlanData;
     },
 
     async getWeekPlanWithItems(
@@ -192,7 +239,11 @@ export const weeklyPlanService = {
         weekStart: Date,
         weekEnd: Date
     ): Promise<WeeklyPlanWithItems> {
-        const plan = await this.getOrCreateWeekPlan(workspaceId, weekStart, weekEnd);
+        const plan = await this.getOrCreateWeekPlan(
+            workspaceId,
+            weekStart,
+            weekEnd
+        );
 
         const { data: items, error } = await supabase
             .from('plan_items')
@@ -234,7 +285,9 @@ export const weeklyPlanService = {
             .single();
 
         if (error) {
-            throw new Error(`Erro ao atualizar plano semanal: ${error.message}`);
+            throw new Error(
+                `Erro ao atualizar plano semanal: ${error.message}`
+            );
         }
 
         return result as WeeklyPlanData;
@@ -312,7 +365,9 @@ export const weeklyPlanService = {
             .single();
 
         if (error) {
-            throw new Error(`Erro ao atualizar item do plano: ${error.message}`);
+            throw new Error(
+                `Erro ao atualizar item do plano: ${error.message}`
+            );
         }
 
         return result as PlanItemData;
@@ -348,7 +403,10 @@ export const weeklyPlanService = {
     },
 
     async deletePlanItem(id: string): Promise<void> {
-        const { error } = await supabase.from('plan_items').delete().eq('id', id);
+        const { error } = await supabase
+            .from('plan_items')
+            .delete()
+            .eq('id', id);
 
         if (error) {
             throw new Error(`Erro ao eliminar item do plano: ${error.message}`);
@@ -376,15 +434,15 @@ export const weeklyPlanService = {
             .order('sortOrder', { ascending: true });
 
         if (error) {
-            throw new Error(
-                `Erro ao buscar items por dia: ${error.message}`
-            );
+            throw new Error(`Erro ao buscar items por dia: ${error.message}`);
         }
 
         return (data || []) as PlanItemWithRelations[];
     },
 
-    async getPlanItemWithRelations(id: string): Promise<PlanItemWithRelations | null> {
+    async getPlanItemWithRelations(
+        id: string
+    ): Promise<PlanItemWithRelations | null> {
         const { data, error } = await supabase
             .from('plan_items')
             .select(
@@ -434,9 +492,7 @@ export const weeklyPlanService = {
             .single();
 
         if (error) {
-            throw new Error(
-                `Erro ao marcar como publicado: ${error.message}`
-            );
+            throw new Error(`Erro ao marcar como publicado: ${error.message}`);
         }
 
         if (item.contentPieceId) {
@@ -452,9 +508,7 @@ export const weeklyPlanService = {
         return result as PlanItemData;
     },
 
-    async removePlanItemAndRevertPiece(
-        planItemId: string
-    ): Promise<void> {
+    async removePlanItemAndRevertPiece(planItemId: string): Promise<void> {
         const item = await this.getPlanItemWithRelations(planItemId);
 
         if (item?.contentPieceId) {

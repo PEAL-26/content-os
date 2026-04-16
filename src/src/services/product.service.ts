@@ -73,6 +73,7 @@ export const productService = {
                 targetAudience: input.targetAudience || null,
                 problemSolved: input.problemSolved || null,
                 isActive: input.isActive ?? true,
+                createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
             })
             .select()

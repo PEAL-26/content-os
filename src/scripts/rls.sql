@@ -328,6 +328,182 @@ USING (
 );
 
 -- =============================================================================
+-- 11. ARTICLE_TAGS
+-- =============================================================================
+
+CREATE POLICY "article_tags_select"
+ON article_tags FOR SELECT
+USING ("articleId" IN (
+    SELECT id FROM articles WHERE "workspaceId"::uuid IN (SELECT my_workspace_ids())
+));
+
+CREATE POLICY "article_tags_insert"
+ON article_tags FOR INSERT
+WITH CHECK ("articleId" IN (
+    SELECT id FROM articles WHERE "workspaceId"::uuid IN (
+        SELECT "workspaceId"::uuid FROM workspace_members WHERE "userId"::uuid = auth.uid()
+    )
+));
+
+CREATE POLICY "article_tags_delete"
+ON article_tags FOR DELETE
+USING ("articleId" IN (
+    SELECT id FROM articles WHERE "workspaceId"::uuid IN (SELECT my_workspace_ids())
+));
+
+-- =============================================================================
+-- 12. CONTENT_PIECES
+-- =============================================================================
+
+CREATE POLICY "content_pieces_select"
+ON content_pieces FOR SELECT
+USING ("workspaceId"::uuid IN (SELECT my_workspace_ids()));
+
+CREATE POLICY "content_pieces_insert"
+ON content_pieces FOR INSERT
+WITH CHECK (
+  "workspaceId"::uuid IN (
+    SELECT "workspaceId"::uuid
+    FROM workspace_members
+    WHERE "userId"::uuid = auth.uid() AND role IN ('OWNER', 'EDITOR')
+  )
+);
+
+CREATE POLICY "content_pieces_update"
+ON content_pieces FOR UPDATE
+USING (
+  "workspaceId"::uuid IN (
+    SELECT "workspaceId"::uuid
+    FROM workspace_members
+    WHERE "userId"::uuid = auth.uid() AND role IN ('OWNER', 'EDITOR')
+  )
+);
+
+CREATE POLICY "content_pieces_delete"
+ON content_pieces FOR DELETE
+USING (
+  "workspaceId"::uuid IN (
+    SELECT "workspaceId"::uuid
+    FROM workspace_members
+    WHERE "userId"::uuid = auth.uid() AND role IN ('OWNER', 'EDITOR')
+  )
+);
+
+-- =============================================================================
+-- 13. VIDEO_SCRIPTS
+-- =============================================================================
+
+CREATE POLICY "video_scripts_select"
+ON video_scripts FOR SELECT
+USING ("workspaceId"::uuid IN (SELECT my_workspace_ids()));
+
+CREATE POLICY "video_scripts_insert"
+ON video_scripts FOR INSERT
+WITH CHECK (
+  "workspaceId"::uuid IN (
+    SELECT "workspaceId"::uuid
+    FROM workspace_members
+    WHERE "userId"::uuid = auth.uid() AND role IN ('OWNER', 'EDITOR')
+  )
+);
+
+CREATE POLICY "video_scripts_update"
+ON video_scripts FOR UPDATE
+USING (
+  "workspaceId"::uuid IN (
+    SELECT "workspaceId"::uuid
+    FROM workspace_members
+    WHERE "userId"::uuid = auth.uid() AND role IN ('OWNER', 'EDITOR')
+  )
+);
+
+CREATE POLICY "video_scripts_delete"
+ON video_scripts FOR DELETE
+USING (
+  "workspaceId"::uuid IN (
+    SELECT "workspaceId"::uuid
+    FROM workspace_members
+    WHERE "userId"::uuid = auth.uid() AND role IN ('OWNER', 'EDITOR')
+  )
+);
+
+-- =============================================================================
+-- 14. WEEKLY_PLANS
+-- =============================================================================
+
+CREATE POLICY "weekly_plans_select"
+ON weekly_plans FOR SELECT
+USING ("workspaceId"::uuid IN (SELECT my_workspace_ids()));
+
+CREATE POLICY "weekly_plans_insert"
+ON weekly_plans FOR INSERT
+WITH CHECK (
+  "workspaceId"::uuid IN (
+    SELECT "workspaceId"::uuid
+    FROM workspace_members
+    WHERE "userId"::uuid = auth.uid() AND role IN ('OWNER', 'EDITOR')
+  )
+);
+
+CREATE POLICY "weekly_plans_update"
+ON weekly_plans FOR UPDATE
+USING (
+  "workspaceId"::uuid IN (
+    SELECT "workspaceId"::uuid
+    FROM workspace_members
+    WHERE "userId"::uuid = auth.uid() AND role IN ('OWNER', 'EDITOR')
+  )
+);
+
+CREATE POLICY "weekly_plans_delete"
+ON weekly_plans FOR DELETE
+USING (
+  "workspaceId"::uuid IN (
+    SELECT "workspaceId"::uuid
+    FROM workspace_members
+    WHERE "userId"::uuid = auth.uid() AND role IN ('OWNER', 'EDITOR')
+  )
+);
+
+-- =============================================================================
+-- 15. PLAN_ITEMS
+-- =============================================================================
+
+CREATE POLICY "plan_items_select"
+ON plan_items FOR SELECT
+USING ("workspaceId"::uuid IN (SELECT my_workspace_ids()));
+
+CREATE POLICY "plan_items_insert"
+ON plan_items FOR INSERT
+WITH CHECK (
+  "workspaceId"::uuid IN (
+    SELECT "workspaceId"::uuid
+    FROM workspace_members
+    WHERE "userId"::uuid = auth.uid() AND role IN ('OWNER', 'EDITOR')
+  )
+);
+
+CREATE POLICY "plan_items_update"
+ON plan_items FOR UPDATE
+USING (
+  "workspaceId"::uuid IN (
+    SELECT "workspaceId"::uuid
+    FROM workspace_members
+    WHERE "userId"::uuid = auth.uid() AND role IN ('OWNER', 'EDITOR')
+  )
+);
+
+CREATE POLICY "plan_items_delete"
+ON plan_items FOR DELETE
+USING (
+  "workspaceId"::uuid IN (
+    SELECT "workspaceId"::uuid
+    FROM workspace_members
+    WHERE "userId"::uuid = auth.uid() AND role IN ('OWNER', 'EDITOR')
+  )
+);
+
+-- =============================================================================
 -- FINAL CHECK
 -- =============================================================================
 

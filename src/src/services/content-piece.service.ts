@@ -36,6 +36,7 @@ export interface UpdateContentPieceInput {
     slideCount?: number | null;
     channelId?: string | null;
     pillar?: ContentPillar | null;
+    publishedAt?: string
 }
 
 export const contentPieceService = {
@@ -198,6 +199,7 @@ export const contentPieceService = {
         if (input.channelId !== undefined)
             updateData.channelId = input.channelId;
         if (input.pillar !== undefined) updateData.pillar = input.pillar;
+        if (input.publishedAt !== undefined) updateData.publishedAt = input.publishedAt;
 
         const { data, error } = await supabase
             .from('content_pieces')

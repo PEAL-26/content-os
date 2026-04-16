@@ -289,6 +289,8 @@ export const articleService = {
                 status: 'DRAFT',
                 aiGenerated: false,
                 createdBy: original.createdBy,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
             })
             .select()
             .single();
