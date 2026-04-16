@@ -3,27 +3,18 @@ import { DashboardLayout } from '@/layouts/dashboard-layout';
 import { SettingsLayout } from '@/layouts/settings-layout';
 import { ArticleEditor } from '@/pages/articles/article-editor';
 import { ArticleList } from '@/pages/articles/article-list';
+import { DashboardPage } from '@/pages/dashboard';
 import { LoginPage } from '@/pages/auth/login';
 import { RegisterPage } from '@/pages/auth/register';
 import { ContentPiecesPage } from '@/pages/content/content-pieces';
 import { VideoScriptsPage } from '@/pages/content/video-scripts';
+import { WeeklyPlannerPage } from '@/pages/planner/weekly-planner';
 import { CreateWorkspacePage } from '@/pages/onboarding/create-workspace';
 import { ChannelsPage } from '@/pages/settings/channels';
 import { PillarsPage } from '@/pages/settings/pillars';
 import { ProductsPage } from '@/pages/settings/products';
 import { NuqsAdapter } from 'nuqs/adapters/react-router/v7';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-
-function DashboardHome() {
-    return (
-        <div>
-            <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-            <p className="mt-2 text-gray-600">
-                Bem-vindo ao ContentOS! Selecione uma opção no menu lateral.
-            </p>
-        </div>
-    );
-}
 
 function PlaceholderPage({ title }: { title: string }) {
     return (
@@ -62,7 +53,7 @@ export function App() {
                         element={
                             <ProtectedWorkspaceRoute>
                                 <DashboardLayout>
-                                    <DashboardHome />
+                                    <DashboardPage />
                                 </DashboardLayout>
                             </ProtectedWorkspaceRoute>
                         }
@@ -117,7 +108,7 @@ export function App() {
                         element={
                             <ProtectedWorkspaceRoute>
                                 <DashboardLayout>
-                                    <PlaceholderPage title="Planeamento" />
+                                    <WeeklyPlannerPage />
                                 </DashboardLayout>
                             </ProtectedWorkspaceRoute>
                         }

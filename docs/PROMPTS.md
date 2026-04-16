@@ -444,7 +444,7 @@ exceder a duração seleccionada.
 
 ## FASE 5 — Planeador Semanal
 
-### [] PROMPT 5.1 — Estrutura do planeador semanal
+### [x] PROMPT 5.1 — Estrutura do planeador semanal
 
 ```markdown
 Antes de implementar qualquer coisa, analisa o que já existe no projecto:
@@ -482,7 +482,7 @@ será adicionado numa iteração posterior se necessário.
 
 ---
 
-### [] PROMPT 5.2 — Adicionar e gerir items no planeador
+### [x] PROMPT 5.2 — Adicionar e gerir items no planeador
 
 ```markdown
 Antes de implementar qualquer coisa, analisa o que já existe no projecto:
@@ -521,7 +521,7 @@ Ao remover um item do planeador, o `ContentPiece` volta para status
 
 ## FASE 6 — Dashboard
 
-### [] PROMPT 6.1 — Dashboard principal
+### [x] PROMPT 6.1 — Dashboard principal
 
 ```markdown
 Antes de implementar qualquer coisa, analisa o que já existe no projecto:

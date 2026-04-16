@@ -71,6 +71,7 @@ export const contentPieceService = {
             channelId?: string;
             status?: string;
             articleId?: string;
+            pillar?: string;
         }
     ): Promise<ContentPieceWithRelations[]> {
         let query = supabase
@@ -97,6 +98,9 @@ export const contentPieceService = {
         }
         if (filters?.articleId) {
             query = query.eq('articleId', filters.articleId);
+        }
+        if (filters?.pillar) {
+            query = query.eq('pillar', filters.pillar);
         }
 
         const { data, error } = await query;
