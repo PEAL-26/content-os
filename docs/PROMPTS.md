@@ -630,6 +630,399 @@ o seguinte:
 
 ---
 
+## FASE 8 — Listagem de Workspaces
+
+```markdown
+Antes de implementar qualquer coisa, analisa o que já existe no projecto:
+
+1. **Stores e auth** — abre `src/stores/authStore.ts` e `src/stores/workspaceStore.ts`
+   e confirma o que cada um exporta: o `authStore` tem o `user.id` do Supabase
+   disponível? O `workspaceStore` tem `currentWorkspace` e `setWorkspace()`? Verifica
+   se existe algum método para listar todos os workspaces do utilizador ou se apenas
+   carrega um de cada vez.
+
+2. **Hook useWorkspace** — abre `src/hooks/useWorkspace.ts` e verifica quais os
+   métodos já implementados. Existe `getWorkspaces()` (plural) ou apenas
+   `getWorkspace()` (singular)? Se só existir singular, será necessário expandir.
+
+3. **Routing** — abre `src/App.tsx` e confirma o fluxo actual pós-login: o utilizador
+   é redirecionado directamente para `/dashboard` ou passa por algum ecrã de selecção
+   de workspace? Existe rota `/workspaces` definida?
+
+4. **Onboarding** — verifica se a página `src/pages/onboarding/CreateWorkspace.tsx`
+   já existe. Se existir, analisa o formulário de criação para não duplicar lógica.
+
+5. **Schema** — confirma no schema Prisma os campos do modelo `Workspace` (name, slug,
+   description, logoUrl, sector, website) e `WorkspaceMember` (role: OWNER/EDITOR/VIEWER,
+   joinedAt). Confirma que a relação entre os dois permite listar workspaces por `userId`.
+
+Só depois de teres esse contexto completo, implementa o seguinte:
+
+Implementa a listagem e selecção de workspaces do utilizador. Cria:
+
+- `src/pages/Workspaces/WorkspaceList.tsx` — página acessível em `/workspaces` que
+  mostra todos os workspaces onde o utilizador autenticado é membro. Cada workspace
+  é apresentado em formato de card com: logo (inicial do nome se não houver imagem),
+  nome, sector, número de membros, o role do utilizador nesse workspace (badge:
+  OWNER=roxo, EDITOR=azul, VIEWER=cinza), e data de adesão. O workspace actualmente
+  activo (o que está no `workspaceStore`) deve ter destaque visual claro (borda colorida
+  ou badge "Activo"). Botão "Entrar" em cada card — ao clicar, define esse workspace
+  como activo no `workspaceStore` e redireciona para `/dashboard`. Botão
+  "Criar novo workspace" no topo da página
+
+- `src/hooks/useWorkspace.ts` (expandir se necessário) — adicionar o método
+  `getMyWorkspaces(): Promise<WorkspaceWithRole[]>` que faz join entre `workspaces`
+  e `workspace_members` filtrado pelo `userId` autenticado. O tipo `WorkspaceWithRole`
+  deve incluir todos os campos do workspace mais o `role` e `joinedAt` do membro
+
+- `src/components/workspace/WorkspaceCard.tsx` — card reutilizável que recebe um
+  `WorkspaceWithRole` e renderiza a UI descrita acima. Aceita prop `isActive: boolean`
+  para o estado de destaque. Aceita prop `onSelect: () => void`
+
+- Fluxo pós-login actualizado: após autenticação bem-sucedida, verificar quantos
+  workspaces o utilizador tem:
+  - 0 workspaces → redirecionar para `/onboarding/workspace` (criar o primeiro)
+  - 1 workspace → carregar automaticamente e ir para `/dashboard` (sem mostrar lista)
+  - 2+ workspaces → redirecionar para `/workspaces` para o utilizador escolher
+
+O `WorkspaceSelector` na sidebar deve abrir esta página ou um dropdown com a mesma
+lista quando o utilizador tem múltiplos workspaces. Sem page reload ao trocar de
+workspace — actualizar o store e o router reactivamente.
+```
+
+---
+
+## FASE 9 — Configurar Workspace
+
+```markdown
+Antes de implementar qualquer coisa, analisa o que já existe no projecto:
+
+1. **Página de settings** — verifica se existe uma estrutura de settings em
+   `src/pages/Settings/` e como está organizada a navegação entre as sub-páginas
+   de settings (tabs, sidebar lateral, ou rotas separadas). Identifica o padrão
+   de layout já usado para não criar um layout diferente e inconsistente.
+
+2. **workspaceStore e hook** — confirma os campos que o `currentWorkspace` já
+   expõe e se o método `updateWorkspace()` já existe em `useWorkspace.ts`. Se
+   existir, analisa os campos que actualiza actualmente.
+
+3. **Permissões** — verifica como o role do utilizador actual está a ser acedido.
+   Existe algum helper ou hook que expõe `currentUserRole` ou `isOwner()`? As
+   páginas de settings existentes têm alguma protecção por role?
+
+4. **Formulários** — abre qualquer formulário já implementado (ex: `ProductForm.tsx`)
+   e confirma o padrão de validação, feedback de erro, e auto-save ou save manual
+   que o projecto já usa. O novo formulário deve seguir exactamente o mesmo padrão.
+
+5. **Schema** — confirma todos os campos editáveis do modelo `Workspace`:
+   name, slug, description, logoUrl, sector, website, voiceTone, targetAudience,
+   contentLanguage, valueProposition, valueRatio, productRatio, postsPerWeek,
+   articlesPerWeek. Anota quais são obrigatórios e quais opcionais.
+
+Só depois de teres esse contexto completo, implementa o seguinte:
+
+Implementa a página de configuração completa do workspace activo. Cria:
+
+- `src/pages/Settings/WorkspaceSettings.tsx` — página organizada em secções
+  claras com separadores visuais (não tabs — tudo numa página com scroll):
+
+  **Secção "Identidade"**: nome do workspace (obrigatório), slug (gerado do nome,
+  editável, com aviso de que alterar o slug pode afectar integrações), descrição
+  curta, sector, website. O slug deve mostrar preview em tempo real: "URL: /[slug]"
+
+  **Secção "Voz & Audiência"**: tom de voz (`voiceTone`) com textarea e placeholder
+  com exemplo ("Directo, técnico mas acessível. Sem buzzwords."), público-alvo
+  (`targetAudience`) com placeholder ("PMEs que querem automatizar processos"),
+  proposta de valor (`valueProposition`) com placeholder e contador de caracteres,
+  idioma do conteúdo (`contentLanguage`) como select (Português / Inglês / Espanhol
+  / Francês). Estes campos alimentam directamente os prompts de IA — mostrar
+  uma nota informativa a explicar isso
+
+  **Secção "Estratégia de Conteúdo"**: slider de rácio valor/produto (70/30 por
+  defeito, range 50/50 a 90/10) com labels "Valor [X]% / Produto [Y]%" que se
+  actualizam em tempo real ao mover o slider; campo numérico `postsPerWeek`
+  (mínimo 1, máximo 7); campo numérico `articlesPerWeek` (mínimo 0, máximo 7).
+  Mostrar um resumo visual abaixo: "Plano: X posts/semana · Y artigos/semana"
+
+  **Secção "Zona de Perigo"** (só visível para OWNER): botão "Transferir
+  propriedade" (abre modal — implementação básica: só mostrar modal informativo
+  por agora, sem lógica completa); botão "Apagar workspace" com confirmação
+  dupla (digitar o nome do workspace para confirmar)
+
+- `src/hooks/useWorkspace.ts` (expandir) — adicionar ou actualizar o método
+  `updateWorkspace(workspaceId, data)` que aceita Partial dos campos editáveis
+  e actualiza tanto na BD como no `workspaceStore` reactivamente
+
+- Botão "Guardar alterações" fixo no fundo da página (sticky bottom bar) com
+  indicador de campos modificados ("3 alterações por guardar"). Ao guardar com
+  sucesso, mostrar toast de confirmação. Ao sair com alterações não guardadas,
+  mostrar aviso de confirmação ("Tens alterações não guardadas. Sair?")
+
+Apenas utilizadores com role OWNER podem editar. EDITOR e VIEWER vêem os campos
+mas em modo somente leitura, com um aviso "Só o proprietário pode editar as
+configurações do workspace".
+```
+
+---
+
+## FASE 10 — Meu Perfil
+
+```markdown
+Antes de implementar qualquer coisa, analisa o que já existe no projecto:
+
+1. **Auth e utilizador** — abre `src/stores/authStore.ts` e verifica exactamente
+   o que o objecto `user` contém. O Supabase Auth expõe `user.email`,
+   `user.user_metadata` (onde ficam nome, avatar, etc.) e `user.id`. Existe
+   algum campo de `displayName` ou `fullName` já a ser usado em algum componente?
+   O avatar já está a ser mostrado algures na sidebar ou header?
+
+2. **Supabase Auth API** — confirma se está a ser usado o método
+   `supabase.auth.updateUser()` em algum sítio no projecto. Este método permite
+   actualizar `email`, `password`, e `data` (user_metadata). Anota como a
+   instância do cliente Supabase está exportada em `src/lib/supabase.ts`.
+
+3. **Routing e navegação** — verifica se existe rota `/profile` ou `/settings/profile`
+   definida em `src/App.tsx`. Verifica como o utilizador acede actualmente ao seu
+   perfil — existe link na sidebar ou no avatar do header?
+
+4. **Padrão de formulários** — abre um formulário já implementado no projecto
+   (ex: `WorkspaceSettings.tsx` se já existir, ou `ProductForm.tsx`) e confirma
+   o padrão de validação, feedback, e save que o projecto usa. Seguir exactamente
+   o mesmo padrão.
+
+5. **Schema** — neste caso não há modelo separado de perfil — os dados do utilizador
+   ficam no `auth.users` do Supabase via `user_metadata`. Confirma que o `authStore`
+   já actualiza o estado local quando `supabase.auth.updateUser()` é chamado via
+   `onAuthStateChange`.
+
+Só depois de teres esse contexto completo, implementa o seguinte:
+
+Implementa a página de perfil do utilizador autenticado. Cria:
+
+- `src/pages/Profile/MyProfile.tsx` — página acessível em `/profile` com três
+  secções:
+
+  **Secção "Informação Pessoal"**: avatar circular com inicial do nome (se não
+  houver foto) e botão de upload de foto de perfil (guardar base64 ou URL no
+  `user_metadata.avatar_url` via `supabase.auth.updateUser()`); campo nome
+  completo (`user_metadata.full_name`); campo email (sempre visível mas só
+  editável com confirmação — ver abaixo); campo de bio curta opcional
+  (`user_metadata.bio`, máx 160 caracteres com contador)
+
+  **Secção "Segurança"**: campo "Password actual" + campo "Nova password" +
+  campo "Confirmar nova password". Validação: password nova mínimo 8 caracteres,
+  deve conter letra e número. Botão "Actualizar password" separado do botão
+  principal. Mostrar data do último login: "Último acesso: [data formatada]"
+
+  **Secção "Os meus workspaces"**: lista read-only dos workspaces onde o
+  utilizador é membro (reutilizar `WorkspaceCard` em modo compacto se já estiver
+  implementado), com o role em cada um e link "Gerir" para `/workspaces`. Esta
+  secção é informativa — sem acções aqui
+
+- `src/hooks/useProfile.ts` — hook com:
+  - `updateProfile({ fullName, bio, avatarUrl })` — chama `supabase.auth.updateUser()`
+    com os campos em `data` e actualiza o `authStore` com o utilizador devolvido
+  - `updatePassword({ currentPassword, newPassword })` — valida re-autenticação
+    via `supabase.auth.signInWithPassword()` antes de chamar `updateUser({ password })`
+  - `updateEmail(newEmail)` — chama `updateUser({ email })` e mostra aviso:
+    "Será enviado email de confirmação para [novo email]. O email só muda após
+    confirmação"
+  - `isUpdating: boolean` — estado de loading durante qualquer operação
+
+- `src/components/profile/AvatarUpload.tsx` — componente de upload de avatar:
+  círculo clicável que abre file picker (aceita jpg/png/webp, máx 2MB), faz
+  preview local antes de guardar, e ao confirmar faz upload para Supabase Storage
+  no bucket `avatars/[userId]`. Se Supabase Storage não estiver configurado,
+  usar a inicial do nome como fallback permanente sem bloquear
+
+Alterações de nome e bio têm auto-save com debounce de 2 segundos. Alterações
+de email e password requerem acção explícita (botão separado). Feedback claro em
+caso de erro: "Password actual incorrecta", "Email já em uso", etc., em português.
+```
+
+---
+
+## FASE 11 — Listagem de Membros do Workspace
+
+```markdown
+Antes de implementar qualquer coisa, analisa o que já existe no projecto:
+
+1. **Role do utilizador actual** — verifica como o role do utilizador autenticado
+   no workspace activo está a ser acedido. Existe helper `isOwner()` ou
+   `currentUserRole` em algum hook ou store? Se não existir, será necessário criá-lo
+   neste prompt. Confirma se o `workspaceStore` tem o `currentWorkspace` com os
+   membros incluídos ou se é necessária uma query separada.
+
+2. **Modelos de membros** — confirma no schema Prisma os campos exactos de
+   `WorkspaceMember`: `id`, `workspaceId`, `userId` (UUID do Supabase auth),
+   `role` (enum: OWNER/EDITOR/VIEWER), `joinedAt`. Verifica como ligar o `userId`
+   ao nome e email do utilizador — no Supabase, `auth.users` não é acessível
+   directamente via Prisma; confirma se existe alguma tabela `profiles` ou se
+   os dados do utilizador são lidos via `supabase.auth.admin` ou via
+   `user_metadata`.
+
+3. **Convites existentes** — verifica se existe alguma tabela de convites no schema
+   Prisma ou no Supabase (ex: tabela `invitations` ou uso do sistema de
+   `auth.users` com magic link). Se não existir, será necessário definir a
+   estratégia neste prompt.
+
+4. **Componentes de UI** — lista os componentes de tabela, modal, dropdown e badge
+   já existentes em `src/components/ui/`. O padrão de tabela ou lista já usado
+   noutras páginas deve ser reutilizado aqui.
+
+5. **RLS** — confirma que as políticas RLS para `workspace_members` já foram
+   aplicadas (ficheiro `rls.sql`): OWNER pode inserir/apagar membros, todos os
+   membros podem fazer SELECT.
+
+Só depois de teres esse contexto completo, implementa o seguinte:
+
+Implementa a listagem de membros do workspace activo. Cria:
+
+- `src/pages/Settings/Members.tsx` — página acessível em `/settings/members` com:
+
+  **Header da página**: título "Membros", contador "X membros", e botão
+  "Convidar membro" (só visível para OWNER)
+
+  **Tabela de membros** com colunas: Avatar + Nome + Email, Role (badge com cor:
+  OWNER=roxo, EDITOR=azul, VIEWER=cinza), Data de adesão (formatada: "há 3 dias",
+  "há 2 meses"), e coluna de Acções (dropdown com opções — detalhado no Prompt W.5).
+  A linha do utilizador autenticado deve ter indicação "(Você)" ao lado do nome.
+  O OWNER não pode ser removido nem ter o role alterado (as suas acções ficam
+  desabilitadas)
+
+  **Estado vazio**: se só houver um membro (o próprio OWNER), mostrar CTA:
+  "A tua equipa está vazia. Convida alguém para colaborar."
+
+  **Banner de convite pendente**: se existirem convites enviados ainda não aceites,
+  mostrar secção colapsável "Convites pendentes (X)" com: email convidado, role
+  destinado, data de envio, e botão "Revogar convite"
+
+- `src/hooks/useMembers.ts` — hook com:
+  - `getMembers(workspaceId)` — lista todos os `WorkspaceMember` do workspace.
+    Para obter nome e email de cada membro, usar `supabase.from('workspace_members')`
+    com join ou fazer query separada ao `authStore` para o utilizador actual e
+    ao Supabase para os restantes. Documentar claramente a estratégia escolhida
+  - `currentUserRole` — role do utilizador autenticado neste workspace (derivado
+    da lista de membros)
+  - `isOwner` — boolean derivado de `currentUserRole === 'OWNER'`
+  - Estado `isLoading` e `error`
+
+- `src/components/members/MemberRow.tsx` — linha da tabela de membros reutilizável
+  com: avatar (inicial do nome), nome, email, badge de role, data formatada, e
+  dropdown de acções. Aceita prop `isCurrentUser: boolean` e `canManage: boolean`
+  (só true quando o utilizador actual é OWNER e o membro em questão não é OWNER)
+
+- `src/components/members/InviteMemberModal.tsx` — modal de convite com: campo
+  de email, selector de role (EDITOR ou VIEWER — nunca OWNER via convite), e botão
+  "Enviar convite". Estratégia de convite: usar Supabase Auth `inviteUserByEmail()`
+  se disponível no plano, ou criar registo na tabela `invitations` com token e
+  enviar email via Supabase Edge Function. Documenta a escolha no código com comentário
+
+Apenas OWNER vê o botão "Convidar" e o dropdown de acções nos outros membros.
+EDITOR e VIEWER vêem a lista mas sem acções. A contagem de membros no header
+actualiza reactivamente após qualquer operação.
+```
+
+---
+
+## FASE 12 — Operações sobre Membros
+
+```markdown
+Antes de implementar qualquer coisa, analisa o que já existe no projecto:
+
+1. **Página de membros** — confirma que `src/pages/Settings/Members.tsx` e
+   `src/hooks/useMembers.ts` já estão implementados. Verifica exactamente quais
+   os métodos que `useMembers.ts` já expõe e quais estão em falta. Verifica se
+   o `MemberRow.tsx` já tem o dropdown de acções estruturado mas vazio, ou se
+   ainda não existe.
+
+2. **Permissões implementadas** — confirma como `isOwner` e `currentUserRole`
+   estão a ser derivados. Existe algum guard de permissão reutilizável no projecto
+   (ex: componente `<RequireRole role="OWNER">`) ou a verificação é feita inline
+   em cada componente? Seguir o padrão já estabelecido.
+
+3. **Modais existentes** — lista os modais já implementados no projecto e como
+   são controlados (estado local com `useState`, store global, ou biblioteca).
+   O novo modal de confirmação deve seguir exactamente o mesmo padrão.
+
+4. **RLS e operações** — relê as políticas RLS de `workspace_members` no ficheiro
+   `rls.sql`: confirma quais as operações permitidas por role para UPDATE
+   (alterar role) e DELETE (remover membro). Confirma que o cliente Supabase está
+   configurado com a `anon key` e que o RLS vai validar automaticamente as
+   permissões — não é necessário validar manualmente no frontend, mas deve-se
+   mostrar feedback claro quando o RLS rejeita.
+
+5. **Utilizador actual** — confirma como o `userId` do utilizador autenticado está
+   disponível (via `authStore.user.id`). É necessário para impedir que o utilizador
+   execute acções sobre si próprio.
+
+Só depois de teres esse contexto completo, implementa o seguinte:
+
+Implementa todas as operações de gestão de membros. Expande `useMembers.ts` e
+cria os componentes necessários para as seguintes acções:
+
+**Operação 1 — Alterar role do membro**
+
+- Em `useMembers.ts`, adicionar `updateMemberRole(memberId, newRole: 'EDITOR' | 'VIEWER')`.
+  O role OWNER não pode ser atribuído via esta operação — apenas via transferência
+  de propriedade (Prompt W.2)
+- No dropdown de acções do `MemberRow`, opção "Alterar role" abre um sub-menu inline
+  (não modal) com as opções disponíveis. A opção actual aparece com check e desabilitada.
+  Ao seleccionar nova opção, mostrar confirmação inline: "Alterar role de [Nome] para
+  Editor?" com botões Confirmar/Cancelar. Após confirmar, actualizar a linha
+  sem reload da página
+
+**Operação 2 — Remover membro**
+
+- Em `useMembers.ts`, adicionar `removeMember(memberId)`. Após remoção, se o membro
+  removido for o utilizador autenticado (saída voluntária), redirecionar para
+  `/workspaces`. Se for outro membro, actualizar a lista reactivamente
+- No dropdown de acções, opção "Remover do workspace" (em vermelho). Ao clicar, abre
+  `src/components/members/RemoveMemberModal.tsx` — modal de confirmação com: nome e
+  avatar do membro, aviso "Esta acção não pode ser desfeita. [Nome] perderá acesso
+  imediato a todos os conteúdos deste workspace.", e botões "Cancelar" e "Remover"
+  (botão vermelho). Durante a operação, o botão mostra spinner e fica desabilitado
+
+**Operação 3 — Transferir propriedade**
+
+- Em `useMembers.ts`, adicionar `transferOwnership(targetMemberId)`. Esta operação
+  deve: alterar o role do utilizador actual para EDITOR, alterar o role do membro
+  alvo para OWNER, e actualizar o `workspaceStore` com o novo estado
+- No dropdown de acções, opção "Transferir propriedade" (só visível para OWNER, sobre
+  membros com role EDITOR). Abre `src/components/members/TransferOwnershipModal.tsx`
+  com: aviso grave "Vais perder a propriedade deste workspace. Passarás a ser Editor.",
+  nome do novo proprietário em destaque, campo de confirmação (digitar "CONFIRMAR"),
+  e botões "Cancelar" e "Transferir propriedade" (só activo após digitar a confirmação)
+
+**Operação 4 — Revogar convite pendente**
+
+- Em `useMembers.ts`, adicionar `revokeInvite(inviteId)`. Remove o registo de
+  convite da BD (tabela `invitations` ou equivalente definido no Prompt W.4).
+  Actualizar a secção "Convites pendentes" reactivamente após revogar
+- Sem modal de confirmação para esta acção — apenas botão com loading state
+
+**Operação 5 — Sair do workspace (para não-OWNER)**
+
+- Em `useMembers.ts`, adicionar `leaveWorkspace()` — remove o próprio utilizador
+  dos membros do workspace activo e limpa o `workspaceStore`
+- Esta opção aparece na página de membros como botão "Sair do workspace" no canto
+  superior direito, mas **apenas** para utilizadores com role EDITOR ou VIEWER
+  (nunca para OWNER — OWNER tem de transferir a propriedade primeiro)
+- Confirmar com modal simples: "Tens a certeza que queres sair de [nome do workspace]?
+  Perderás acesso imediato a todos os conteúdos."
+
+**Estado de loading e erros transversal a todas as operações:**
+
+Criar `src/components/members/MemberActionsDropdown.tsx` que agrega todas as
+acções acima num único dropdown coerente. O dropdown deve: desabilitar todas as
+acções durante qualquer operação em curso (`isLoading`), mostrar erro inline no
+dropdown se a operação falhar (ex: "Sem permissão para esta acção"), e fechar
+automaticamente após operação concluída com sucesso. Nunca mostrar acções que
+o utilizador não tem permissão para executar — omitir completamente em vez de
+mostrar desabilitadas (excepto a opção do role actual, que aparece com check).
+```
+
+
 ## MELHORIA 1 — Modelo configurável via variável de ambiente
 
 Actualiza a configuração de IA para que o modelo da Anthropic seja definido
