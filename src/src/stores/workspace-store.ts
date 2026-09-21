@@ -32,6 +32,13 @@ interface WorkspaceState {
     clearError: () => void;
 }
 
+const ACTIVE_WORKSPACE_KEY = 'contentos-active-workspace';
+
+function getPersistedWorkspaceId(): string | null {
+    if (typeof window === 'undefined') return null;
+    return window.localStorage.getItem(ACTIVE_WORKSPACE_KEY);
+}
+
 export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     currentWorkspace: null,
     workspaces: [],
@@ -49,9 +56,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         try {
             const workspaces =
                 await workspaceService.getWorkspacesByUser(userId);
+
+            const persistedId = getPersistedWorkspaceId();
+            const persistedWorkspace = persistedId
+                ? (workspaces.find((w) => w.id === persistedId) ?? null)
+                : null;
+
             set({
                 workspaces,
-                currentWorkspace: workspaces[0] ?? null,
+                currentWorkspace: persistedWorkspace,
                 isLoading: false,
                 hasFetched: true,
             });
@@ -65,6 +78,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     },
 
     setWorkspace: (workspace: Workspace) => {
+        if (typeof window !== 'undefined') {
+            window.localStorage.setItem(ACTIVE_WORKSPACE_KEY, workspace.id);
+        }
         set({ currentWorkspace: workspace });
     },
 
@@ -100,6 +116,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
             const workspacesWithRole: WorkspaceWithRole = {
                 ...workspace,
                 memberRole: 'OWNER',
+                joinedAt: new Date().toISOString(),
+                memberCount: 1,
             };
             set({
                 workspaces: [...get().workspaces, workspacesWithRole],

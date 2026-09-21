@@ -45,6 +45,7 @@ export const workspaceService = {
             .select(
                 `
                 role,
+                joinedAt,
                 workspace:workspaces(*)
             `
             )
@@ -54,9 +55,43 @@ export const workspaceService = {
             throw new Error(`Erro ao buscar workspaces: ${error.message}`);
         }
 
-        return (data ?? []).map((item) => ({
+        const memberships = data ?? [];
+
+        const workspaces: WorkspaceWithRole[] = memberships.map((item) => ({
             ...(item.workspace as unknown as Workspace),
             memberRole: item.role,
+            joinedAt: item.joinedAt,
+            memberCount: 1,
+        }));
+
+        if (workspaces.length === 0) {
+            return workspaces;
+        }
+
+        const workspaceIds = workspaces.map((w) => w.id);
+
+        const { data: memberRows, error: memberError } = await supabase
+            .from('workspace_members')
+            .select('workspaceId')
+            .in('workspaceId', workspaceIds);
+
+        if (memberError) {
+            throw new Error(
+                `Erro ao contar membros do workspace: ${memberError.message}`
+            );
+        }
+
+        const counts = new Map<string, number>();
+        for (const row of memberRows ?? []) {
+            counts.set(
+                row.workspaceId,
+                (counts.get(row.workspaceId) ?? 0) + 1
+            );
+        }
+
+        return workspaces.map((w) => ({
+            ...w,
+            memberCount: counts.get(w.id) ?? 1,
         }));
     },
 

@@ -28,6 +28,8 @@ export interface WorkspaceMember {
 
 export interface WorkspaceWithRole extends Workspace {
     memberRole?: 'OWNER' | 'EDITOR' | 'VIEWER';
+    joinedAt?: string;
+    memberCount?: number;
 }
 
 export interface Product {

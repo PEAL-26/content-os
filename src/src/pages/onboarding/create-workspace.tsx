@@ -7,21 +7,13 @@ import {
     type CreateWorkspaceFormData,
 } from '@/lib/schemas/workspace';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 
 export function CreateWorkspacePage() {
     const navigate = useNavigate();
     const { user } = useAuthContext();
-    const { createWorkspace, isLoading, error, currentWorkspace } =
-        useWorkspace();
-
-    useEffect(() => {
-        if (currentWorkspace) {
-            navigate('/dashboard', { replace: true });
-        }
-    }, [currentWorkspace, navigate]);
+    const { createWorkspace, isLoading, error } = useWorkspace();
 
     const {
         register,

@@ -10,7 +10,6 @@ import type { AIProvider } from '@/services/ai-provider.service';
 export function AISettingsPage() {
     const {
         providers,
-        defaultProvider,
         defaultProviderId,
         defaultModelCode,
         apiKeys,

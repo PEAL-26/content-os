@@ -1,8 +1,11 @@
 import { useWorkspace } from '@/hooks/use-workspace';
+import { Cog, Plus } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 export function WorkspaceSelector() {
     const { currentWorkspace, workspaces, setWorkspace } = useWorkspace();
+    const navigate = useNavigate();
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -110,6 +113,30 @@ export function WorkspaceSelector() {
                                 )}
                             </button>
                         ))}
+                    </div>
+                    <div className="border-t border-gray-100 py-1">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setIsOpen(false);
+                                navigate('/workspaces');
+                            }}
+                            className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        >
+                            <Cog className="h-4 w-4 text-gray-400" />
+                            Gerir workspaces
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setIsOpen(false);
+                                navigate('/onboarding');
+                            }}
+                            className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        >
+                            <Plus className="h-4 w-4 text-gray-400" />
+                            Criar novo workspace
+                        </button>
                     </div>
                 </div>
             )}

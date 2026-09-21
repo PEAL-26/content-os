@@ -169,7 +169,7 @@ function createProviderInstance(id: string, apiKey: string, baseUrl?: string, he
         case 'google':
             return createGoogleGenerativeAI({ apiKey });
         case 'opencode':
-            return createOpenAICompatible({ apiKey, baseURL: baseUrl, name: 'OpenCode' });
+            return createOpenAICompatible({ apiKey, baseURL: baseUrl || '', name: 'OpenCode' });
         case 'groq':
             return createGroq({ apiKey });
         case 'deepseek':

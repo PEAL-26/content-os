@@ -18,7 +18,6 @@ export function useAIProviders() {
         updateProvider,
         deleteProvider,
         saveApiKey,
-        removeApiKey,
         testConnection,
     } = useAIProviderStore();
 

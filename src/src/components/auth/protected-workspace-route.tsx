@@ -10,7 +10,8 @@ export function ProtectedWorkspaceRoute({
     children,
 }: ProtectedWorkspaceRouteProps) {
     const { user, isLoading: authLoading } = useAuth();
-    const { isLoading: workspaceLoading, workspaces } = useWorkspace();
+    const { isLoading: workspaceLoading, workspaces, currentWorkspace } =
+        useWorkspace();
     const location = useLocation();
 
     const isLoading = authLoading || workspaceLoading;
@@ -29,6 +30,14 @@ export function ProtectedWorkspaceRoute({
 
     if (!workspaceLoading && workspaces.length === 0) {
         return <Navigate to="/onboarding" state={{ from: location }} replace />;
+    }
+
+    if (
+        !workspaceLoading &&
+        workspaces.length > 0 &&
+        !currentWorkspace
+    ) {
+        return <Navigate to="/workspaces" state={{ from: location }} replace />;
     }
 
     if (isLoading) {

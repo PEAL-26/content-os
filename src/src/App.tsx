@@ -1,4 +1,5 @@
 import { ProtectedWorkspaceRoute } from '@/components/auth/protected-workspace-route';
+import { ProtectedRoute } from '@/components/auth/protected-route';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { SettingsLayout } from '@/components/layout/settings-layout';
 import { ArticleEditor } from '@/pages/articles/article-editor';
@@ -11,9 +12,10 @@ import { VideoScriptsPage } from '@/pages/content/video-scripts';
 import { WeeklyPlannerPage } from '@/pages/planner/weekly-planner';
 import { CreateWorkspacePage } from '@/pages/onboarding/create-workspace';
 import { ChannelsPage } from '@/pages/settings/channels';
-import { PillarsPage } from '@/pages/settings/pillars';
+import { PillarsPage } from '@/pages/settings/Pillars';
 import { ProductsPage } from '@/pages/settings/products';
 import { AISettingsPage } from '@/pages/settings/ai-settings';
+import { WorkspacesPage } from '@/pages/workspaces/workspaces';
 import { NuqsAdapter } from 'nuqs/adapters/react-router/v7';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 
@@ -47,6 +49,15 @@ export function App() {
                     <Route
                         path="/onboarding"
                         element={<CreateWorkspacePage />}
+                    />
+
+                    <Route
+                        path="/workspaces"
+                        element={
+                            <ProtectedRoute>
+                                <WorkspacesPage />
+                            </ProtectedRoute>
+                        }
                     />
 
                     <Route

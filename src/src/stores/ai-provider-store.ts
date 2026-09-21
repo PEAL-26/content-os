@@ -5,6 +5,7 @@ import {
     type UpdateProviderInput,
 } from '@/services/ai-provider.service';
 import { aiProviderKeyService } from '@/services/ai-provider-key.service';
+import { supabase } from '@/lib/supabase';
 import { create } from 'zustand';
 
 interface AIProviderState {
@@ -41,13 +42,11 @@ export const useAIProviderStore = create<AIProviderState>((set, get) => ({
             const allKeys = aiProviderKeyService.getAllApiKeys(workspaceId);
 
             // Find workspace default
-            const { data: workspace } = await import('@/lib/supabase').then(m =>
-                m.supabase
-                    .from('workspaces')
-                    .select('defaultAIProviderId, defaultAIModel')
-                    .eq('id', workspaceId)
-                    .single()
-            );
+            const { data: workspace } = await supabase
+                .from('workspaces')
+                .select('defaultAIProviderId, defaultAIModel')
+                .eq('id', workspaceId)
+                .single();
 
             set({
                 providers,
@@ -98,7 +97,7 @@ export const useAIProviderStore = create<AIProviderState>((set, get) => ({
         }
     },
 
-    deleteProvider: async (providerId: string, workspaceId: string) => {
+    deleteProvider: async (providerId: string, _workspaceId: string) => {
         try {
             await aiProviderService.deleteProvider(providerId);
             set({

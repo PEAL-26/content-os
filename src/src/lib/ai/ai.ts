@@ -32,7 +32,6 @@ export async function generateArticle(
 
         if (storeAvailable.length > 0) {
             const prompt = buildArticlePrompt(params);
-            let lastError = '';
 
             for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
                 for (const provider of storeAvailable) {
@@ -58,11 +57,8 @@ export async function generateArticle(
                                 prompt,
                             };
                         }
-
-                        lastError = parsed.error || 'Erro ao processar resposta';
                     } catch (error) {
                         const err = error as Error;
-                        lastError = err.message;
                         console.warn(`Provider ${provider.providerId} falhou:`, err.message);
                     }
                 }

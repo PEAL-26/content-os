@@ -2,11 +2,12 @@ import { useAuthContext } from '@/context/use-auth-context';
 import { workspaceInitService } from '@/services/workspace-init.service';
 import { useWorkspaceStore } from '@/stores/workspace-store';
 import { useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 export function useWorkspace() {
     const { user, isLoading: authLoading } = useAuthContext();
     const navigate = useNavigate();
+    const location = useLocation();
     const store = useWorkspaceStore();
     const hasCheckedRef = useRef(false);
     const initializedWorkspacesRef = useRef<Set<string>>(new Set());
@@ -26,15 +27,45 @@ export function useWorkspace() {
     }, [user, authLoading]);
 
     useEffect(() => {
-        if (
-            !store.isLoading &&
-            store.workspaces.length === 0 &&
-            user &&
-            !authLoading
-        ) {
-            navigate('/onboarding', { replace: true });
+        if (!user || authLoading || store.isLoading) {
+            return;
         }
-    }, [store.isLoading, store.workspaces.length, user, authLoading, navigate]);
+
+        // 0 workspaces → onboarding (criar o primeiro)
+        if (store.workspaces.length === 0) {
+            navigate('/onboarding', { replace: true });
+            return;
+        }
+
+        // 1 workspace → activar automaticamente
+        if (store.workspaces.length === 1) {
+            const single = store.workspaces[0];
+            if (store.currentWorkspace?.id !== single.id) {
+                store.setWorkspace(single);
+            }
+            if (
+                location.pathname === '/workspaces' ||
+                location.pathname === '/'
+            ) {
+                navigate('/dashboard', { replace: true });
+            }
+            return;
+        }
+
+        // 2+ workspaces → forçar escolha quando não há workspace activo
+        if (!store.currentWorkspace && location.pathname !== '/workspaces') {
+            navigate('/workspaces', { replace: true });
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- store is stable reference
+    }, [
+        user,
+        authLoading,
+        store.isLoading,
+        store.workspaces.length,
+        store.currentWorkspace?.id,
+        location.pathname,
+        navigate,
+    ]);
 
     useEffect(() => {
         const workspaceId = store.currentWorkspace?.id;
@@ -54,6 +85,7 @@ export function useWorkspace() {
         workspaces: store.workspaces,
         isLoading: store.isLoading || authLoading,
         error: store.error,
+        fetchWorkspaces: store.fetchWorkspaces,
         setWorkspace: store.setWorkspace,
         createWorkspace: store.createWorkspace,
         updateWorkspace: store.updateWorkspace,

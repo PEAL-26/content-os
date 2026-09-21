@@ -41,8 +41,6 @@ export async function generateVideoScript(
                 durationSec: params.durationSec,
             });
 
-            let lastError = '';
-
             for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
                 for (const provider of storeAvailable) {
                     try {
@@ -71,11 +69,8 @@ export async function generateVideoScript(
                                 };
                             }
                         }
-
-                        lastError = 'Resposta incompleta da IA';
                     } catch (error) {
                         const err = error as Error;
-                        lastError = err.message;
                         console.warn(`Provider ${provider.providerId} falhou:`, err.message);
                     }
                 }
