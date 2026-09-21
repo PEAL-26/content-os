@@ -504,6 +504,147 @@ USING (
 );
 
 -- =============================================================================
+-- 12. AI PROVIDERS
+-- =============================================================================
+
+ALTER TABLE ai_providers        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_provider_models  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_provider_headers ENABLE ROW LEVEL SECURITY;
+
+-- ai_providers
+CREATE POLICY "ai_providers_select"
+ON ai_providers FOR SELECT
+USING ("workspaceId"::uuid IN (SELECT my_workspace_ids()));
+
+CREATE POLICY "ai_providers_insert"
+ON ai_providers FOR INSERT
+WITH CHECK (
+  "workspaceId"::uuid IN (
+    SELECT "workspaceId"::uuid
+    FROM workspace_members
+    WHERE "userId"::uuid = auth.uid() AND role IN ('OWNER', 'EDITOR')
+  )
+);
+
+CREATE POLICY "ai_providers_update"
+ON ai_providers FOR UPDATE
+USING (
+  "workspaceId"::uuid IN (
+    SELECT "workspaceId"::uuid
+    FROM workspace_members
+    WHERE "userId"::uuid = auth.uid() AND role IN ('OWNER', 'EDITOR')
+  )
+);
+
+CREATE POLICY "ai_providers_delete"
+ON ai_providers FOR DELETE
+USING (
+  "workspaceId"::uuid IN (
+    SELECT "workspaceId"::uuid
+    FROM workspace_members
+    WHERE "userId"::uuid = auth.uid() AND role IN ('OWNER', 'EDITOR')
+  )
+);
+
+-- ai_provider_models
+CREATE POLICY "ai_provider_models_select"
+ON ai_provider_models FOR SELECT
+USING (
+  "providerId" IN (
+    SELECT id FROM ai_providers
+    WHERE "workspaceId"::uuid IN (SELECT my_workspace_ids())
+  )
+);
+
+CREATE POLICY "ai_provider_models_insert"
+ON ai_provider_models FOR INSERT
+WITH CHECK (
+  "providerId" IN (
+    SELECT id FROM ai_providers
+    WHERE "workspaceId"::uuid IN (
+      SELECT "workspaceId"::uuid
+      FROM workspace_members
+      WHERE "userId"::uuid = auth.uid() AND role IN ('OWNER', 'EDITOR')
+    )
+  )
+);
+
+CREATE POLICY "ai_provider_models_update"
+ON ai_provider_models FOR UPDATE
+USING (
+  "providerId" IN (
+    SELECT id FROM ai_providers
+    WHERE "workspaceId"::uuid IN (
+      SELECT "workspaceId"::uuid
+      FROM workspace_members
+      WHERE "userId"::uuid = auth.uid() AND role IN ('OWNER', 'EDITOR')
+    )
+  )
+);
+
+CREATE POLICY "ai_provider_models_delete"
+ON ai_provider_models FOR DELETE
+USING (
+  "providerId" IN (
+    SELECT id FROM ai_providers
+    WHERE "workspaceId"::uuid IN (
+      SELECT "workspaceId"::uuid
+      FROM workspace_members
+      WHERE "userId"::uuid = auth.uid() AND role IN ('OWNER', 'EDITOR')
+    )
+  )
+);
+
+-- ai_provider_headers
+CREATE POLICY "ai_provider_headers_select"
+ON ai_provider_headers FOR SELECT
+USING (
+  "providerId" IN (
+    SELECT id FROM ai_providers
+    WHERE "workspaceId"::uuid IN (SELECT my_workspace_ids())
+  )
+);
+
+CREATE POLICY "ai_provider_headers_insert"
+ON ai_provider_headers FOR INSERT
+WITH CHECK (
+  "providerId" IN (
+    SELECT id FROM ai_providers
+    WHERE "workspaceId"::uuid IN (
+      SELECT "workspaceId"::uuid
+      FROM workspace_members
+      WHERE "userId"::uuid = auth.uid() AND role IN ('OWNER', 'EDITOR')
+    )
+  )
+);
+
+CREATE POLICY "ai_provider_headers_update"
+ON ai_provider_headers FOR UPDATE
+USING (
+  "providerId" IN (
+    SELECT id FROM ai_providers
+    WHERE "workspaceId"::uuid IN (
+      SELECT "workspaceId"::uuid
+      FROM workspace_members
+      WHERE "userId"::uuid = auth.uid() AND role IN ('OWNER', 'EDITOR')
+    )
+  )
+);
+
+CREATE POLICY "ai_provider_headers_delete"
+ON ai_provider_headers FOR DELETE
+USING (
+  "providerId" IN (
+    SELECT id FROM ai_providers
+    WHERE "workspaceId"::uuid IN (
+      SELECT "workspaceId"::uuid
+      FROM workspace_members
+      WHERE "userId"::uuid = auth.uid() AND role IN ('OWNER', 'EDITOR')
+    )
+  )
+);
+
+-- =============================================================================
 -- FINAL CHECK
 -- =============================================================================
 

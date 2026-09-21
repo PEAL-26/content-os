@@ -105,6 +105,10 @@ model Workspace {
   postsPerWeek    Int @default(3)
   articlesPerWeek Int @default(1)
 
+  // Configurações de IA
+  defaultAIProviderId String? // ID do provedor padrão (ex: "anthropic")
+  defaultAIModel      String? // Código do modelo padrão (ex: "claude-sonnet-4-20250514")
+
   // Relações
   members       WorkspaceMember[]
   products      Product[]
@@ -113,6 +117,7 @@ model Workspace {
   articles      Article[]
   weeklyPlans   WeeklyPlan[]
   tags          Tag[]
+  aiProviders   AIProvider[]
 
   @@map("workspaces")
 }
@@ -431,4 +436,63 @@ model PlanItem {
   channel      ChannelConfig? @relation(fields: [channelId], references: [id])
 
   @@map("plan_items")
+}
+
+// =============================================================================
+// AI PROVIDERS (Provedores de IA configuráveis por workspace)
+// =============================================================================
+
+model AIProvider {
+  id          String   @id @default(uuid())
+  workspaceId String
+  providerId  String   // ID técnico: "anthropic", "openai", "custom_abc123"
+  name        String   // Nome de exibição
+  description String?
+  baseUrl     String?  // URL base da API (obrigatório para custom)
+  isDefault   Boolean  @default(false) // true para os 10 pré-cadastrados
+  isCustom    Boolean  @default(false) // true para provedores do utilizador
+  isActive    Boolean  @default(true)
+  priority    Int      @default(0) // Ordem no fallback
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  models    AIProviderModel[]
+  headers   AIProviderHeader[]
+
+  @@unique([workspaceId, providerId])
+  @@map("ai_providers")
+}
+
+// =============================================================================
+// AI PROVIDER MODELS (Modelos de cada provedor)
+// =============================================================================
+
+model AIProviderModel {
+  id          String   @id @default(uuid())
+  providerId  String
+  displayName String   // "Claude Sonnet 4"
+  modelCode   String   // "claude-sonnet-4-20250514"
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  provider AIProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@map("ai_provider_models")
+}
+
+// =============================================================================
+// AI PROVIDER HEADERS (Headers HTTP customizados)
+// =============================================================================
+
+model AIProviderHeader {
+  id         String   @id @default(uuid())
+  providerId String
+  key        String   // "X-Custom-Auth"
+  value      String   // "xyz"
+  createdAt  DateTime @default(now())
+
+  provider AIProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@map("ai_provider_headers")
 }

@@ -18,8 +18,14 @@ import {
     parseThreadResponse,
     parseVideoScriptResponse,
 } from './content-prompts';
-import { createProvider, getAvailableProviders } from './provider';
+import {
+    createProvider,
+    getAvailableProviders,
+    getAvailableProvidersFromStore,
+    createLanguageModelFromProvider,
+} from './provider';
 import type { AIProviderId } from './types';
+import type { AIProvider } from '@/services/ai-provider.service';
 
 export interface GenerateContentPiecesParams {
     article: Article;
@@ -57,8 +63,61 @@ async function delay(ms: number): Promise<void> {
 
 async function generateSinglePiece(
     format: ContentFormat,
-    params: GenerateContentPiecesParams
+    params: GenerateContentPiecesParams,
+    storeProviders?: AIProvider[],
+    storeApiKeys?: Record<string, string>
 ): Promise<GeneratedPiece> {
+    // Try store-based providers first
+    if (storeProviders && storeApiKeys && Object.keys(storeApiKeys).length > 0) {
+        const storeAvailable = getAvailableProvidersFromStore(storeProviders, storeApiKeys);
+
+        if (storeAvailable.length > 0) {
+            const prompt = buildPromptForFormat(format, {
+                article: params.article,
+                workspace: params.workspace,
+                product: params.product,
+                pillar: params.pillar,
+            });
+
+            let lastError = '';
+
+            for (const provider of storeAvailable) {
+                for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+                    try {
+                        const apiKey = storeApiKeys[provider.providerId];
+                        if (!apiKey) continue;
+
+                        const model = createLanguageModelFromProvider(provider, apiKey, provider.models[0]?.modelCode);
+
+                        const { text } = await generateText({
+                            model,
+                            prompt,
+                            maxOutputTokens: 4000,
+                        });
+
+                        const piece = parseGeneratedContent(format, text);
+
+                        if (piece) {
+                            return { ...piece, provider: provider.providerId as AIProviderId };
+                        }
+
+                        lastError = 'Não foi possível interpretar a resposta';
+                    } catch (error) {
+                        lastError = error instanceof Error ? error.message : 'Erro desconhecido';
+                        console.warn(`Provider ${provider.providerId} failed:`, lastError);
+                    }
+
+                    if (attempt < MAX_RETRIES - 1) {
+                        await delay(RETRY_DELAY_MS);
+                    }
+                }
+            }
+
+            // If store providers all failed, fall through to legacy
+        }
+    }
+
+    // Fallback: legacy env var providers
     const providers = getAvailableProviders();
 
     if (providers.length === 0) {
@@ -254,14 +313,16 @@ function parseGeneratedContent(
 }
 
 export async function generateContentPieces(
-    params: GenerateContentPiecesParams
+    params: GenerateContentPiecesParams,
+    storeProviders?: AIProvider[],
+    storeApiKeys?: Record<string, string>
 ): Promise<GenerateContentPiecesResult> {
     const limit = pLimit(CONCURRENCY_LIMIT);
 
     const generationPromises = params.formats.map((format) =>
         limit(async () => {
             try {
-                const piece = await generateSinglePiece(format, params);
+                const piece = await generateSinglePiece(format, params, storeProviders, storeApiKeys);
                 return { success: true, format, piece };
             } catch (error) {
                 return {

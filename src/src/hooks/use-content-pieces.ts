@@ -1,6 +1,7 @@
 import { generateContentPieces, type GeneratedPiece } from '@/lib/ai';
 import { contentPieceService } from '@/services/content-piece.service';
 import { useWorkspaceStore } from '@/stores/workspace-store';
+import { useAIProviderStore } from '@/stores/ai-provider-store';
 import type {
     Article,
     ContentFormat,
@@ -32,6 +33,8 @@ export interface UpdatePieceParams {
 
 export function useContentPieces(articleId: string) {
     const { currentWorkspace } = useWorkspaceStore();
+    const providers = useAIProviderStore((s) => s.providers);
+    const apiKeys = useAIProviderStore((s) => s.apiKeys);
     const [pieces, setPieces] = useState<ContentPieceWithRelations[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
@@ -87,13 +90,17 @@ export function useContentPieces(articleId: string) {
             setGeneratingFormats(new Set(params.formats));
 
             try {
-                const result = await generateContentPieces({
-                    article: params.article,
-                    formats: params.formats,
-                    workspace: currentWorkspace,
-                    product: params.product,
-                    pillar: params.pillar,
-                });
+                const result = await generateContentPieces(
+                    {
+                        article: params.article,
+                        formats: params.formats,
+                        workspace: currentWorkspace,
+                        product: params.product,
+                        pillar: params.pillar,
+                    },
+                    providers,
+                    apiKeys
+                );
 
                 if (!result.success && result.pieces.length === 0) {
                     return {

@@ -6,6 +6,19 @@ import { defineConfig } from 'vite';
 
 // https://vite.dev/config/
 export default defineConfig({
+    server:{
+        allowedHosts:[".ngrok-free.app"],
+        proxy: {
+            '/v1': {
+                target: 'https://integrate.api.nvidia.com',
+                changeOrigin: true,
+                rewrite: (path) => path.replace(/^\/v1/, '/v1'),
+                headers: {
+                    'Access-Control-Allow-Origin': '*',
+                },
+            },
+        },
+    },
     plugins: [
         react(),
         babel({ presets: [reactCompilerPreset()] }),

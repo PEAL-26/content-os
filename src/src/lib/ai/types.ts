@@ -29,6 +29,7 @@ export type AIProviderId =
     | 'cerebras'
     | 'together'
     | 'openrouter'
+    | 'nvidia'
     | 'ollama';
 
 export interface AIProviderConfig {

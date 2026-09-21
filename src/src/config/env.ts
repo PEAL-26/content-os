@@ -13,6 +13,8 @@ export function envConfig() {
         CEREBRAS_API_KEY: import.meta.env.VITE_CEREBRAS_API_KEY,
         TOGETHER_API_KEY: import.meta.env.VITE_TOGETHER_API_KEY,
         OPENROUTER_API_KEY: import.meta.env.VITE_OPENROUTER_API_KEY,
+        NVIDIA_API_KEY: import.meta.env.VITE_NVIDIA_API_KEY,
+        NVIDIA_API_URL: import.meta.env.VITE_NVIDIA_API_URL,
         OLLAMA_URL: import.meta.env.VITE_OLLAMA_URL,
         AI_PROVIDER_PRIORITY: import.meta.env.VITE_AI_PROVIDER_PRIORITY,
         AI_DEFAULT_MODEL: import.meta.env.VITE_AI_DEFAULT_MODEL,

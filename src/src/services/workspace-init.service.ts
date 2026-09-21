@@ -2,11 +2,13 @@ import { supabase } from '@/lib/supabase';
 import { v4 as uuidv4 } from 'uuid';
 import { channelService } from './channel.service';
 import { pillarService } from './pillar.service';
+import { aiProviderService } from './ai-provider.service';
 
 export interface WorkspaceInitResult {
     pillarsCreated: boolean;
     channelsCreated: boolean;
     tagsCreated: boolean;
+    aiProvidersCreated: boolean;
 }
 
 export const workspaceInitService = {
@@ -17,6 +19,7 @@ export const workspaceInitService = {
             pillarsCreated: false,
             channelsCreated: false,
             tagsCreated: false,
+            aiProvidersCreated: false,
         };
 
         try {
@@ -37,6 +40,13 @@ export const workspaceInitService = {
             results.tagsCreated = await this.ensureDefaultTags(workspaceId);
         } catch (error) {
             console.error('Erro ao inicializar tags:', error);
+        }
+
+        try {
+            results.aiProvidersCreated =
+                await aiProviderService.ensureDefaultProviders(workspaceId);
+        } catch (error) {
+            console.error('Erro ao inicializar provedores IA:', error);
         }
 
         return results;

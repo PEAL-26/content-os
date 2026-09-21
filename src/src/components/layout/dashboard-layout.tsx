@@ -19,6 +19,7 @@ import {
     Menu,
     X,
     Sparkles,
+    Brain,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -54,6 +55,7 @@ const navigation: NavGroup[] = [
         title: 'Configurações',
         items: [
             { name: 'Workspace', href: '/dashboard/settings', icon: Building2 },
+            { name: 'IA', href: '/dashboard/settings/ai', icon: Brain },
             { name: 'Produtos', href: '/dashboard/settings/products', icon: Package },
             { name: 'Pilares', href: '/dashboard/settings/pillars', icon: Flag },
             { name: 'Canais', href: '/dashboard/settings/channels', icon: Radio },

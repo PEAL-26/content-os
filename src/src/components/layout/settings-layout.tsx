@@ -6,6 +6,7 @@ interface SettingsLayoutProps {
 
 const settingsNav = [
     { name: 'Geral', href: '/dashboard/settings' },
+    { name: 'IA', href: '/dashboard/settings/ai' },
     { name: 'Pilares', href: '/dashboard/settings/pillars' },
     { name: 'Canais', href: '/dashboard/settings/channels' },
     { name: 'Produtos', href: '/dashboard/settings/products' },

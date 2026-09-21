@@ -6,6 +6,7 @@ import {
     type UpdateVideoScriptInput,
 } from '@/services/video-script.service';
 import { useWorkspaceStore } from '@/stores/workspace-store';
+import { useAIProviderStore } from '@/stores/ai-provider-store';
 import type { SocialChannel } from '@/types/database';
 import { generateVideoScript } from '@/lib/ai';
 import { useCallback, useEffect, useState } from 'react';
@@ -18,6 +19,8 @@ export interface GenerateScriptParams {
 
 export function useVideoScripts(filters?: VideoScriptsFilters) {
     const { currentWorkspace } = useWorkspaceStore();
+    const providers = useAIProviderStore((s) => s.providers);
+    const apiKeys = useAIProviderStore((s) => s.apiKeys);
     const [scripts, setScripts] = useState<VideoScriptWithRelations[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
@@ -67,12 +70,16 @@ export function useVideoScripts(filters?: VideoScriptsFilters) {
                     return { success: false, error: 'Artigo não encontrado' };
                 }
 
-                const result = await generateVideoScript({
-                    article,
-                    targetChannel: params.targetChannel,
-                    durationSec: params.durationSec,
-                    workspace: currentWorkspace,
-                });
+                const result = await generateVideoScript(
+                    {
+                        article,
+                        targetChannel: params.targetChannel,
+                        durationSec: params.durationSec,
+                        workspace: currentWorkspace,
+                    },
+                    providers,
+                    apiKeys
+                );
 
                 if (!result.success) {
                     return {

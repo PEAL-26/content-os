@@ -6,6 +6,7 @@ import {
 } from '@/lib/ai';
 import { articleService } from '@/services/article.service';
 import { useWorkspaceStore } from '@/stores/workspace-store';
+import { useAIProviderStore } from '@/stores/ai-provider-store';
 import type { Product } from '@/types/database';
 import type { PillarConfig } from '@/types/pillar';
 import { useCallback, useState } from 'react';
@@ -27,6 +28,8 @@ interface GenerateArticleResult {
 export function useAI() {
     const { currentWorkspace } = useWorkspaceStore();
     const { user } = useAuthContext();
+    const providers = useAIProviderStore((s) => s.providers);
+    const apiKeys = useAIProviderStore((s) => s.apiKeys);
     const [isGenerating, setIsGenerating] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [currentProvider, setCurrentProvider] = useState<string | null>(null);
@@ -58,12 +61,16 @@ export function useAI() {
                 );
 
                 try {
-                    const result = await generateArticle({
-                        topic: input.topic,
-                        pillar: input.pillar,
-                        product: input.product,
-                        workspace: currentWorkspace,
-                    });
+                    const result = await generateArticle(
+                        {
+                            topic: input.topic,
+                            pillar: input.pillar,
+                            product: input.product,
+                            workspace: currentWorkspace,
+                        },
+                        providers,
+                        apiKeys
+                    );
 
                     if (!result.success) {
                         await articleService.deleteArticle(preArticle.id);

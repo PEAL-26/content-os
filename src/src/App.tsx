@@ -13,6 +13,7 @@ import { CreateWorkspacePage } from '@/pages/onboarding/create-workspace';
 import { ChannelsPage } from '@/pages/settings/channels';
 import { PillarsPage } from '@/pages/settings/pillars';
 import { ProductsPage } from '@/pages/settings/products';
+import { AISettingsPage } from '@/pages/settings/ai-settings';
 import { NuqsAdapter } from 'nuqs/adapters/react-router/v7';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 
@@ -160,6 +161,19 @@ export function App() {
                                 <DashboardLayout>
                                     <SettingsLayout>
                                         <ProductsPage />
+                                    </SettingsLayout>
+                                </DashboardLayout>
+                            </ProtectedWorkspaceRoute>
+                        }
+                    />
+
+                    <Route
+                        path="/dashboard/settings/ai"
+                        element={
+                            <ProtectedWorkspaceRoute>
+                                <DashboardLayout>
+                                    <SettingsLayout>
+                                        <AISettingsPage />
                                     </SettingsLayout>
                                 </DashboardLayout>
                             </ProtectedWorkspaceRoute>

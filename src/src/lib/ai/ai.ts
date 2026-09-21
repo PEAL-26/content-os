@@ -4,12 +4,15 @@ import {
     createProvider,
     getAvailableProviders,
     getProviderById,
+    getAvailableProvidersFromStore,
+    createLanguageModelFromProvider,
 } from './provider';
 import type {
     AIProviderId,
     GenerateArticleParams,
     GenerateArticleResult,
 } from './types';
+import type { AIProvider } from '@/services/ai-provider.service';
 
 const MAX_RETRIES = 2;
 const RETRY_DELAY_MS = 3000;
@@ -19,14 +22,67 @@ async function delay(ms: number): Promise<void> {
 }
 
 export async function generateArticle(
-    params: GenerateArticleParams
+    params: GenerateArticleParams,
+    storeProviders?: AIProvider[],
+    storeApiKeys?: Record<string, string>
 ): Promise<GenerateArticleResult> {
+    // Try store-based providers first
+    if (storeProviders && storeApiKeys && Object.keys(storeApiKeys).length > 0) {
+        const storeAvailable = getAvailableProvidersFromStore(storeProviders, storeApiKeys);
+
+        if (storeAvailable.length > 0) {
+            const prompt = buildArticlePrompt(params);
+            let lastError = '';
+
+            for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+                for (const provider of storeAvailable) {
+                    try {
+                        const apiKey = storeApiKeys[provider.providerId];
+                        if (!apiKey) continue;
+
+                        const model = createLanguageModelFromProvider(provider, apiKey, provider.models[0]?.modelCode);
+
+                        const { text } = await generateText({
+                            model,
+                            prompt,
+                            maxOutputTokens: 8000,
+                        });
+
+                        const parsed = parseArticleResponse(text);
+
+                        if (parsed.article) {
+                            return {
+                                success: true,
+                                article: parsed.article,
+                                provider: provider.providerId as AIProviderId,
+                                prompt,
+                            };
+                        }
+
+                        lastError = parsed.error || 'Erro ao processar resposta';
+                    } catch (error) {
+                        const err = error as Error;
+                        lastError = err.message;
+                        console.warn(`Provider ${provider.providerId} falhou:`, err.message);
+                    }
+                }
+
+                if (attempt < MAX_RETRIES - 1) {
+                    await delay(RETRY_DELAY_MS);
+                }
+            }
+
+            // If store providers all failed, fall through to legacy
+        }
+    }
+
+    // Fallback: legacy env var providers
     const providers = getAvailableProviders();
 
     if (providers.length === 0) {
         return {
             success: false,
-            error: 'Nenhum provider de IA configurado. Adiciona pelo menos uma API key no ficheiro .env.',
+            error: 'Nenhum provider de IA configurado. Configura pelo menos um provedor nas definições.',
             code: 'NO_API_KEY',
         };
     }
