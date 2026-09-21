@@ -10,7 +10,7 @@ export function LoginPage() {
     const { signIn, isLoading, error, clearError } = useAuthContext();
 
     const from =
-        (location.state as { from?: Location })?.from?.pathname || '/dashboard';
+        (location.state as { from?: Location })?.from?.pathname || '/';
 
     const {
         register,

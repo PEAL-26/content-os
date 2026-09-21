@@ -129,7 +129,7 @@ export function useAI() {
                 setIsGenerating(false);
             }
         },
-        [currentWorkspace, user?.id]
+        [currentWorkspace, user?.id, providers, apiKeys]
     );
 
     const clearError = useCallback(() => {

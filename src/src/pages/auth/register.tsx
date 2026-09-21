@@ -19,7 +19,7 @@ export function RegisterPage() {
     const onSubmit = async (data: RegisterFormData) => {
         const result = await signUp(data.name, data.email, data.password);
         if (result.success) {
-            navigate('/dashboard', { replace: true });
+            navigate('/', { replace: true });
         }
     };
 

@@ -29,7 +29,6 @@ export function useAIProviders() {
     }>({ type: null, provider: null });
 
     const loadProviders = useCallback(async () => {
-        if (!workspaceId) return;
         await fetchProviders(workspaceId);
     }, [workspaceId, fetchProviders]);
 
@@ -51,9 +50,9 @@ export function useAIProviders() {
     }, [workspaceId, setDefaultProvider]);
 
     const handleSaveDefaultApiKey = useCallback(async (apiKey: string) => {
-        if (!workspaceId || !modalState.provider) return;
-        saveApiKey(workspaceId, modalState.provider.providerId, apiKey);
-    }, [workspaceId, modalState.provider, saveApiKey]);
+        if (!modalState.provider) return;
+        saveApiKey(modalState.provider.providerId, apiKey);
+    }, [modalState.provider, saveApiKey]);
 
     const handleCreateCustom = useCallback(async (data: {
         name: string;
@@ -63,8 +62,6 @@ export function useAIProviders() {
         models: { displayName: string; modelCode: string }[];
         headers: { key: string; value: string }[];
     }) => {
-        if (!workspaceId) return { success: false, error: 'No workspace' };
-
         const input: CreateCustomProviderInput = {
             name: data.name,
             baseUrl: data.baseUrl,
@@ -73,19 +70,15 @@ export function useAIProviders() {
             headers: data.headers,
         };
 
-        const result = await createCustomProvider(workspaceId, input);
+        const result = await createCustomProvider(input);
 
-        if (result.success && result.success) {
-            // Save the API key separately
-            const newProviders = useAIProviderStore.getState().providers;
-            const newProvider = newProviders[newProviders.length - 1];
-            if (newProvider) {
-                saveApiKey(workspaceId, newProvider.providerId, data.apiKey);
-            }
+        if (result.success && result.provider) {
+            // Guarda a API key separadamente, associada ao novo provedor
+            saveApiKey(result.provider.providerId, data.apiKey);
         }
 
         return result;
-    }, [workspaceId, createCustomProvider, saveApiKey]);
+    }, [createCustomProvider, saveApiKey]);
 
     const handleUpdateCustom = useCallback(async (data: {
         name: string;
@@ -95,7 +88,7 @@ export function useAIProviders() {
         models: { displayName: string; modelCode: string }[];
         headers: { key: string; value: string }[];
     }) => {
-        if (!workspaceId || !modalState.provider) return { success: false, error: 'No provider' };
+        if (!modalState.provider) return { success: false, error: 'No provider' };
 
         const result = await updateProvider(modalState.provider.id, {
             name: data.name,
@@ -106,16 +99,15 @@ export function useAIProviders() {
         });
 
         if (result.success) {
-            saveApiKey(workspaceId, modalState.provider.providerId, data.apiKey);
+            saveApiKey(modalState.provider.providerId, data.apiKey);
         }
 
         return result;
-    }, [workspaceId, modalState.provider, updateProvider, saveApiKey]);
+    }, [modalState.provider, updateProvider, saveApiKey]);
 
     const handleDelete = useCallback(async (provider: AIProvider) => {
-        if (!workspaceId) return { success: false, error: 'No workspace' };
-        return deleteProvider(provider.id, workspaceId);
-    }, [workspaceId, deleteProvider]);
+        return deleteProvider(provider.id);
+    }, [deleteProvider]);
 
     const handleTestConnection = useCallback(async (apiKey: string, baseUrl?: string, headers?: { key: string; value: string }[]) => {
         if (!modalState.provider) return { success: false, error: 'No provider' };

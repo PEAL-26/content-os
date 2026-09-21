@@ -117,7 +117,6 @@ model Workspace {
   articles      Article[]
   weeklyPlans   WeeklyPlan[]
   tags          Tag[]
-  aiProviders   AIProvider[]
 
   @@map("workspaces")
 }
@@ -439,28 +438,25 @@ model PlanItem {
 }
 
 // =============================================================================
-// AI PROVIDERS (Provedores de IA configuráveis por workspace)
+// AI PROVIDERS (Provedores de IA globais da conta)
 // =============================================================================
 
 model AIProvider {
   id          String   @id @default(uuid())
-  workspaceId String
   providerId  String   // ID técnico: "anthropic", "openai", "custom_abc123"
   name        String   // Nome de exibição
   description String?
   baseUrl     String?  // URL base da API (obrigatório para custom)
-  isDefault   Boolean  @default(false) // true para os 10 pré-cadastrados
+  isDefault   Boolean  @default(false) // true para os pré-cadastrados
   isCustom    Boolean  @default(false) // true para provedores do utilizador
   isActive    Boolean  @default(true)
   priority    Int      @default(0) // Ordem no fallback
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   models    AIProviderModel[]
   headers   AIProviderHeader[]
 
-  @@unique([workspaceId, providerId])
   @@map("ai_providers")
 }
 

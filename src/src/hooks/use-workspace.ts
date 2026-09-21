@@ -1,6 +1,10 @@
+import { GLOBAL_PATHS } from '@/lib/workspace-paths';
 import { useAuthContext } from '@/context/use-auth-context';
 import { workspaceInitService } from '@/services/workspace-init.service';
-import { useWorkspaceStore } from '@/stores/workspace-store';
+import {
+    getPersistedWorkspaceId,
+    useWorkspaceStore,
+} from '@/stores/workspace-store';
 import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -31,31 +35,56 @@ export function useWorkspace() {
             return;
         }
 
-        // 0 workspaces → onboarding (criar o primeiro)
+        const pathname = location.pathname;
+        const isOnboarding = pathname === '/onboarding';
+
+        // Onboarding destina-se apenas a novos registos (0 workspaces).
+        // Um utilizador existente que aterrize lá vai para o workspace activo.
+        if (isOnboarding) {
+            if (store.workspaces.length > 0) {
+                const preferred =
+                    store.currentWorkspace ??
+                    store.workspaces.find(
+                        (w) => w.id === getPersistedWorkspaceId()
+                    ) ??
+                    store.workspaces[0];
+                navigate(`/${preferred.id}/dashboard`, { replace: true });
+            }
+            return;
+        }
+
+        // Já dentro de uma rota de workspace válida → o guard trata do resto.
+        const firstSegment = pathname.split('/')[1];
+        if (
+            firstSegment &&
+            store.workspaces.some((w) => w.id === firstSegment)
+        ) {
+            return;
+        }
+
+        // Páginas globais (login/register/settings de conta) → nada a fazer.
+        if (
+            GLOBAL_PATHS.some(
+                (p) => pathname === p || pathname.startsWith(`${p}/`)
+            )
+        ) {
+            return;
+        }
+
+        // Landing (raiz ou caminhos antigos) → decidir pelo nº de workspaces.
         if (store.workspaces.length === 0) {
             navigate('/onboarding', { replace: true });
             return;
         }
 
-        // 1 workspace → activar automaticamente
-        if (store.workspaces.length === 1) {
-            const single = store.workspaces[0];
-            if (store.currentWorkspace?.id !== single.id) {
-                store.setWorkspace(single);
-            }
-            if (
-                location.pathname === '/workspaces' ||
-                location.pathname === '/'
-            ) {
-                navigate('/dashboard', { replace: true });
-            }
-            return;
-        }
+        const preferred =
+            store.currentWorkspace ??
+            store.workspaces.find(
+                (w) => w.id === getPersistedWorkspaceId()
+            ) ??
+            store.workspaces[0];
 
-        // 2+ workspaces → forçar escolha quando não há workspace activo
-        if (!store.currentWorkspace && location.pathname !== '/workspaces') {
-            navigate('/workspaces', { replace: true });
-        }
+        navigate(`/${preferred.id}/dashboard`, { replace: true });
         // eslint-disable-next-line react-hooks/exhaustive-deps -- store is stable reference
     }, [
         user,
@@ -90,5 +119,6 @@ export function useWorkspace() {
         createWorkspace: store.createWorkspace,
         updateWorkspace: store.updateWorkspace,
         clearWorkspace: store.clearWorkspace,
+        clearError: store.clearError,
     };
 }

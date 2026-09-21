@@ -1,20 +1,42 @@
-import { Link, useLocation } from 'react-router-dom';
+import { workspacePath } from '@/lib/workspace-paths';
+import { Link, useLocation, useParams } from 'react-router-dom';
 
 interface SettingsLayoutProps {
     children: React.ReactNode;
 }
 
-const settingsNav = [
-    { name: 'Geral', href: '/dashboard/settings' },
-    { name: 'IA', href: '/dashboard/settings/ai' },
-    { name: 'Pilares', href: '/dashboard/settings/pillars' },
-    { name: 'Canais', href: '/dashboard/settings/channels' },
-    { name: 'Produtos', href: '/dashboard/settings/products' },
-    { name: 'Membros', href: '/dashboard/settings/members' },
-];
-
 export function SettingsLayout({ children }: SettingsLayoutProps) {
     const location = useLocation();
+    const { workspaceId } = useParams<{ workspaceId: string }>();
+
+    const settingsNav = workspaceId
+        ? [
+              {
+                  name: 'Geral',
+                  href: workspacePath(workspaceId, 'settings'),
+              },
+              {
+                  name: 'IA',
+                  href: workspacePath(workspaceId, 'settings/ai'),
+              },
+              {
+                  name: 'Pilares',
+                  href: workspacePath(workspaceId, 'settings/pillars'),
+              },
+              {
+                  name: 'Canais',
+                  href: workspacePath(workspaceId, 'settings/channels'),
+              },
+              {
+                  name: 'Produtos',
+                  href: workspacePath(workspaceId, 'settings/products'),
+              },
+              {
+                  name: 'Membros',
+                  href: workspacePath(workspaceId, 'settings/members'),
+              },
+          ]
+        : [];
 
     return (
         <div className="space-y-6">

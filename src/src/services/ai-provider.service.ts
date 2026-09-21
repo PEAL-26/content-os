@@ -24,7 +24,6 @@ export interface AIProviderHeader {
 
 export interface AIProvider {
     id: string;
-    workspaceId: string;
     providerId: string;
     name: string;
     description: string | null;
@@ -187,7 +186,10 @@ export const DEFAULT_AI_PROVIDERS: DefaultProviderConfig[] = [
 // =============================================================================
 
 export const aiProviderService = {
-    async getProviders(workspaceId: string): Promise<AIProvider[]> {
+    /**
+     * Lista global de provedores (configuração de conta, sem workspace).
+     */
+    async getProviders(): Promise<AIProvider[]> {
         const { data, error } = await supabase
             .from('ai_providers')
             .select(`
@@ -195,7 +197,6 @@ export const aiProviderService = {
                 models:ai_provider_models(*),
                 headers:ai_provider_headers(*)
             `)
-            .eq('workspaceId', workspaceId)
             .order('priority');
 
         if (error) {
@@ -225,16 +226,37 @@ export const aiProviderService = {
     },
 
     async getDefaultProvider(workspaceId: string): Promise<AIProvider | null> {
+        const config = await this.getDefaultProviderConfig(workspaceId);
+        if (!config) return null;
+
+        const providers = await this.getProviders();
+        return (
+            providers.find(
+                (p) => p.providerId === config.providerId
+            ) ?? null
+        );
+    },
+
+    /**
+     * Devolve o provedor padrão configurado no workspace (referência por
+     * providerId), sem carregar a lista global de provedores.
+     */
+    async getDefaultProviderConfig(workspaceId: string): Promise<{
+        providerId: string;
+        modelCode: string | null;
+    } | null> {
         const { data: workspace, error: wsError } = await supabase
             .from('workspaces')
-            .select('defaultAIProviderId')
+            .select('defaultAIProviderId, defaultAIModel')
             .eq('id', workspaceId)
             .single();
 
         if (wsError || !workspace?.defaultAIProviderId) return null;
 
-        const providers = await this.getProviders(workspaceId);
-        return providers.find(p => p.providerId === workspace.defaultAIProviderId) ?? null;
+        return {
+            providerId: workspace.defaultAIProviderId,
+            modelCode: workspace.defaultAIModel,
+        };
     },
 
     async setDefaultProvider(
@@ -257,20 +279,18 @@ export const aiProviderService = {
     },
 
     async createCustomProvider(
-        workspaceId: string,
         input: CreateCustomProviderInput
     ): Promise<AIProvider> {
         const providerId = `custom_${uuidv4().slice(0, 8)}`;
 
         // Get max priority
-        const existing = await this.getProviders(workspaceId);
+        const existing = await this.getProviders();
         const maxPriority = existing.reduce((max, p) => Math.max(max, p.priority), 0);
 
         const { data: provider, error: providerError } = await supabase
             .from('ai_providers')
             .insert({
                 id: uuidv4(),
-                workspaceId,
                 providerId,
                 name: input.name,
                 description: input.description ?? null,
@@ -425,14 +445,17 @@ export const aiProviderService = {
         }
     },
 
-    async ensureDefaultProviders(workspaceId: string): Promise<boolean> {
-        const existing = await this.getProviders(workspaceId);
+    /**
+     * Cria os provedores padrão uma única vez por conta (global).
+     * Devolve true se foram criados, false se já existiam.
+     */
+    async ensureDefaultProviders(): Promise<boolean> {
+        const existing = await this.getProviders();
 
         if (existing.length > 0) return false;
 
         const providersToInsert = DEFAULT_AI_PROVIDERS.map(dp => ({
             id: uuidv4(),
-            workspaceId,
             providerId: dp.providerId,
             name: dp.name,
             description: dp.description,

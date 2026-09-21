@@ -32,9 +32,9 @@ interface WorkspaceState {
     clearError: () => void;
 }
 
-const ACTIVE_WORKSPACE_KEY = 'contentos-active-workspace';
+export const ACTIVE_WORKSPACE_KEY = 'contentos-active-workspace';
 
-function getPersistedWorkspaceId(): string | null {
+export function getPersistedWorkspaceId(): string | null {
     if (typeof window === 'undefined') return null;
     return window.localStorage.getItem(ACTIVE_WORKSPACE_KEY);
 }
@@ -119,6 +119,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
                 joinedAt: new Date().toISOString(),
                 memberCount: 1,
             };
+            if (typeof window !== 'undefined') {
+                window.localStorage.setItem(ACTIVE_WORKSPACE_KEY, workspaceId);
+            }
             set({
                 workspaces: [...get().workspaces, workspacesWithRole],
                 currentWorkspace: workspace,

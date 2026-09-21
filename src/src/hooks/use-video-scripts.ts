@@ -118,7 +118,7 @@ export function useVideoScripts(filters?: VideoScriptsFilters) {
                 setIsGenerating(false);
             }
         },
-        [currentWorkspace, fetchScripts]
+        [currentWorkspace, fetchScripts, providers, apiKeys]
     );
 
     const updateScript = useCallback(

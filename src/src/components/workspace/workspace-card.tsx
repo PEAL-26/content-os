@@ -1,12 +1,14 @@
 import type { WorkspaceWithRole } from '@/types/database';
 import { format } from 'date-fns';
 import { pt } from 'date-fns/locale';
-import { Users } from 'lucide-react';
+import { Pencil, Users } from 'lucide-react';
 
 interface WorkspaceCardProps {
     workspace: WorkspaceWithRole;
     isActive: boolean;
     onSelect: () => void;
+    /** Quando fornecida, mostra um botão "Editar" ao lado de "Entrar". */
+    onEdit?: () => void;
 }
 
 const ROLE_BADGES: Record<
@@ -31,6 +33,7 @@ export function WorkspaceCard({
     workspace,
     isActive,
     onSelect,
+    onEdit,
 }: WorkspaceCardProps) {
     const role = ROLE_BADGES[workspace.memberRole ?? 'VIEWER'];
     const initial = workspace.name.charAt(0).toUpperCase();
@@ -96,13 +99,25 @@ export function WorkspaceCard({
                     )}
                 </div>
 
-                <button
-                    type="button"
-                    onClick={onSelect}
-                    className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-500 focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-                >
-                    Entrar
-                </button>
+                <div className="flex items-center gap-2">
+                    {onEdit && (
+                        <button
+                            type="button"
+                            onClick={onEdit}
+                            className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50"
+                        >
+                            <Pencil className="h-4 w-4" />
+                            Editar
+                        </button>
+                    )}
+                    <button
+                        type="button"
+                        onClick={onSelect}
+                        className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-500 focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                    >
+                        Entrar
+                    </button>
+                </div>
             </div>
         </div>
     );

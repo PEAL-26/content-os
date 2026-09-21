@@ -160,7 +160,7 @@ export function useContentPieces(articleId: string) {
                 setGeneratingFormats(new Set());
             }
         },
-        [currentWorkspace, fetchPieces]
+        [currentWorkspace, fetchPieces, providers, apiKeys]
     );
 
     const updatePiece = useCallback(

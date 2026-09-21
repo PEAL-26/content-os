@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Modal } from '@/components/ui/modal';
 import type { AIProvider } from '@/services/ai-provider.service';
 
@@ -45,7 +45,24 @@ export function CustomProviderModal({
     const [isTesting, setIsTesting] = useState(false);
     const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null);
 
-    useEffect(() => {
+    // Sincroniza o estado do formulário com o provider selecionado ajustando o
+    // estado durante o render (padrão recomendado em vez de setState em effect).
+    const [syncKey, setSyncKey] = useState({
+        providerId: provider?.id ?? null,
+        existingApiKey,
+        isOpen,
+    });
+    if (
+        syncKey.providerId !== (provider?.id ?? null) ||
+        syncKey.existingApiKey !== existingApiKey ||
+        syncKey.isOpen !== isOpen
+    ) {
+        setSyncKey({
+            providerId: provider?.id ?? null,
+            existingApiKey,
+            isOpen,
+        });
+
         if (provider) {
             setName(provider.name);
             setBaseUrl(provider.baseUrl ?? '');
@@ -70,7 +87,7 @@ export function CustomProviderModal({
             setHeaders([]);
         }
         setTestResult(null);
-    }, [provider, existingApiKey, isOpen]);
+    }
 
     const addModel = () => {
         setModels([...models, { displayName: '', modelCode: '' }]);

@@ -1,55 +1,79 @@
-const STORAGE_PREFIX = 'contentos_ai_keys';
+const STORAGE_KEY = 'contentos_ai_keys';
+const LEGACY_PREFIX = 'contentos_ai_keys_';
 
-function getStorageKey(workspaceId: string): string {
-    return `${STORAGE_PREFIX}_${workspaceId}`;
+function readAll(): Record<string, string> {
+    try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        return stored ? (JSON.parse(stored) as Record<string, string>) : {};
+    } catch {
+        return {};
+    }
+}
+
+function writeAll(keys: Record<string, string>): void {
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(keys));
+    } catch (error) {
+        console.error('Erro ao guardar API keys:', error);
+    }
+}
+
+/**
+ * Migra as chaves antigas guardadas por workspace (contentos_ai_keys_<id>)
+ * para o armazenamento global único. Best-effort — só corre uma vez.
+ */
+function migrateLegacyKeys(): void {
+    try {
+        const keys = readAll();
+        const hasLegacy = Object.keys(keys).length === 0;
+
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+            const key = localStorage.key(i);
+            if (!key || !key.startsWith(LEGACY_PREFIX) || key === STORAGE_KEY) {
+                continue;
+            }
+            if (hasLegacy) {
+                try {
+                    const parsed = JSON.parse(
+                        localStorage.getItem(key) ?? '{}'
+                    ) as Record<string, string>;
+                    Object.assign(keys, parsed);
+                } catch {
+                    // ignora entradas corrompidas
+                }
+            }
+            localStorage.removeItem(key);
+        }
+
+        if (hasLegacy) {
+            writeAll(keys);
+        }
+    } catch {
+        // best-effort
+    }
 }
 
 export const aiProviderKeyService = {
-    getApiKey(workspaceId: string, providerId: string): string | null {
-        try {
-            const stored = localStorage.getItem(getStorageKey(workspaceId));
-            if (!stored) return null;
-            const keys = JSON.parse(stored) as Record<string, string>;
-            return keys[providerId] ?? null;
-        } catch {
-            return null;
-        }
+    getApiKey(providerId: string): string | null {
+        migrateLegacyKeys();
+        const keys = readAll();
+        return keys[providerId] ?? null;
     },
 
-    setApiKey(workspaceId: string, providerId: string, key: string): void {
-        try {
-            const stored = localStorage.getItem(getStorageKey(workspaceId));
-            const keys: Record<string, string> = stored ? JSON.parse(stored) : {};
-            keys[providerId] = key;
-            localStorage.setItem(getStorageKey(workspaceId), JSON.stringify(keys));
-        } catch (error) {
-            console.error('Erro ao guardar API key:', error);
-        }
+    setApiKey(providerId: string, key: string): void {
+        const keys = readAll();
+        keys[providerId] = key;
+        writeAll(keys);
     },
 
-    removeApiKey(workspaceId: string, providerId: string): void {
-        try {
-            const stored = localStorage.getItem(getStorageKey(workspaceId));
-            if (!stored) return;
-            const keys = JSON.parse(stored) as Record<string, string>;
-            delete keys[providerId];
-            localStorage.setItem(getStorageKey(workspaceId), JSON.stringify(keys));
-        } catch (error) {
-            console.error('Erro ao remover API key:', error);
-        }
+    removeApiKey(providerId: string): void {
+        const keys = readAll();
+        delete keys[providerId];
+        writeAll(keys);
     },
 
-    getAllApiKeys(workspaceId: string): Record<string, string> {
-        try {
-            const stored = localStorage.getItem(getStorageKey(workspaceId));
-            if (!stored) return {};
-            return JSON.parse(stored) as Record<string, string>;
-        } catch {
-            return {};
-        }
-    },
-
-    hasApiKey(workspaceId: string, providerId: string): boolean {
-        return this.getApiKey(workspaceId, providerId) !== null;
+    getAllApiKeys(): Record<string, string> {
+        migrateLegacyKeys();
+        return readAll();
     },
 };

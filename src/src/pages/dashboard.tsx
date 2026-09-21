@@ -4,7 +4,9 @@ import { WeekChecklist } from '@/components/dashboard/week-checklist';
 import { PillarBadge } from '@/components/content/pillar-badge';
 import { ChannelBadge } from '@/components/channels/channel-badge';
 import { useDashboard } from '@/hooks/use-dashboard';
+import { useWorkspace } from '@/hooks/use-workspace';
 import { getUserDisplayName } from '@/helpers/user';
+import { workspacePath } from '@/lib/workspace-paths';
 import { CONTENT_FORMAT_EMOJIS } from '@/helpers/content-format';
 import {
     Calendar,
@@ -22,6 +24,8 @@ import { Link } from 'react-router-dom';
 
 export function DashboardPage() {
     const { user } = useAuthContext();
+    const { currentWorkspace } = useWorkspace();
+    const workspaceId = currentWorkspace?.id ?? '';
     const {
         isLoading,
         error,
@@ -246,7 +250,10 @@ export function DashboardPage() {
                                 {draftArticles.map((article) => (
                                     <Link
                                         key={article.id}
-                                        to={`/dashboard/articles/${article.id}/edit`}
+                                        to={workspacePath(
+                                            workspaceId,
+                                            `articles/${article.id}/edit`
+                                        )}
                                         className="flex items-center justify-between rounded-lg border border-gray-200 p-3 transition-colors hover:bg-gray-50"
                                     >
                                         <div className="min-w-0 flex-1">
@@ -270,7 +277,10 @@ export function DashboardPage() {
                                 ))}
                                 {draftArticles.length > 0 && (
                                     <Link
-                                        to="/dashboard/articles"
+                                        to={workspacePath(
+                                            workspaceId,
+                                            'articles'
+                                        )}
                                         className="mt-2 flex items-center justify-center gap-1 text-sm text-blue-600 hover:text-blue-700"
                                     >
                                         Ver todos os artigos

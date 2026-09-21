@@ -7,7 +7,9 @@ import { useArticles, type ArticlesFilters } from '@/hooks/use-articles';
 import { useDebounce } from '@/hooks/use-debounce';
 import { usePillars } from '@/hooks/use-pillars';
 import { useProducts } from '@/hooks/use-products';
+import { useWorkspace } from '@/hooks/use-workspace';
 import type { CreateArticleInput } from '@/lib/schemas/article';
+import { workspacePath } from '@/lib/workspace-paths';
 import type { ArticleStatus, ArticleWithRelations } from '@/types/database';
 import type { ContentPillar } from '@/types/pillar';
 import { useQueryState } from 'nuqs';
@@ -42,6 +44,8 @@ function ArticleCard({
 }) {
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
+    const { currentWorkspace } = useWorkspace();
+    const workspaceId = currentWorkspace?.id ?? '';
 
     const handleDelete = async () => {
         setIsDeleting(true);
@@ -148,7 +152,10 @@ function ArticleCard({
 
                     <div className="flex shrink-0 items-center gap-1">
                         <Link
-                            to={`/dashboard/articles/${article.id}/edit`}
+                            to={workspacePath(
+                                workspaceId,
+                                `articles/${article.id}/edit`
+                            )}
                             className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
                             title="Editar"
                         >
@@ -608,6 +615,8 @@ function ArticleListContent({
     pillarOptions: Array<{ id: string; name: string; pillar: string }>;
 }) {
     const navigate = useNavigate();
+    const { currentWorkspace } = useWorkspace();
+    const workspaceId = currentWorkspace?.id ?? '';
     const {
         articles,
         isLoading,
@@ -630,7 +639,9 @@ function ArticleListContent({
     const handleCreate = async (data: CreateArticleInput) => {
         const result = await createArticle(data);
         if (result.success && result.articleId) {
-            navigate(`/dashboard/articles/${result.articleId}/edit`);
+            navigate(
+                workspacePath(workspaceId, `articles/${result.articleId}/edit`)
+            );
         }
         return result;
     };
@@ -818,7 +829,9 @@ function ArticleListContent({
                 isOpen={showGenerateModal}
                 onClose={() => setShowGenerateModal(false)}
                 onGenerated={(articleId) => {
-                    navigate(`/dashboard/articles/${articleId}/edit`);
+                    navigate(
+                        workspacePath(workspaceId, `articles/${articleId}/edit`)
+                    );
                 }}
             />
         </div>

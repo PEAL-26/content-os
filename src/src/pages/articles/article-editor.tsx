@@ -6,6 +6,7 @@ import { useDebounce } from '@/hooks/use-debounce';
 import { usePillars } from '@/hooks/use-pillars';
 import { useProducts } from '@/hooks/use-products';
 import { cn } from '@/lib/utils';
+import { workspacePath } from '@/lib/workspace-paths';
 import { articleService } from '@/services/article.service';
 import { useWorkspaceStore } from '@/stores/workspace-store';
 import {
@@ -38,6 +39,7 @@ export function ArticleEditor() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const { currentWorkspace } = useWorkspaceStore();
+    const workspaceId = currentWorkspace?.id ?? '';
     const { pillars } = usePillars();
     const { activeProducts } = useProducts();
 
@@ -94,18 +96,18 @@ export function ArticleEditor() {
                         keywords: data.keywords || [],
                     });
                 } else {
-                    navigate('/dashboard/articles');
+                    navigate(workspacePath(workspaceId, 'articles'));
                 }
             } catch (err) {
                 console.error('Error loading article:', err);
-                navigate('/dashboard/articles');
+                navigate(workspacePath(workspaceId, 'articles'));
             } finally {
                 setIsLoading(false);
             }
         };
 
         loadArticle();
-    }, [id, navigate]);
+    }, [id, navigate, workspaceId]);
 
     useEffect(() => {
         if (!id) return;
@@ -265,7 +267,7 @@ export function ArticleEditor() {
             <div className="py-12 text-center">
                 <p className="text-gray-500">Artigo não encontrado</p>
                 <Link
-                    to="/dashboard/articles"
+                    to={workspacePath(workspaceId, 'articles')}
                     className="mt-2 text-blue-600 hover:underline"
                 >
                     Voltar à lista
@@ -283,7 +285,7 @@ export function ArticleEditor() {
             <div className="flex items-center justify-between border-b px-6 py-4">
                 <div className="flex items-center gap-4">
                     <Link
-                        to="/dashboard/articles"
+                        to={workspacePath(workspaceId, 'articles')}
                         className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
                     >
                         <svg

@@ -1,10 +1,11 @@
 import { useWorkspace } from '@/hooks/use-workspace';
-import { Cog, Plus } from 'lucide-react';
+import { workspacePath } from '@/lib/workspace-paths';
+import { Cog } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 export function WorkspaceSelector() {
-    const { currentWorkspace, workspaces, setWorkspace } = useWorkspace();
+    const { currentWorkspace, workspaces } = useWorkspace();
     const navigate = useNavigate();
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -94,8 +95,10 @@ export function WorkspaceSelector() {
                                 key={workspace.id}
                                 type="button"
                                 onClick={() => {
-                                    setWorkspace(workspace);
                                     setIsOpen(false);
+                                    navigate(
+                                        workspacePath(workspace.id, 'dashboard')
+                                    );
                                 }}
                                 className={`flex w-full items-center justify-between px-3 py-2 text-sm ${
                                     workspace.id === currentWorkspace?.id
@@ -119,23 +122,19 @@ export function WorkspaceSelector() {
                             type="button"
                             onClick={() => {
                                 setIsOpen(false);
-                                navigate('/workspaces');
+                                if (currentWorkspace) {
+                                    navigate(
+                                        workspacePath(
+                                            currentWorkspace.id,
+                                            'settings'
+                                        )
+                                    );
+                                }
                             }}
                             className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
                         >
                             <Cog className="h-4 w-4 text-gray-400" />
                             Gerir workspaces
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => {
-                                setIsOpen(false);
-                                navigate('/onboarding');
-                            }}
-                            className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                        >
-                            <Plus className="h-4 w-4 text-gray-400" />
-                            Criar novo workspace
                         </button>
                     </div>
                 </div>

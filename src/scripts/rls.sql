@@ -504,144 +504,88 @@ USING (
 );
 
 -- =============================================================================
--- 12. AI PROVIDERS
+-- 17. AI PROVIDERS (globais da conta)
 -- =============================================================================
 
 ALTER TABLE ai_providers        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ai_provider_models  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ai_provider_headers ENABLE ROW LEVEL SECURITY;
 
+-- Provedores, modelos e headers de IA são configuração global da conta:
+-- qualquer utilizador autenticado pode geri-los (já não dependem de workspace).
+
 -- ai_providers
 CREATE POLICY "ai_providers_select"
 ON ai_providers FOR SELECT
-USING ("workspaceId"::uuid IN (SELECT my_workspace_ids()));
+USING (auth.uid() IS NOT NULL);
 
 CREATE POLICY "ai_providers_insert"
 ON ai_providers FOR INSERT
-WITH CHECK (
-  "workspaceId"::uuid IN (
-    SELECT "workspaceId"::uuid
-    FROM workspace_members
-    WHERE "userId"::uuid = auth.uid() AND role IN ('OWNER', 'EDITOR')
-  )
-);
+WITH CHECK (auth.uid() IS NOT NULL);
 
 CREATE POLICY "ai_providers_update"
 ON ai_providers FOR UPDATE
-USING (
-  "workspaceId"::uuid IN (
-    SELECT "workspaceId"::uuid
-    FROM workspace_members
-    WHERE "userId"::uuid = auth.uid() AND role IN ('OWNER', 'EDITOR')
-  )
-);
+USING (auth.uid() IS NOT NULL)
+WITH CHECK (auth.uid() IS NOT NULL);
 
 CREATE POLICY "ai_providers_delete"
 ON ai_providers FOR DELETE
-USING (
-  "workspaceId"::uuid IN (
-    SELECT "workspaceId"::uuid
-    FROM workspace_members
-    WHERE "userId"::uuid = auth.uid() AND role IN ('OWNER', 'EDITOR')
-  )
-);
+USING (auth.uid() IS NOT NULL);
 
 -- ai_provider_models
 CREATE POLICY "ai_provider_models_select"
 ON ai_provider_models FOR SELECT
 USING (
-  "providerId" IN (
-    SELECT id FROM ai_providers
-    WHERE "workspaceId"::uuid IN (SELECT my_workspace_ids())
-  )
+  "providerId" IN (SELECT id FROM ai_providers)
 );
 
 CREATE POLICY "ai_provider_models_insert"
 ON ai_provider_models FOR INSERT
 WITH CHECK (
-  "providerId" IN (
-    SELECT id FROM ai_providers
-    WHERE "workspaceId"::uuid IN (
-      SELECT "workspaceId"::uuid
-      FROM workspace_members
-      WHERE "userId"::uuid = auth.uid() AND role IN ('OWNER', 'EDITOR')
-    )
-  )
+  "providerId" IN (SELECT id FROM ai_providers)
 );
 
 CREATE POLICY "ai_provider_models_update"
 ON ai_provider_models FOR UPDATE
 USING (
-  "providerId" IN (
-    SELECT id FROM ai_providers
-    WHERE "workspaceId"::uuid IN (
-      SELECT "workspaceId"::uuid
-      FROM workspace_members
-      WHERE "userId"::uuid = auth.uid() AND role IN ('OWNER', 'EDITOR')
-    )
-  )
+  "providerId" IN (SELECT id FROM ai_providers)
+)
+WITH CHECK (
+  "providerId" IN (SELECT id FROM ai_providers)
 );
 
 CREATE POLICY "ai_provider_models_delete"
 ON ai_provider_models FOR DELETE
 USING (
-  "providerId" IN (
-    SELECT id FROM ai_providers
-    WHERE "workspaceId"::uuid IN (
-      SELECT "workspaceId"::uuid
-      FROM workspace_members
-      WHERE "userId"::uuid = auth.uid() AND role IN ('OWNER', 'EDITOR')
-    )
-  )
+  "providerId" IN (SELECT id FROM ai_providers)
 );
 
 -- ai_provider_headers
 CREATE POLICY "ai_provider_headers_select"
 ON ai_provider_headers FOR SELECT
 USING (
-  "providerId" IN (
-    SELECT id FROM ai_providers
-    WHERE "workspaceId"::uuid IN (SELECT my_workspace_ids())
-  )
+  "providerId" IN (SELECT id FROM ai_providers)
 );
 
 CREATE POLICY "ai_provider_headers_insert"
 ON ai_provider_headers FOR INSERT
 WITH CHECK (
-  "providerId" IN (
-    SELECT id FROM ai_providers
-    WHERE "workspaceId"::uuid IN (
-      SELECT "workspaceId"::uuid
-      FROM workspace_members
-      WHERE "userId"::uuid = auth.uid() AND role IN ('OWNER', 'EDITOR')
-    )
-  )
+  "providerId" IN (SELECT id FROM ai_providers)
 );
 
 CREATE POLICY "ai_provider_headers_update"
 ON ai_provider_headers FOR UPDATE
 USING (
-  "providerId" IN (
-    SELECT id FROM ai_providers
-    WHERE "workspaceId"::uuid IN (
-      SELECT "workspaceId"::uuid
-      FROM workspace_members
-      WHERE "userId"::uuid = auth.uid() AND role IN ('OWNER', 'EDITOR')
-    )
-  )
+  "providerId" IN (SELECT id FROM ai_providers)
+)
+WITH CHECK (
+  "providerId" IN (SELECT id FROM ai_providers)
 );
 
 CREATE POLICY "ai_provider_headers_delete"
 ON ai_provider_headers FOR DELETE
 USING (
-  "providerId" IN (
-    SELECT id FROM ai_providers
-    WHERE "workspaceId"::uuid IN (
-      SELECT "workspaceId"::uuid
-      FROM workspace_members
-      WHERE "userId"::uuid = auth.uid() AND role IN ('OWNER', 'EDITOR')
-    )
-  )
+  "providerId" IN (SELECT id FROM ai_providers)
 );
 
 -- =============================================================================

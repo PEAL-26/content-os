@@ -1,7 +1,9 @@
 import { WorkspaceSelector } from '@/components/workspace/workspace-selector';
 import { useAuthContext } from '@/context/use-auth-context';
+import { useWorkspace } from '@/hooks/use-workspace';
 import { useWorkspaceContentPieces } from '@/hooks/use-workspace-content-pieces';
 import { getUserDisplayName, getUserInitial } from '@/helpers/user';
+import { workspacePath } from '@/lib/workspace-paths';
 import { useLocation } from 'react-router-dom';
 import { Link } from 'react-router-dom';
 import {
@@ -21,7 +23,7 @@ import {
     Sparkles,
     Brain,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 const STORAGE_KEY = 'contentos-sidebar-open';
 
@@ -36,34 +38,6 @@ interface NavGroup {
     items: NavItem[];
 }
 
-const navigation: NavGroup[] = [
-    {
-        items: [
-            { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-            { name: 'Planeador', href: '/dashboard/planning', icon: CalendarCheck },
-        ],
-    },
-    {
-        title: 'Conteúdo',
-        items: [
-            { name: 'Artigos', href: '/dashboard/articles', icon: FileText },
-            { name: 'Peças', href: '/dashboard/content', icon: Layers },
-            { name: 'Roteiros', href: '/dashboard/video-scripts', icon: Clapperboard },
-        ],
-    },
-    {
-        title: 'Configurações',
-        items: [
-            { name: 'Workspace', href: '/dashboard/settings', icon: Building2 },
-            { name: 'IA', href: '/dashboard/settings/ai', icon: Brain },
-            { name: 'Produtos', href: '/dashboard/settings/products', icon: Package },
-            { name: 'Pilares', href: '/dashboard/settings/pillars', icon: Flag },
-            { name: 'Canais', href: '/dashboard/settings/channels', icon: Radio },
-            { name: 'Membros', href: '/dashboard/settings/members', icon: Users },
-        ],
-    },
-];
-
 function getInitialSidebarState(): boolean {
     if (typeof window === 'undefined') return false;
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -76,9 +50,87 @@ function getInitialSidebarState(): boolean {
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
     const location = useLocation();
     const { user, signOut } = useAuthContext();
+    const { currentWorkspace } = useWorkspace();
     const { pieces: pendingPieces } = useWorkspaceContentPieces({
         status: 'DRAFT',
     });
+
+    const workspaceId = currentWorkspace?.id;
+
+    const navigation = useMemo<NavGroup[]>(() => {
+        if (!workspaceId) return [];
+        return [
+            {
+                items: [
+                    {
+                        name: 'Dashboard',
+                        href: workspacePath(workspaceId, 'dashboard'),
+                        icon: LayoutDashboard,
+                    },
+                    {
+                        name: 'Planeador',
+                        href: workspacePath(workspaceId, 'planning'),
+                        icon: CalendarCheck,
+                    },
+                ],
+            },
+            {
+                title: 'Conteúdo',
+                items: [
+                    {
+                        name: 'Artigos',
+                        href: workspacePath(workspaceId, 'articles'),
+                        icon: FileText,
+                    },
+                    {
+                        name: 'Peças',
+                        href: workspacePath(workspaceId, 'content'),
+                        icon: Layers,
+                    },
+                    {
+                        name: 'Roteiros',
+                        href: workspacePath(workspaceId, 'video-scripts'),
+                        icon: Clapperboard,
+                    },
+                ],
+            },
+            {
+                title: 'Configurações',
+                items: [
+                    {
+                        name: 'Workspace',
+                        href: workspacePath(workspaceId, 'settings'),
+                        icon: Building2,
+                    },
+                    {
+                        name: 'IA',
+                        href: workspacePath(workspaceId, 'settings/ai'),
+                        icon: Brain,
+                    },
+                    {
+                        name: 'Produtos',
+                        href: workspacePath(workspaceId, 'settings/products'),
+                        icon: Package,
+                    },
+                    {
+                        name: 'Pilares',
+                        href: workspacePath(workspaceId, 'settings/pillars'),
+                        icon: Flag,
+                    },
+                    {
+                        name: 'Canais',
+                        href: workspacePath(workspaceId, 'settings/channels'),
+                        icon: Radio,
+                    },
+                    {
+                        name: 'Membros',
+                        href: workspacePath(workspaceId, 'settings/members'),
+                        icon: Users,
+                    },
+                ],
+            },
+        ];
+    }, [workspaceId]);
 
     const [sidebarOpen, setSidebarOpen] = useState(getInitialSidebarState);
     const [isMobile, setIsMobile] = useState(false);
