@@ -62,7 +62,6 @@ export const pillarService = {
             examples: p.examples,
             isActive: true,
             sortOrder: p.sortOrder,
-            createdAt: new Date().toISOString(),
         }));
 
         const { error } = await supabase
