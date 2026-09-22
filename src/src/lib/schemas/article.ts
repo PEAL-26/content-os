@@ -40,6 +40,10 @@ export const updateArticleSchema = z.object({
     keywords: z.array(z.string()).optional(),
     status: z.enum(['DRAFT', 'REVIEW', 'APPROVED', 'PUBLISHED']).optional(),
     publishedUrl: z.string().url().optional().nullable(),
+    /** Artefacto publicado: URL (Storage assets ou link externo). */
+    assetUrl: z.string().url().optional().nullable(),
+    /** Nome do ficheiro do artefacto. */
+    assetName: z.string().max(300).optional().nullable(),
     aiPromptUsed: z.string().optional().nullable(),
     readingTimeMin: z.number().optional().nullable(),
 });

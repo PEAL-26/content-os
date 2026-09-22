@@ -78,6 +78,17 @@ enum FunnelStage {
   BOTTOM // Conversão
 }
 
+enum PromptTargetType {
+  PIECE
+  VIDEO_SCRIPT
+}
+
+enum PublicationTargetType {
+  ARTICLE
+  PIECE
+  VIDEO_SCRIPT
+}
+
 // =============================================================================
 // WORKSPACE (Multi-tenant root)
 // =============================================================================
@@ -106,7 +117,7 @@ model Workspace {
   articlesPerWeek Int @default(1)
 
   // Configurações de IA
-  defaultAIProviderId String? // ID do provedor padrão (ex: "anthropic")
+  defaultAIProviderId String? // Row id (UUID) do AIProvider padrão
   defaultAIModel      String? // Código do modelo padrão (ex: "claude-sonnet-4-20250514")
 
   // Relações
@@ -117,6 +128,7 @@ model Workspace {
   articles      Article[]
   weeklyPlans   WeeklyPlan[]
   tags          Tag[]
+  aiSystemPrompts AISystemPrompt[]
 
   @@map("workspaces")
 }
@@ -268,6 +280,10 @@ model Article {
   publishedAt  DateTime?
   publishedUrl String? // URL final no site
 
+  // Artefacto publicado
+  assetUrl  String? // URL do artefacto (Storage assets ou link externo)
+  assetName String? // Nome do ficheiro do artefacto
+
   // IA
   aiGenerated  Boolean @default(false)
   aiPromptUsed String? // Prompt usado para gerar (auditoria)
@@ -322,6 +338,10 @@ model ContentPiece {
   status      ContentPieceStatus @default(DRAFT)
   publishedAt DateTime?
 
+  // Artefacto publicado
+  assetUrl  String? // URL do artefacto (Storage assets ou link externo)
+  assetName String? // Nome do ficheiro do artefacto
+
   // IA
   aiGenerated Boolean @default(false)
 
@@ -363,6 +383,10 @@ model VideoScript {
   // Estado
   status      ArticleStatus @default(DRAFT) // Reutiliza enum
   aiGenerated Boolean       @default(false)
+
+  // Artefacto publicado
+  assetUrl  String? // URL do artefacto (Storage assets ou link externo)
+  assetName String? // Nome do ficheiro do artefacto
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -447,16 +471,26 @@ model AIProvider {
   name        String   // Nome de exibição
   description String?
   baseUrl     String?  // URL base da API (obrigatório para custom)
-  isDefault   Boolean  @default(false) // true para os pré-cadastrados
-  isCustom    Boolean  @default(false) // true para provedores do utilizador
-  isActive    Boolean  @default(true)
-  priority    Int      @default(0) // Ordem no fallback
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
 
-  models    AIProviderModel[]
-  headers   AIProviderHeader[]
+  // Scoping: exatamente um de userId/workspaceId (CHECK no migration SQL)
+  userId      String? // Dono a nível de utilizador (acessível em todos os workspaces dele)
+  workspaceId String? // Workspace específico (só membros desse workspace)
 
+  apiKeyEncrypted String? // API key cifrada (AES-GCM, chave derivada da password)
+  apiKeyIv        String? // IV (base64) usado na cifra da API key
+  config          Json?   // Configuração padrão do provider (temperature, max_tokens, ...)
+  isDefault       Boolean @default(false) // true para os pré-cadastrados
+  isCustom        Boolean @default(false) // true para provedores do utilizador
+  isActive        Boolean @default(true)
+  priority        Int     @default(0) // Ordem no fallback (dentro do scope do dono)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  models  AIProviderModel[]
+  headers AIProviderHeader[]
+
+  @@index([userId])
+  @@index([workspaceId])
   @@map("ai_providers")
 }
 
@@ -469,6 +503,7 @@ model AIProviderModel {
   providerId  String
   displayName String   // "Claude Sonnet 4"
   modelCode   String   // "claude-sonnet-4-20250514"
+  config      Json?    // Configuração padrão do modelo (temperature, max_tokens, ...)
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
 
@@ -491,4 +526,64 @@ model AIProviderHeader {
   provider AIProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
 
   @@map("ai_provider_headers")
+}
+
+// =============================================================================
+// AI SYSTEM PROMPTS (Prompts globais por tipo de conteúdo — nunca por provider)
+// Resolução: workspace → user → default no código. CHECK exatamente um de
+// userId/workspaceId (migration SQL).
+// =============================================================================
+
+model AISystemPrompt {
+  id           String   @id @default(uuid())
+  userId       String? // Override a nível de utilizador
+  workspaceId  String? // Override a nível de workspace (ganha sobre o do utilizador)
+  contentType  String // "article" | "image" | "carousel" | "linkedin_post" | ...
+  systemPrompt String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, contentType])
+  @@unique([workspaceId, contentType])
+  @@index([workspaceId])
+  @@map("ai_system_prompts")
+}
+
+// =============================================================================
+// CONTENT GENERATION PROMPTS (Prompt final portátil de cada peça/roteiro gerado)
+// Uma linha por item (carrossel → por slide; thread → por tweet; simples → "main").
+// =============================================================================
+
+model ContentGenerationPrompt {
+  id         String           @id @default(uuid())
+  targetType PromptTargetType // PIECE | VIDEO_SCRIPT
+  targetId   String           // content_pieces.id ou video_scripts.id (polimórfico)
+  itemKey    String?          // "main" | "slide-1" | "tweet-3" | ...
+  prompt     String           // Prompt final self-contained (portátil)
+  providerId String?          // Row id do ai_providers usado na geração
+  modelCode  String?          // Código do modelo usado na geração
+  createdAt  DateTime         @default(now())
+
+  @@index([targetType, targetId])
+  @@map("content_generation_prompts")
+}
+
+// =============================================================================
+// CONTENT PUBLICATIONS (Publicações multi-plataforma de conteúdo publicável)
+// Polimórfico: ARTICLE | PIECE | VIDEO_SCRIPT → targetId.
+// =============================================================================
+
+model ContentPublication {
+  id         String                @id @default(uuid())
+  targetType PublicationTargetType // ARTICLE | PIECE | VIDEO_SCRIPT
+  targetId   String                // articles.id | content_pieces.id | video_scripts.id
+  platform   String                // "LINKEDIN" | "INSTAGRAM" | "outros" | ...
+  url        String                // Link da publicação
+  publishedAt DateTime             @default(now())
+  createdAt   DateTime             @default(now())
+
+  @@index([targetType, targetId])
+  @@map("content_publications")
 }

@@ -16,6 +16,8 @@ export interface Workspace {
     productRatio: number;
     postsPerWeek: number;
     articlesPerWeek: number;
+    defaultAIProviderId?: string | null;
+    defaultAIModel?: string | null;
 }
 
 export interface WorkspaceMember {
@@ -157,6 +159,10 @@ export interface Article {
     status: ArticleStatus;
     publishedAt: string | null;
     publishedUrl: string | null;
+    /** Artefacto publicado: URL (Storage assets ou link externo). */
+    assetUrl: string | null;
+    /** Nome do ficheiro do artefacto. */
+    assetName: string | null;
     aiGenerated: boolean;
     aiPromptUsed: string | null;
     readingTimeMin: number | null;
@@ -266,6 +272,10 @@ export interface ContentPiece {
     slideCount: number | null;
     status: ContentPieceStatus;
     publishedAt: string | null;
+    /** Artefacto publicado: URL (Storage assets ou link externo). */
+    assetUrl: string | null;
+    /** Nome do ficheiro do artefacto. */
+    assetName: string | null;
     aiGenerated: boolean;
     createdAt: string;
     updatedAt: string;
@@ -285,4 +295,55 @@ export interface ContentPieceWithRelations extends ContentPiece {
         channel: SocialChannel;
         handle: string | null;
     } | null;
+}
+
+// =============================================================================
+// AI SYSTEM PROMPTS (globais por tipo de conteúdo, nunca por provider)
+// =============================================================================
+
+export type AISystemPromptScope =
+    | { type: 'user'; userId: string }
+    | { type: 'workspace'; workspaceId: string };
+
+export interface AISystemPrompt {
+    id: string;
+    userId: string | null;
+    workspaceId: string | null;
+    contentType: string; // 'article' | ContentFormat (ex: 'CAROUSEL')
+    systemPrompt: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+// =============================================================================
+// CONTENT GENERATION PROMPTS (prompt final portátil por item de peça/roteiro)
+// =============================================================================
+
+export type GenerationPromptTargetType = 'PIECE' | 'VIDEO_SCRIPT';
+
+export interface ContentGenerationPrompt {
+    id: string;
+    targetType: GenerationPromptTargetType;
+    targetId: string;
+    itemKey: string | null; // 'main' | 'slide-1' | 'tweet-3' | ...
+    prompt: string;
+    providerId: string | null;
+    modelCode: string | null;
+    createdAt: string;
+}
+
+// =============================================================================
+// CONTENT PUBLICATIONS (publicações multi-plataforma, polimórfico)
+// =============================================================================
+
+export type PublicationTargetType = 'ARTICLE' | 'PIECE' | 'VIDEO_SCRIPT';
+
+export interface ContentPublication {
+    id: string;
+    targetType: PublicationTargetType;
+    targetId: string;
+    platform: string; // 'LINKEDIN' | 'INSTAGRAM' | 'outros' | ...
+    url: string;
+    publishedAt: string;
+    createdAt: string;
 }

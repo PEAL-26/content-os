@@ -32,18 +32,32 @@ export type AIProviderId =
     | 'nvidia'
     | 'ollama';
 
+/** Opções de configuração de IA por provider/modelo (defaults). */
+export interface AIProviderConfigOptions {
+    temperature?: number | null;
+    max_tokens?: number | null;
+    /** Nível de raciocínio para modelos que o suportam (big-pickle, Nemotron…). */
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | null;
+}
+
+/**
+ * Configuração resolvida de um provedor de IA, pronta a usar na fábrica
+ * OpenAI-compatible. Segue o padrão do projecto pealtech/system.
+ */
 export interface AIProviderConfig {
-    id: AIProviderId;
+    /** id do modelo (ai_provider_models.id) */
+    id: string;
+    /** id técnico do provider ("anthropic", "openai", "custom_abc123") */
+    providerId: string;
+    /** nome do provider */
     name: string;
-    apiKeyEnvVar: string;
-    apiUrlEnvVar?: string;
-    models: {
-        primary: string;
-        fallback: string;
-    };
-    priority: number;
-    isFree: boolean;
-    description?: string;
+    /** código do modelo enviado à API (ai_provider_models.modelCode) */
+    model: string;
+    /** nome de exibição do modelo (ai_provider_models.displayName) */
+    modelName: string;
+    base_url: string;
+    api_key: string;
+    config: AIProviderConfigOptions;
 }
 
 export interface AIProviderResult {
@@ -64,6 +78,7 @@ export type GenerateArticleResult =
           success: true;
           article: AIGeneratedArticle;
           provider: AIProviderId;
+          /** Prompt final completo (system + user) — portátil (aiPromptUsed). */
           prompt: string;
       }
     | { success: false; error: string; code: AIProviderResult['code'] };
@@ -94,6 +109,8 @@ export type GenerateVideoScriptResult =
           script: GeneratedVideoScript;
           provider: AIProviderId;
           prompt: string;
+          /** Prompt final portátil por item (para content_generation_prompts). */
+          portablePrompts?: import('@/services/ai-prompt.service').PortablePromptItem[];
       }
     | { success: false; error: string; code: AIProviderResult['code'] };
 

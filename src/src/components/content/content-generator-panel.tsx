@@ -1,4 +1,8 @@
 import { ChannelBadge } from '@/components/channels/channel-badge';
+import {
+    AIProviderPicker,
+    type AIProviderSelection,
+} from '@/components/ai/ai-provider-picker';
 import { useChannels } from '@/hooks/use-channels';
 import { useContentPieces } from '@/hooks/use-content-pieces';
 import type {
@@ -73,6 +77,8 @@ export function ContentGeneratorPanel({
     const [editingPiece, setEditingPiece] =
         useState<ContentPieceWithRelations | null>(null);
     const [isSavingModal, setIsSavingModal] = useState(false);
+    const [preferred, setPreferred] = useState<AIProviderSelection | null>(null);
+    const [additionalInstructions, setAdditionalInstructions] = useState('');
 
     const piecesByFormat = useMemo(() => {
         const map = new Map<ContentFormat, ContentPieceWithRelations[]>();
@@ -127,6 +133,9 @@ export function ContentGeneratorPanel({
             channelIds,
             product,
             pillar,
+            additionalInstructions:
+                additionalInstructions.trim() || undefined,
+            preferred,
         });
 
         if (result.errors.length > 0) {
@@ -251,6 +260,33 @@ export function ContentGeneratorPanel({
                 </div>
             </div>
 
+            <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                    Provedor / Modelo
+                </label>
+                <AIProviderPicker
+                    value={preferred}
+                    onChange={setPreferred}
+                    disabled={isGenerating}
+                />
+            </div>
+
+            <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                    Instruções adicionais
+                </label>
+                <textarea
+                    value={additionalInstructions}
+                    onChange={(e) =>
+                        setAdditionalInstructions(e.target.value)
+                    }
+                    disabled={isGenerating}
+                    rows={2}
+                    placeholder="Indicações extra para esta geração (opcional)..."
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none disabled:bg-gray-50"
+                />
+            </div>
+
             <button
                 onClick={handleGenerate}
                 disabled={
@@ -347,6 +383,13 @@ export function ContentGeneratorPanel({
                 onClose={() => setEditingPiece(null)}
                 piece={editingPiece}
                 onSave={handleSavePiece}
+                onAssetChange={
+                    editingPiece
+                        ? async (data) => {
+                              await updatePiece(editingPiece.id, data);
+                          }
+                        : undefined
+                }
                 isSaving={isSavingModal}
             />
         </div>

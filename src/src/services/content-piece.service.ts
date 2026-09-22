@@ -8,6 +8,7 @@ import type {
     ContentSlide,
 } from '@/types/database';
 import { v4 as uuidv4 } from 'uuid';
+import { saveGenerationPrompts, type PortablePromptItem } from '@/services/ai-prompt.service';
 
 export interface CreateContentPieceInput {
     articleId: string;
@@ -24,6 +25,12 @@ export interface CreateContentPieceInput {
     slides?: ContentSlide[] | null;
     slideCount?: number | null;
     aiGenerated?: boolean;
+    /** Artefacto publicado: URL (Storage assets ou link externo). */
+    assetUrl?: string | null;
+    /** Nome do ficheiro do artefacto. */
+    assetName?: string | null;
+    /** Prompts finais portáteis por item (gravados em content_generation_prompts). */
+    portablePrompts?: PortablePromptItem[];
 }
 
 export interface UpdateContentPieceInput {
@@ -36,7 +43,11 @@ export interface UpdateContentPieceInput {
     slideCount?: number | null;
     channelId?: string | null;
     pillar?: ContentPillar | null;
-    publishedAt?: string
+    publishedAt?: string;
+    /** Artefacto publicado: URL (Storage assets ou link externo). */
+    assetUrl?: string | null;
+    /** Nome do ficheiro do artefacto. */
+    assetName?: string | null;
 }
 
 export const contentPieceService = {
@@ -167,6 +178,8 @@ export const contentPieceService = {
                 slideCount: input.slideCount || null,
                 status: 'DRAFT',
                 aiGenerated: input.aiGenerated || false,
+                assetUrl: input.assetUrl ?? null,
+                assetName: input.assetName ?? null,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
             })
@@ -175,6 +188,15 @@ export const contentPieceService = {
 
         if (error) {
             throw new Error(`Erro ao criar peça de conteúdo: ${error.message}`);
+        }
+
+        // Guarda os prompts finais portáteis por item.
+        if (input.portablePrompts && input.portablePrompts.length > 0) {
+            await saveGenerationPrompts({
+                targetType: 'PIECE',
+                targetId: (data as ContentPiece).id,
+                items: input.portablePrompts,
+            });
         }
 
         return data as ContentPiece;
@@ -200,6 +222,8 @@ export const contentPieceService = {
             updateData.channelId = input.channelId;
         if (input.pillar !== undefined) updateData.pillar = input.pillar;
         if (input.publishedAt !== undefined) updateData.publishedAt = input.publishedAt;
+        if (input.assetUrl !== undefined) updateData.assetUrl = input.assetUrl;
+        if (input.assetName !== undefined) updateData.assetName = input.assetName;
 
         const { data, error } = await supabase
             .from('content_pieces')
@@ -279,6 +303,8 @@ export const contentPieceService = {
             slideCount: input.slideCount || null,
             status: 'DRAFT' as const,
             aiGenerated: input.aiGenerated || false,
+            assetUrl: input.assetUrl ?? null,
+            assetName: input.assetName ?? null,
             createdAt: now,
             updatedAt: now,
         }));
@@ -294,6 +320,20 @@ export const contentPieceService = {
             );
         }
 
-        return data as ContentPiece[];
+        const created = data as ContentPiece[];
+
+        // Guarda os prompts finais portáteis por item.
+        for (let i = 0; i < created.length; i++) {
+            const input = pieces[i];
+            if (input.portablePrompts && input.portablePrompts.length > 0) {
+                await saveGenerationPrompts({
+                    targetType: 'PIECE',
+                    targetId: created[i].id,
+                    items: input.portablePrompts,
+                });
+            }
+        }
+
+        return created;
     },
 };

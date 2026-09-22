@@ -6,6 +6,7 @@ interface AIProviderCardProps {
     isDefault: boolean;
     onConfigure: () => void;
     onDelete?: () => void;
+    onRemoveApiKey?: () => void;
     canDelete: boolean;
 }
 
@@ -19,6 +20,7 @@ const PROVIDER_ICONS: Record<string, string> = {
     cerebras: '🧠',
     together: '🌐',
     openrouter: '🔗',
+    nvidia: '🟢',
     ollama: '💻',
 };
 
@@ -28,9 +30,16 @@ export function AIProviderCard({
     isDefault,
     onConfigure,
     onDelete,
+    onRemoveApiKey,
     canDelete,
 }: AIProviderCardProps) {
     const icon = provider.isCustom ? '🔧' : PROVIDER_ICONS[provider.providerId] ?? '🤖';
+
+    // Uma chave está "guardada" quando a linha tem ciphertext (apiKeyEncrypted/apiKeyIv)
+    // — independentemente de estar descifrada em memória (apiKeys). Só assim o botão
+    // "Remover chave" serve de escape hatch nos cenários de password errada ou chave
+    // corrompida, em que apiKeys[] está vazio mas a chave continua guardada na BD.
+    const hasStoredKey = !!(provider.apiKeyEncrypted && provider.apiKeyIv);
 
     return (
         <div className="flex items-center gap-4 rounded-lg border border-gray-200 bg-white px-4 py-3 shadow-sm hover:border-gray-300 transition-colors">
@@ -98,6 +107,16 @@ export function AIProviderCard({
                 >
                     Configurar
                 </button>
+                {hasStoredKey && onRemoveApiKey && (
+                    <button
+                        type="button"
+                        onClick={onRemoveApiKey}
+                        className="rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-600"
+                        title="Remove a chave guardada deste provedor sem precisar da password (útil se a password estiver errada ou a chave corrompida)"
+                    >
+                        Remover chave
+                    </button>
+                )}
                 {canDelete && onDelete && (
                     <button
                         type="button"

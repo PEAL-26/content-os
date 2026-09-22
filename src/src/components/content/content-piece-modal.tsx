@@ -2,6 +2,7 @@ import { Modal } from '@/components/ui/modal';
 import { useChannels } from '@/hooks/use-channels';
 import type { ContentPieceWithRelations, ContentSlide } from '@/types/database';
 import { CHANNEL_LABELS, CONTENT_FORMAT_LABELS } from '@/types/database';
+import { ContentMetaManager } from './content-meta-manager';
 import { useEffect, useState } from 'react';
 
 interface ContentPieceModalProps {
@@ -17,6 +18,11 @@ interface ContentPieceModalProps {
         slides: ContentSlide[] | null;
         channelId: string | null;
     }) => Promise<void>;
+    /** Grava o artefacto (URL + nome) na peça. */
+    onAssetChange?: (data: {
+        assetUrl: string | null;
+        assetName: string | null;
+    }) => Promise<void>;
     isSaving?: boolean;
 }
 
@@ -25,6 +31,7 @@ export function ContentPieceModal({
     onClose,
     piece,
     onSave,
+    onAssetChange,
     isSaving = false,
 }: ContentPieceModalProps) {
     const { channels } = useChannels();
@@ -325,6 +332,16 @@ export function ContentPieceModal({
                         </div>
                     </div>
                 )}
+            </div>
+
+            <div className="mt-6 space-y-4 border-t border-gray-200 pt-4">
+                <ContentMetaManager
+                    targetType="PIECE"
+                    targetId={piece.id}
+                    assetUrl={piece.assetUrl}
+                    assetName={piece.assetName}
+                    onAssetChange={onAssetChange}
+                />
             </div>
 
             <div className="mt-6 flex justify-end gap-3 border-t pt-4">

@@ -3,26 +3,20 @@ import tailwindcss from '@tailwindcss/vite';
 import react, { reactCompilerPreset } from '@vitejs/plugin-react';
 import * as path from 'path';
 import { defineConfig } from 'vite';
+import { apiAiDevPlugin } from './server/vite-api-plugin';
 
 // https://vite.dev/config/
 export default defineConfig({
-    server:{
-        allowedHosts:[".ngrok-free.app"],
-        proxy: {
-            '/v1': {
-                target: 'https://integrate.api.nvidia.com',
-                changeOrigin: true,
-                rewrite: (path) => path.replace(/^\/v1/, '/v1'),
-                headers: {
-                    'Access-Control-Allow-Origin': '*',
-                },
-            },
-        },
+    server: {
+        allowedHosts: ['.ngrok-free.app'],
     },
     plugins: [
         react(),
         babel({ presets: [reactCompilerPreset()] }),
         tailwindcss(),
+        // /api/ai/* em dev — as LLMs correm server-side (Vercel Functions em
+        // prod), resolvendo o CORS das chamadas diretas aos providers.
+        apiAiDevPlugin(),
     ],
     build: {
         outDir: 'dist',

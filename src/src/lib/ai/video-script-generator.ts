@@ -1,14 +1,13 @@
-import { generateText } from 'ai';
 import {
-    buildVideoScriptPrompt,
+    buildContext,
+    buildSingleItemPortablePrompt,
+    buildVideoScriptSystemPrompt,
     parseVideoScriptResponse,
     type ParsedVideoScript,
 } from './content-prompts';
 import {
-    createProvider,
-    getAvailableProviders,
+    generateWithFallback,
     getAvailableProvidersFromStore,
-    createLanguageModelFromProvider,
 } from './provider';
 import type {
     AIProviderId,
@@ -17,190 +16,89 @@ import type {
     GeneratedVideoScript,
 } from './types';
 import type { AIProvider } from '@/services/ai-provider.service';
+import type { PortablePromptItem } from '@/services/ai-prompt.service';
+import { resolveSystemPrompt } from '@/services/ai-prompt.service';
 
-const MAX_RETRIES = 2;
-const RETRY_DELAY_MS = 2000;
-
-async function delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
+/**
+ * Gera um roteiro de vídeo usando os providers da conta (BD), por prioridade,
+ * com retry e fallback — todas as chamadas passam pelo servidor próprio
+ * (`callLLM` → /api/ai/generate), que resolve o CORS.
+ */
 export async function generateVideoScript(
     params: GenerateVideoScriptParams,
     storeProviders?: AIProvider[],
-    storeApiKeys?: Record<string, string>
+    storeApiKeys?: Record<string, string>,
+    preferred?: { providerId?: string | null; modelCode?: string | null },
+    additionalInstructions?: string
 ): Promise<GenerateVideoScriptResult> {
-    // Try store-based providers first
-    if (storeProviders && storeApiKeys && Object.keys(storeApiKeys).length > 0) {
-        const storeAvailable = getAvailableProvidersFromStore(storeProviders, storeApiKeys);
+    const { article, workspace, durationSec } = params;
 
-        if (storeAvailable.length > 0) {
-            const prompt = buildVideoScriptPrompt({
-                article: params.article,
-                workspace: params.workspace,
-                durationSec: params.durationSec,
-            });
+    // System prompt: override workspace > user > default (VIDEO_SCRIPT), com
+    // instruções adicionais por geração.
+    const systemPrompt = await resolveSystemPrompt({
+        workspaceId: workspace.id,
+        contentType: 'VIDEO_SCRIPT',
+        buildDefault: () =>
+            buildVideoScriptSystemPrompt({ article, workspace, durationSec }),
+    });
+    const fullSystem = additionalInstructions?.trim()
+        ? `${systemPrompt}\n\n## Instruções Adicionais\n${additionalInstructions.trim()}`
+        : systemPrompt;
 
-            for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-                for (const provider of storeAvailable) {
-                    try {
-                        const apiKey = storeApiKeys[provider.providerId];
-                        if (!apiKey) continue;
-
-                        const model = createLanguageModelFromProvider(provider, apiKey, provider.models[0]?.modelCode);
-
-                        const { text } = await generateText({
-                            model,
-                            prompt,
-                            maxOutputTokens: 4000,
-                        });
-
-                        const parsed = parseVideoScriptResponse(text);
-
-                        if (parsed) {
-                            const script = convertParsedToScript(parsed, params.durationSec);
-
-                            if (script.title && script.hook && script.cta) {
-                                return {
-                                    success: true,
-                                    script,
-                                    provider: provider.providerId as AIProviderId,
-                                    prompt,
-                                };
-                            }
-                        }
-                    } catch (error) {
-                        const err = error as Error;
-                        console.warn(`Provider ${provider.providerId} falhou:`, err.message);
-                    }
-                }
-
-                if (attempt < MAX_RETRIES - 1) {
-                    await delay(RETRY_DELAY_MS);
-                }
-            }
-
-            // If store providers all failed, fall through to legacy
-        }
-    }
-
-    // Fallback: legacy env var providers
-    const providers = getAvailableProviders();
-
-    if (providers.length === 0) {
-        return {
-            success: false,
-            error: 'Nenhum provider de IA configurado. Configura pelo menos um provedor nas definições.',
-            code: 'NO_API_KEY',
-        };
-    }
-
-    const prompt = buildVideoScriptPrompt({
-        article: params.article,
-        workspace: params.workspace,
-        durationSec: params.durationSec,
+    const result = await generateWithFallback<GeneratedVideoScript>({
+        providers: getAvailableProvidersFromStore(
+            storeProviders ?? [],
+            storeApiKeys ?? {}
+        ),
+        apiKeys: storeApiKeys ?? {},
+        preferred,
+        buildSystem: () => fullSystem,
+        buildPrompt: () =>
+            buildContext({
+                article,
+                workspace,
+                durationSec,
+            }),
+        parse: (text) => {
+            const parsed = parseVideoScriptResponse(text);
+            if (!parsed) return null;
+            const script = convertParsedToScript(parsed, durationSec);
+            if (script.title && script.hook && script.cta) return script;
+            return null;
+        },
+        defaultMaxTokens: 4000,
     });
 
-    let lastError = '';
-
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-        for (const providerConfig of providers) {
-            try {
-                const result = await tryProvider(providerConfig.id, prompt, params.durationSec);
-
-                if (result.success) {
-                    return {
-                        success: true,
-                        script: result.script,
-                        provider: providerConfig.id,
-                        prompt,
-                    };
-                }
-
-                lastError = result.error || 'Erro desconhecido';
-
-                if (result.code === 'NO_API_KEY') {
-                    continue;
-                }
-            } catch (error) {
-                const err = error as Error;
-                lastError = err.message;
-                console.warn(
-                    `Provider ${providerConfig.id} falhou:`,
-                    err.message
-                );
-            }
-        }
-
-        if (attempt < MAX_RETRIES - 1) {
-            await delay(RETRY_DELAY_MS);
-        }
-    }
-
-    return {
-        success: false,
-        error: `Todos os providers falharam. Último erro: ${lastError}`,
-        code: 'API_ERROR',
-    };
-}
-
-async function tryProvider(
-    providerId: AIProviderId,
-    prompt: string,
-    durationSec: number
-): Promise<
-    | { success: true; script: GeneratedVideoScript }
-    | { success: false; error: string; code: string }
-> {
-    const config = getAvailableProviders().find((p) => p.id === providerId);
-
-    if (!config) {
+    if (!result.ok || !result.data) {
         return {
             success: false,
-            error: `Provider ${providerId} não encontrado ou configurado.`,
+            error:
+                result.error ??
+                'Não foi possível gerar o roteiro. Tenta novamente.',
             code: 'API_ERROR',
         };
     }
 
-    const apiKey = import.meta.env[config.apiKeyEnvVar] || '';
-    if (!apiKey && providerId !== 'ollama') {
-        return {
-            success: false,
-            error: 'API key não configurada',
-            code: 'NO_API_KEY',
-        };
-    }
+    const promptParams = { article, workspace, durationSec };
+    const portablePrompts: PortablePromptItem[] = [
+        {
+            itemKey: 'main',
+            prompt: buildSingleItemPortablePrompt(
+                'VIDEO_SCRIPT',
+                promptParams,
+                result.data.title,
+                result.data.fullScript || result.data.solution || ''
+            ),
+        },
+    ];
 
-    const provider = createProvider(providerId, apiKey);
-    const model = provider.languageModel(config.models.primary);
-
-    const { text } = await generateText({
-        model,
-        prompt,
-        maxOutputTokens: 4000,
-    });
-
-    const parsed = parseVideoScriptResponse(text);
-
-    if (!parsed) {
-        return {
-            success: false,
-            error: 'Não foi possível interpretar a resposta da IA',
-            code: 'INVALID_RESPONSE',
-        };
-    }
-
-    const script = convertParsedToScript(parsed, durationSec);
-
-    if (!script.title || !script.hook || !script.cta) {
-        return {
-            success: false,
-            error: 'Resposta incompleta da IA',
-            code: 'INVALID_RESPONSE',
-        };
-    }
-
-    return { success: true, script };
+    return {
+        success: true,
+        script: { ...result.data, provider: result.providerId as AIProviderId },
+        provider: result.providerId as AIProviderId,
+        prompt: result.prompt,
+        portablePrompts,
+    };
 }
 
 function convertParsedToScript(

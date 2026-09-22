@@ -1,5 +1,9 @@
 import { Modal } from '@/components/ui/modal';
 import { VideoScriptCard } from '@/components/content/video-script-card';
+import {
+    AIProviderPicker,
+    type AIProviderSelection,
+} from '@/components/ai/ai-provider-picker';
 import { useVideoScripts } from '@/hooks/use-video-scripts';
 import { useArticles } from '@/hooks/use-articles';
 import type { ArticleStatus, SocialChannel } from '@/types/database';
@@ -35,6 +39,8 @@ export function VideoScriptsPage() {
     const [selectedDuration, setSelectedDuration] = useState(60);
     const [articleSearch, setArticleSearch] = useState('');
     const [approvingIds, setApprovingIds] = useState<Set<string>>(new Set());
+    const [preferred, setPreferred] = useState<AIProviderSelection | null>(null);
+    const [additionalInstructions, setAdditionalInstructions] = useState('');
 
     const filters = {
         status: statusFilter !== 'ALL' ? statusFilter : undefined,
@@ -49,6 +55,7 @@ export function VideoScriptsPage() {
         approvedCount,
         totalCount,
         generateScript,
+        updateScript,
         approveScript,
         deleteScript,
     } = useVideoScripts(filters);
@@ -69,12 +76,17 @@ export function VideoScriptsPage() {
             articleId: selectedArticleId,
             targetChannel: selectedChannel,
             durationSec: selectedDuration,
+            additionalInstructions:
+                additionalInstructions.trim() || undefined,
+            preferred,
         });
 
         if (result.success) {
             setShowGenerateModal(false);
             setSelectedArticleId('');
             setArticleSearch('');
+            setAdditionalInstructions('');
+            setPreferred(null);
         } else {
             alert(result.error || 'Erro ao gerar roteiro');
         }
@@ -205,6 +217,9 @@ export function VideoScriptsPage() {
                             script={script}
                             onApprove={() => handleApprove(script.id)}
                             onDelete={() => handleDelete(script.id)}
+                            onAssetChange={async (data) => {
+                                await updateScript(script.id, data);
+                            }}
                             isApproving={approvingIds.has(script.id)}
                         />
                     ))}
@@ -217,6 +232,8 @@ export function VideoScriptsPage() {
                     setShowGenerateModal(false);
                     setSelectedArticleId('');
                     setArticleSearch('');
+                    setAdditionalInstructions('');
+                    setPreferred(null);
                 }}
                 title="Gerar Roteiro de Vídeo"
                 size="md"
@@ -307,12 +324,41 @@ export function VideoScriptsPage() {
                         </div>
                     </div>
 
+                    <div>
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                            Provedor / Modelo
+                        </label>
+                        <AIProviderPicker
+                            value={preferred}
+                            onChange={setPreferred}
+                            disabled={isGenerating}
+                        />
+                    </div>
+
+                    <div>
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                            Instruções adicionais
+                        </label>
+                        <textarea
+                            value={additionalInstructions}
+                            onChange={(e) =>
+                                setAdditionalInstructions(e.target.value)
+                            }
+                            disabled={isGenerating}
+                            rows={2}
+                            placeholder="Indicações extra para este roteiro (opcional)..."
+                            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none disabled:bg-gray-50"
+                        />
+                    </div>
+
                     <div className="flex justify-end gap-3 border-t pt-4">
                         <button
                             onClick={() => {
                                 setShowGenerateModal(false);
                                 setSelectedArticleId('');
                                 setArticleSearch('');
+                                setAdditionalInstructions('');
+                                setPreferred(null);
                             }}
                             className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
                         >

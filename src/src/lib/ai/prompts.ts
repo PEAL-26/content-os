@@ -1,7 +1,53 @@
 import type { GenerateArticleParams } from './types';
 import { generateSlug } from '@/helpers/slug';
 
-export function buildArticlePrompt(params: GenerateArticleParams): string {
+// =============================================================================
+// Prompt do artigo — dividido em system (função + regras + formato) e user
+// (contexto da geração). O system é o default configurável em ai_system_prompts
+// (contentType 'article'); o user carrega o contexto desta geração.
+// =============================================================================
+
+export function buildArticleSystemPrompt(
+    params: GenerateArticleParams
+): string {
+    const language = params.workspace.contentLanguage || 'pt';
+    const languageLabel =
+        language === 'pt'
+            ? 'português'
+            : language === 'en'
+              ? 'inglês'
+              : language;
+    const voiceTone = params.workspace.voiceTone || 'profissional e acessível';
+
+    let prompt = `És um copywriter especialista em criar artigos de blog otimizados para SEO e conversão.\n\n`;
+
+    prompt += `## Requisitos de Formato\n`;
+    prompt += `Responde APENAS com JSON válido, sem texto adicional:\n`;
+    prompt += `{\n`;
+    prompt += `  "title": "Título SEO atrativo (max 60 chars)",\n`;
+    prompt += `  "slug": "url-amigavel-separada-por-hifens",\n`;
+    prompt += `  "summary": "Resumo atrativo (max 150 chars)",\n`;
+    prompt += `  "body": "Conteúdo em Markdown estruturado com H2, H3, listas, blockquotes. Mínimo 800 palavras.",\n`;
+    prompt += `  "seoTitle": "Título SEO alternativo (max 60 chars)",\n`;
+    prompt += `  "seoDescription": "Descrição meta para SEO (max 160 chars)",\n`;
+    prompt += `  "keywords": ["keyword1", "keyword2", "keyword3", "keyword4", "keyword5"],\n`;
+    prompt += `  "readingTimeMin": numero_estimado_minutos\n`;
+    prompt += `}\n`;
+
+    prompt += `\n## Instruções\n`;
+    prompt += `- Escreve em ${languageLabel}\n`;
+    prompt += `- Usa o tom: ${voiceTone}\n`;
+    prompt += `- Inclui CTAs subtis relacionados com o problema/solução\n`;
+    prompt += `- Estrutura o body com pelo menos 3 secções H2\n`;
+    prompt += `- O slug deve ser URL-friendly em ${languageLabel}\n`;
+    prompt += `- Keywords devem ser termos de pesquisa relevantes\n`;
+
+    return prompt;
+}
+
+export function buildArticleUserPrompt(
+    params: GenerateArticleParams
+): string {
     const { topic, pillar, product, workspace } = params;
 
     const language = workspace.contentLanguage || 'pt';
@@ -13,9 +59,7 @@ export function buildArticlePrompt(params: GenerateArticleParams): string {
               : language;
     const voiceTone = workspace.voiceTone || 'profissional e acessível';
 
-    let prompt = `És um copywriter especialista em criar artigos de blog otimizados para SEO e conversão.\n\n`;
-
-    prompt += `## Contexto do Cliente\n`;
+    let prompt = `## Contexto do Cliente\n`;
     prompt += `Idioma: ${languageLabel}\n`;
     prompt += `Tom de voz: ${voiceTone}\n`;
 
@@ -56,28 +100,14 @@ export function buildArticlePrompt(params: GenerateArticleParams): string {
     prompt += `\n## Tema do Artigo\n`;
     prompt += `${topic}\n`;
 
-    prompt += `\n## Requisitos de Formato\n`;
-    prompt += `Responde APENAS com JSON válido, sem texto adicional:\n`;
-    prompt += `{\n`;
-    prompt += `  "title": "Título SEO atrativo (max 60 chars)",\n`;
-    prompt += `  "slug": "url-amigavel-separada-por-hifens",\n`;
-    prompt += `  "summary": "Resumo atrativo (max 150 chars)",\n`;
-    prompt += `  "body": "Conteúdo em Markdown estruturado com H2, H3, listas, blockquotes. Mínimo 800 palavras.",\n`;
-    prompt += `  "seoTitle": "Título SEO alternativo (max 60 chars)",\n`;
-    prompt += `  "seoDescription": "Descrição meta para SEO (max 160 chars)",\n`;
-    prompt += `  "keywords": ["keyword1", "keyword2", "keyword3", "keyword4", "keyword5"],\n`;
-    prompt += `  "readingTimeMin": numero_estimado_minutos\n`;
-    prompt += `}\n`;
-
-    prompt += `\n## Instruções\n`;
-    prompt += `- Escreve em ${languageLabel}\n`;
-    prompt += `- Usa o tom: ${voiceTone}\n`;
-    prompt += `- Inclui CTAs subtis relacionados com o problema/solução\n`;
-    prompt += `- Estrutura o body com pelo menos 3 secções H2\n`;
-    prompt += `- O slug deve ser URL-friendly em ${languageLabel}\n`;
-    prompt += `- Keywords devem ser termos de pesquisa relevantes\n`;
-
     return prompt;
+}
+
+/** Prompt completo (system + user) — usados para auditoria/paridade legacy. */
+export function buildArticlePrompt(params: GenerateArticleParams): string {
+    const system = buildArticleSystemPrompt(params);
+    const user = buildArticleUserPrompt(params);
+    return `${system}\n\n${user}`;
 }
 
 export function parseArticleResponse(text: string): {

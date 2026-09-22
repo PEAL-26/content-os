@@ -96,8 +96,10 @@ export function WeeklyPlannerPage() {
     };
 
     const handlePublish = async (data: {
+        platform: string;
         publishedUrl?: string;
         publishedAt: Date;
+        assetFile?: File | null;
     }) => {
         if (!selectedItemForPublish) return;
 

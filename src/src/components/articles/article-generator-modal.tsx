@@ -1,4 +1,8 @@
 import { Modal } from '@/components/ui/modal';
+import {
+    AIProviderPicker,
+    type AIProviderSelection,
+} from '@/components/ai/ai-provider-picker';
 import { useAI } from '@/hooks/use-ai';
 import { usePillars } from '@/hooks/use-pillars';
 import { useProducts } from '@/hooks/use-products';
@@ -23,6 +27,8 @@ export function ArticleGeneratorModal({
     const [pillarId, setPillarId] = useState<string | null>(null);
     const [productId, setProductId] = useState<string | null>(null);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [preferred, setPreferred] = useState<AIProviderSelection | null>(null);
+    const [additionalInstructions, setAdditionalInstructions] = useState('');
 
     useEffect(() => {
         if (!isOpen) {
@@ -31,6 +37,8 @@ export function ArticleGeneratorModal({
             setPillarId(null);
             setProductId(null);
             setErrorMessage(null);
+            setPreferred(null);
+            setAdditionalInstructions('');
             clearError();
         }
     }, [isOpen, clearError]);
@@ -51,6 +59,9 @@ export function ArticleGeneratorModal({
                 topic: topic.trim(),
                 pillar: selectedPillar,
                 product: selectedProduct || undefined,
+                additionalInstructions:
+                    additionalInstructions.trim() || undefined,
+                preferred,
             });
 
             if (result.success && result.articleId) {
@@ -154,21 +165,33 @@ export function ArticleGeneratorModal({
                             </svg>
                             <p className="text-sm text-red-700">{error}</p>
                         </div>
-                        {error.includes('VITE_ANTHROPIC_API_KEY') && (
-                            <p className="mt-2 text-xs text-red-600">
-                                Adiciona a tua chave API no ficheiro{' '}
-                                <code className="rounded bg-red-100 px-1">
-                                    .env
-                                </code>
-                                :
-                                <br />
-                                <code className="rounded bg-red-100 px-1">
-                                    VITE_ANTHROPIC_API_KEY=sk-ant-...
-                                </code>
-                            </p>
-                        )}
                     </div>
                 )}
+
+                <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                        Provedor / Modelo
+                    </label>
+                    <AIProviderPicker
+                        value={preferred}
+                        onChange={setPreferred}
+                        disabled={isGenerating}
+                    />
+                </div>
+
+                <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                        Instruções adicionais
+                    </label>
+                    <textarea
+                        value={additionalInstructions}
+                        onChange={(e) => setAdditionalInstructions(e.target.value)}
+                        disabled={isGenerating}
+                        rows={2}
+                        placeholder="Indicações extra para esta geração (opcional)..."
+                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none disabled:bg-gray-50"
+                    />
+                </div>
 
                 {isGenerating && (
                     <div className="rounded-md bg-blue-50 p-3">

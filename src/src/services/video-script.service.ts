@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import type { ArticleStatus, SocialChannel } from '@/types/database';
 import { v4 as uuidv4 } from 'uuid';
+import { saveGenerationPrompts, type PortablePromptItem } from '@/services/ai-prompt.service';
 
 export interface VideoScript {
     id: string;
@@ -17,6 +18,10 @@ export interface VideoScript {
     onScreenText: string[];
     bRoll: string[];
     status: ArticleStatus;
+    /** Artefacto publicado: URL (Storage assets ou link externo). */
+    assetUrl: string | null;
+    /** Nome do ficheiro do artefacto. */
+    assetName: string | null;
     aiGenerated: boolean;
     createdAt: string;
     updatedAt: string;
@@ -40,6 +45,12 @@ export interface CreateVideoScriptInput {
     onScreenText?: string[];
     bRoll?: string[];
     aiGenerated?: boolean;
+    /** Artefacto publicado: URL (Storage assets ou link externo). */
+    assetUrl?: string | null;
+    /** Nome do ficheiro do artefacto. */
+    assetName?: string | null;
+    /** Prompt final portátil por item (gravado em content_generation_prompts). */
+    portablePrompts?: PortablePromptItem[];
 }
 
 export interface UpdateVideoScriptInput {
@@ -54,6 +65,10 @@ export interface UpdateVideoScriptInput {
     onScreenText?: string[];
     bRoll?: string[];
     status?: ArticleStatus;
+    /** Artefacto publicado: URL (Storage assets ou link externo). */
+    assetUrl?: string | null;
+    /** Nome do ficheiro do artefacto. */
+    assetName?: string | null;
 }
 
 export interface VideoScriptsFilters {
@@ -150,6 +165,8 @@ export const videoScriptService = {
                 onScreenText: input.onScreenText || [],
                 bRoll: input.bRoll || [],
                 status: 'DRAFT',
+                assetUrl: input.assetUrl ?? null,
+                assetName: input.assetName ?? null,
                 aiGenerated: input.aiGenerated || false,
                 createdAt: now,
                 updatedAt: now,
@@ -161,6 +178,15 @@ export const videoScriptService = {
             throw new Error(
                 `Erro ao criar roteiro de vídeo: ${error.message}`
             );
+        }
+
+        // Guarda o prompt final portátil.
+        if (input.portablePrompts && input.portablePrompts.length > 0) {
+            await saveGenerationPrompts({
+                targetType: 'VIDEO_SCRIPT',
+                targetId: (data as VideoScript).id,
+                items: input.portablePrompts,
+            });
         }
 
         return data as VideoScript;
@@ -185,6 +211,8 @@ export const videoScriptService = {
         if (input.onScreenText !== undefined) updateData.onScreenText = input.onScreenText;
         if (input.bRoll !== undefined) updateData.bRoll = input.bRoll;
         if (input.status !== undefined) updateData.status = input.status;
+        if (input.assetUrl !== undefined) updateData.assetUrl = input.assetUrl;
+        if (input.assetName !== undefined) updateData.assetName = input.assetName;
 
         const { data, error } = await supabase
             .from('video_scripts')

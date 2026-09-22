@@ -232,6 +232,8 @@ export const articleService = {
         }
         if (input.publishedUrl !== undefined)
             updateData.publishedUrl = input.publishedUrl;
+        if (input.assetUrl !== undefined) updateData.assetUrl = input.assetUrl;
+        if (input.assetName !== undefined) updateData.assetName = input.assetName;
         if (input.aiPromptUsed !== undefined)
             updateData.aiPromptUsed = input.aiPromptUsed;
         if (input.readingTimeMin !== undefined)
@@ -309,6 +311,18 @@ export const articleService = {
             ...(status === 'PUBLISHED'
                 ? { publishedAt: new Date().toISOString() }
                 : {}),
+        });
+    },
+
+    /** Atualiza o artefacto publicado (URL + nome do ficheiro). */
+    async updateAsset(
+        id: string,
+        assetUrl: string | null,
+        assetName: string | null
+    ): Promise<Article> {
+        return this.updateArticle(id, {
+            assetUrl,
+            assetName,
         });
     },
 };

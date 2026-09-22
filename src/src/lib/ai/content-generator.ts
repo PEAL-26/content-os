@@ -6,10 +6,13 @@ import type {
     Workspace,
 } from '@/types/database';
 import type { PillarConfig } from '@/types/pillar';
-import { generateText } from 'ai';
 import pLimit from 'p-limit';
 import {
-    buildPromptForFormat,
+    buildCarouselItemPortablePrompt,
+    buildContext,
+    buildSingleItemPortablePrompt,
+    buildSystemPromptForFormat,
+    buildThreadItemPortablePrompt,
     parseCarouselResponse,
     parseCtaPostResponse,
     parseInstagramPostResponse,
@@ -19,13 +22,13 @@ import {
     parseVideoScriptResponse,
 } from './content-prompts';
 import {
-    createProvider,
-    getAvailableProviders,
+    generateWithFallback,
     getAvailableProvidersFromStore,
-    createLanguageModelFromProvider,
 } from './provider';
 import type { AIProviderId } from './types';
 import type { AIProvider } from '@/services/ai-provider.service';
+import type { PortablePromptItem } from '@/services/ai-prompt.service';
+import { resolveSystemPrompt } from '@/services/ai-prompt.service';
 
 export interface GenerateContentPiecesParams {
     article: Article;
@@ -45,6 +48,8 @@ export interface GeneratedPiece {
     slides: ContentSlide[] | null;
     slideCount: number | null;
     provider?: AIProviderId;
+    /** Prompts finais portáteis por item (para content_generation_prompts). */
+    portablePrompts?: PortablePromptItem[];
 }
 
 export interface GenerateContentPiecesResult {
@@ -54,136 +59,122 @@ export interface GenerateContentPiecesResult {
 }
 
 const CONCURRENCY_LIMIT = 3;
-const MAX_RETRIES = 2;
-const RETRY_DELAY_MS = 2000;
-
-async function delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 async function generateSinglePiece(
     format: ContentFormat,
     params: GenerateContentPiecesParams,
     storeProviders?: AIProvider[],
-    storeApiKeys?: Record<string, string>
+    storeApiKeys?: Record<string, string>,
+    preferred?: { providerId?: string | null; modelCode?: string | null },
+    additionalInstructions?: string
 ): Promise<GeneratedPiece> {
-    // Try store-based providers first
-    if (storeProviders && storeApiKeys && Object.keys(storeApiKeys).length > 0) {
-        const storeAvailable = getAvailableProvidersFromStore(storeProviders, storeApiKeys);
+    const { article, workspace, product, pillar } = params;
 
-        if (storeAvailable.length > 0) {
-            const prompt = buildPromptForFormat(format, {
-                article: params.article,
-                workspace: params.workspace,
-                product: params.product,
-                pillar: params.pillar,
-            });
+    // System prompt: override workspace > user > default em código, com as
+    // instruções adicionais (por geração) anexadas.
+    const systemPrompt = await resolveSystemPrompt({
+        workspaceId: workspace.id,
+        contentType: format,
+        buildDefault: () => buildSystemPromptForFormat(format, params),
+    });
+    const fullSystem = additionalInstructions?.trim()
+        ? `${systemPrompt}\n\n## Instruções Adicionais\n${additionalInstructions.trim()}`
+        : systemPrompt;
 
-            let lastError = '';
+    const result = await generateWithFallback<Omit<GeneratedPiece, 'provider' | 'portablePrompts'>>({
+        providers: getAvailableProvidersFromStore(
+            storeProviders ?? [],
+            storeApiKeys ?? {}
+        ),
+        apiKeys: storeApiKeys ?? {},
+        preferred,
+        buildSystem: () => fullSystem,
+        buildPrompt: () =>
+            buildContext({
+                article,
+                workspace,
+                product,
+                pillar,
+            }),
+        parse: (text) => parseGeneratedContent(format, text),
+        maxAttempts: 2,
+        defaultMaxTokens: 4000,
+    });
 
-            for (const provider of storeAvailable) {
-                for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-                    try {
-                        const apiKey = storeApiKeys[provider.providerId];
-                        if (!apiKey) continue;
-
-                        const model = createLanguageModelFromProvider(provider, apiKey, provider.models[0]?.modelCode);
-
-                        const { text } = await generateText({
-                            model,
-                            prompt,
-                            maxOutputTokens: 4000,
-                        });
-
-                        const piece = parseGeneratedContent(format, text);
-
-                        if (piece) {
-                            return { ...piece, provider: provider.providerId as AIProviderId };
-                        }
-
-                        lastError = 'Não foi possível interpretar a resposta';
-                    } catch (error) {
-                        lastError = error instanceof Error ? error.message : 'Erro desconhecido';
-                        console.warn(`Provider ${provider.providerId} failed:`, lastError);
-                    }
-
-                    if (attempt < MAX_RETRIES - 1) {
-                        await delay(RETRY_DELAY_MS);
-                    }
-                }
-            }
-
-            // If store providers all failed, fall through to legacy
-        }
+    if (!result.ok || !result.data) {
+        throw new Error(result.error ?? 'Erro ao gerar peça de conteúdo');
     }
 
-    // Fallback: legacy env var providers
-    const providers = getAvailableProviders();
+    return {
+        ...result.data,
+        provider: result.providerId as AIProviderId,
+        portablePrompts: buildPortablePromptsForPiece(
+            format,
+            params,
+            result.data
+        ),
+    };
+}
 
-    if (providers.length === 0) {
-        throw new Error('Nenhum provider de IA configurado');
-    }
-
-    const prompt = buildPromptForFormat(format, {
+function buildPortablePromptsForPiece(
+    format: ContentFormat,
+    params: GenerateContentPiecesParams,
+    piece: Omit<GeneratedPiece, 'provider' | 'portablePrompts'>
+): PortablePromptItem[] {
+    const promptParams = {
         article: params.article,
         workspace: params.workspace,
         product: params.product,
         pillar: params.pillar,
-    });
+    };
 
-    let lastError = '';
+    switch (format) {
+        case 'CAROUSEL':
+            return (piece.slides ?? []).map((slide) => ({
+                itemKey: `slide-${slide.order}`,
+                prompt: buildCarouselItemPortablePrompt(
+                    promptParams,
+                    slide,
+                    slide.order - 1
+                ),
+            }));
 
-    for (const providerConfig of providers) {
-        for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-            try {
-                const apiKey =
-                    import.meta.env[providerConfig.apiKeyEnvVar] || '';
-                if (!apiKey && providerConfig.id !== 'ollama') {
-                    continue;
-                }
-
-                const provider = createProvider(providerConfig.id, apiKey);
-                const model = provider.languageModel(
-                    providerConfig.models.primary
-                );
-
-                const { text } = await generateText({
-                    model,
-                    prompt,
-                    maxOutputTokens: 4000,
-                });
-
-                const piece = parseGeneratedContent(format, text);
-
-                if (piece) {
-                    return { ...piece, provider: providerConfig.id };
-                }
-
-                lastError = 'Não foi possível interpretar a resposta';
-            } catch (error) {
-                lastError =
-                    error instanceof Error
-                        ? error.message
-                        : 'Erro desconhecido';
-                console.warn(
-                    `Provider ${providerConfig.id} failed:`,
-                    lastError
-                );
-            }
-
-            if (attempt < MAX_RETRIES - 1) {
-                await delay(RETRY_DELAY_MS);
-            }
+        case 'THREAD': {
+            const tweets = extractThreadTweets(piece.body);
+            return tweets.map((tweet) => ({
+                itemKey: `tweet-${tweet.order}`,
+                prompt: buildThreadItemPortablePrompt(promptParams, tweet),
+            }));
         }
-    }
 
-    throw new Error(lastError || 'Todos os providers falharam');
+        default:
+            return [
+                {
+                    itemKey: 'main',
+                    prompt: buildSingleItemPortablePrompt(
+                        format,
+                        promptParams,
+                        piece.title,
+                        piece.body
+                    ),
+                },
+            ];
+    }
+}
+
+/** Extrai os tweets individuais a partir do body (separados por linha em branco). */
+function extractThreadTweets(body: string): Array<{ order: number; text: string }> {
+    return body
+        .split(/\n\s*\n/)
+        .map((text) => text.trim())
+        .filter(Boolean)
+        .map((text, i) => ({ order: i + 1, text }));
 }
 
 function parseGeneratedContent(
     format: ContentFormat,
     text: string
-): Omit<GeneratedPiece, 'provider'> | null {
+): Omit<GeneratedPiece, 'provider' | 'portablePrompts'> | null {
     switch (format) {
         case 'CAROUSEL': {
             const parsed = parseCarouselResponse(text);
@@ -315,14 +306,23 @@ function parseGeneratedContent(
 export async function generateContentPieces(
     params: GenerateContentPiecesParams,
     storeProviders?: AIProvider[],
-    storeApiKeys?: Record<string, string>
+    storeApiKeys?: Record<string, string>,
+    preferred?: { providerId?: string | null; modelCode?: string | null },
+    additionalInstructions?: string
 ): Promise<GenerateContentPiecesResult> {
     const limit = pLimit(CONCURRENCY_LIMIT);
 
     const generationPromises = params.formats.map((format) =>
         limit(async () => {
             try {
-                const piece = await generateSinglePiece(format, params, storeProviders, storeApiKeys);
+                const piece = await generateSinglePiece(
+                    format,
+                    params,
+                    storeProviders,
+                    storeApiKeys,
+                    preferred,
+                    additionalInstructions
+                );
                 return { success: true, format, piece };
             } catch (error) {
                 return {

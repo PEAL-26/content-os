@@ -1,11 +1,11 @@
-import { generateText } from 'ai';
-import { buildArticlePrompt, parseArticleResponse } from './prompts';
 import {
-    createProvider,
-    getAvailableProviders,
-    getProviderById,
+    buildArticleSystemPrompt,
+    buildArticleUserPrompt,
+    parseArticleResponse,
+} from './prompts';
+import {
+    generateWithFallback,
     getAvailableProvidersFromStore,
-    createLanguageModelFromProvider,
 } from './provider';
 import type {
     AIProviderId,
@@ -13,170 +13,58 @@ import type {
     GenerateArticleResult,
 } from './types';
 import type { AIProvider } from '@/services/ai-provider.service';
+import { resolveSystemPrompt } from '@/services/ai-prompt.service';
 
-const MAX_RETRIES = 2;
-const RETRY_DELAY_MS = 3000;
-
-async function delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
+/**
+ * Gera um artigo usando os providers da conta (BD), por prioridade, com retry
+ * e fallback. Todas as chamadas passam pelo transporte server-side (`callLLM`
+ * → /api/ai/generate), que resolve o CORS. O system prompt é resolvido por
+ * tipo de conteúdo (workspace → user → default) + instruções adicionais.
+ */
 export async function generateArticle(
     params: GenerateArticleParams,
     storeProviders?: AIProvider[],
-    storeApiKeys?: Record<string, string>
+    storeApiKeys?: Record<string, string>,
+    preferred?: { providerId?: string | null; modelCode?: string | null },
+    additionalInstructions?: string
 ): Promise<GenerateArticleResult> {
-    // Try store-based providers first
-    if (storeProviders && storeApiKeys && Object.keys(storeApiKeys).length > 0) {
-        const storeAvailable = getAvailableProvidersFromStore(storeProviders, storeApiKeys);
+    // System: override workspace > user > default ('article').
+    const systemPrompt = await resolveSystemPrompt({
+        workspaceId: params.workspace.id,
+        contentType: 'article',
+        buildDefault: () => buildArticleSystemPrompt(params),
+    });
+    const fullSystem = additionalInstructions?.trim()
+        ? `${systemPrompt}\n\n## Instruções Adicionais\n${additionalInstructions.trim()}`
+        : systemPrompt;
 
-        if (storeAvailable.length > 0) {
-            const prompt = buildArticlePrompt(params);
+    const result = await generateWithFallback<NonNullable<ReturnType<typeof parseArticleResponse>['article']>>({
+        providers: getAvailableProvidersFromStore(
+            storeProviders ?? [],
+            storeApiKeys ?? {}
+        ),
+        apiKeys: storeApiKeys ?? {},
+        preferred,
+        buildSystem: () => fullSystem,
+        buildPrompt: () => buildArticleUserPrompt(params),
+        parse: (text) => parseArticleResponse(text).article,
+        defaultMaxTokens: 8000,
+    });
 
-            for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-                for (const provider of storeAvailable) {
-                    try {
-                        const apiKey = storeApiKeys[provider.providerId];
-                        if (!apiKey) continue;
-
-                        const model = createLanguageModelFromProvider(provider, apiKey, provider.models[0]?.modelCode);
-
-                        const { text } = await generateText({
-                            model,
-                            prompt,
-                            maxOutputTokens: 8000,
-                        });
-
-                        const parsed = parseArticleResponse(text);
-
-                        if (parsed.article) {
-                            return {
-                                success: true,
-                                article: parsed.article,
-                                provider: provider.providerId as AIProviderId,
-                                prompt,
-                            };
-                        }
-                    } catch (error) {
-                        const err = error as Error;
-                        console.warn(`Provider ${provider.providerId} falhou:`, err.message);
-                    }
-                }
-
-                if (attempt < MAX_RETRIES - 1) {
-                    await delay(RETRY_DELAY_MS);
-                }
-            }
-
-            // If store providers all failed, fall through to legacy
-        }
-    }
-
-    // Fallback: legacy env var providers
-    const providers = getAvailableProviders();
-
-    if (providers.length === 0) {
+    if (!result.ok || !result.data) {
         return {
             success: false,
-            error: 'Nenhum provider de IA configurado. Configura pelo menos um provedor nas definições.',
-            code: 'NO_API_KEY',
-        };
-    }
-
-    const prompt = buildArticlePrompt(params);
-
-    let lastError = '';
-
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-        for (const providerConfig of providers) {
-            try {
-                const result = await tryProvider(providerConfig.id, prompt);
-
-                if (result.success) {
-                    return {
-                        success: true,
-                        article: result.article,
-                        provider: providerConfig.id,
-                        prompt,
-                    };
-                }
-
-                lastError = result.error || 'Erro desconhecido';
-
-                if (result.code === 'NO_API_KEY') {
-                    continue;
-                }
-            } catch (error) {
-                const err = error as Error;
-                lastError = err.message;
-                console.warn(
-                    `Provider ${providerConfig.id} falhou:`,
-                    err.message
-                );
-            }
-        }
-
-        if (attempt < MAX_RETRIES - 1) {
-            await delay(RETRY_DELAY_MS);
-        }
-    }
-
-    return {
-        success: false,
-        error: `Todos os providers falharam. Último erro: ${lastError}`,
-        code: 'API_ERROR',
-    };
-}
-
-async function tryProvider(
-    providerId: AIProviderId,
-    prompt: string
-): Promise<
-    | {
-          success: true;
-          article: NonNullable<
-              ReturnType<typeof parseArticleResponse>['article']
-          >;
-      }
-    | { success: false; error: string; code: string }
-> {
-    const config = getProviderById(providerId);
-    if (!config) {
-        return {
-            success: false,
-            error: `Provider ${providerId} não encontrado ou configurado, adiciona pelo menos uma API key no ficheiro .env.`,
+            error:
+                result.error ??
+                'Não foi possível gerar o artigo. Tenta novamente.',
             code: 'API_ERROR',
         };
     }
 
-    const apiKey = import.meta.env[config.apiKeyEnvVar] || '';
-    if (!apiKey && providerId !== 'ollama') {
-        return {
-            success: false,
-            error: 'API key não configurada',
-            code: 'NO_API_KEY',
-        };
-    }
-
-    const provider = createProvider(providerId, apiKey);
-
-    const model = provider.languageModel(config.models.primary);
-
-    const { text } = await generateText({
-        model,
-        prompt,
-        maxOutputTokens: 8000,
-    });
-
-    const parsed = parseArticleResponse(text);
-
-    if (!parsed.article) {
-        return {
-            success: false,
-            error: parsed.error || 'Erro ao processar resposta',
-            code: 'INVALID_RESPONSE',
-        };
-    }
-
-    return { success: true, article: parsed.article };
+    return {
+        success: true,
+        article: result.data,
+        provider: result.providerId as AIProviderId,
+        prompt: [result.system, result.prompt].filter(Boolean).join('\n\n'),
+    };
 }

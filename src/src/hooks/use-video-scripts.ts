@@ -15,12 +15,14 @@ export interface GenerateScriptParams {
     articleId: string;
     targetChannel: SocialChannel;
     durationSec: number;
+    /** Instruções adicionais por geração (anexadas ao system prompt). */
+    additionalInstructions?: string;
+    /** Override opcional de provider+modelo para esta geração (null = padrão). */
+    preferred?: { providerId?: string | null; modelCode?: string | null } | null;
 }
 
 export function useVideoScripts(filters?: VideoScriptsFilters) {
     const { currentWorkspace } = useWorkspaceStore();
-    const providers = useAIProviderStore((s) => s.providers);
-    const apiKeys = useAIProviderStore((s) => s.apiKeys);
     const [scripts, setScripts] = useState<VideoScriptWithRelations[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
@@ -70,6 +72,14 @@ export function useVideoScripts(filters?: VideoScriptsFilters) {
                     return { success: false, error: 'Artigo não encontrado' };
                 }
 
+                // Hidratação preguiçosa: carrega os provedores de IA com o
+                // workspace ativo antes de gerar, se ainda não estiverem.
+                const aiStore = useAIProviderStore.getState();
+                if (aiStore.providers.length === 0 && currentWorkspace) {
+                    await aiStore.hydrateProviders(currentWorkspace.id);
+                }
+                const fresh = useAIProviderStore.getState();
+
                 const result = await generateVideoScript(
                     {
                         article,
@@ -77,8 +87,13 @@ export function useVideoScripts(filters?: VideoScriptsFilters) {
                         durationSec: params.durationSec,
                         workspace: currentWorkspace,
                     },
-                    providers,
-                    apiKeys
+                    fresh.providers,
+                    fresh.apiKeys,
+                    params.preferred ?? {
+                        providerId: fresh.defaultProviderId,
+                        modelCode: fresh.defaultModelCode,
+                    },
+                    params.additionalInstructions
                 );
 
                 if (!result.success) {
@@ -102,6 +117,7 @@ export function useVideoScripts(filters?: VideoScriptsFilters) {
                     onScreenText: result.script.onScreenText,
                     bRoll: result.script.bRoll,
                     aiGenerated: true,
+                    portablePrompts: result.portablePrompts,
                 });
 
                 await fetchScripts();
@@ -118,7 +134,7 @@ export function useVideoScripts(filters?: VideoScriptsFilters) {
                 setIsGenerating(false);
             }
         },
-        [currentWorkspace, fetchScripts, providers, apiKeys]
+        [currentWorkspace, fetchScripts]
     );
 
     const updateScript = useCallback(

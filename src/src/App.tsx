@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { ProtectedWorkspaceRoute } from '@/components/auth/protected-workspace-route';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { WorkspaceRedirect } from '@/components/auth/workspace-redirect';
+import { LoadingScreen } from '@/components/auth/workspace-loading';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { SettingsLayout } from '@/components/layout/settings-layout';
 import { NuqsAdapter } from 'nuqs/adapters/react-router/v7';
@@ -50,14 +51,6 @@ const AISettingsPage = lazy(() =>
     import('@/pages/settings/ai-settings').then((m) => ({ default: m.AISettingsPage }))
 );
 
-function PageLoader() {
-    return (
-        <div className="flex h-screen items-center justify-center">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
-        </div>
-    );
-}
-
 function PlaceholderPage({ title }: { title: string }) {
     return (
         <div>
@@ -81,7 +74,7 @@ export function App() {
     return (
         <BrowserRouter>
             <NuqsAdapter>
-                <Suspense fallback={<PageLoader />}>
+                <Suspense fallback={<LoadingScreen />}>
                     <Routes>
                         <Route path="/login" element={<LoginPage />} />
                         <Route path="/register" element={<RegisterPage />} />

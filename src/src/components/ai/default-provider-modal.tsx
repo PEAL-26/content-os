@@ -1,5 +1,7 @@
 import { useState } from 'react';
+import { ConfigFields } from '@/components/ai/config-fields';
 import { Modal } from '@/components/ui/modal';
+import type { AIProviderConfigOptions } from '@/lib/ai/types';
 import type { AIProvider } from '@/services/ai-provider.service';
 
 interface DefaultProviderModalProps {
@@ -7,8 +9,16 @@ interface DefaultProviderModalProps {
     onClose: () => void;
     provider: AIProvider;
     currentApiKey: string | null;
-    onSave: (apiKey: string) => void;
-    onTest: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
+    onSave: (data: {
+        apiKey: string;
+        config: AIProviderConfigOptions;
+    }) => void;
+    onTest: (
+        modelCode: string,
+        apiKey: string,
+        baseUrl?: string,
+        headers?: { key: string; value: string }[]
+    ) => Promise<{ success: boolean; error?: string }>;
 }
 
 export function DefaultProviderModal({
@@ -20,20 +30,37 @@ export function DefaultProviderModal({
     onTest,
 }: DefaultProviderModalProps) {
     const [apiKey, setApiKey] = useState(currentApiKey ?? '');
+    const [config, setConfig] = useState<AIProviderConfigOptions>(
+        provider.config ?? {}
+    );
     const [isTesting, setIsTesting] = useState(false);
-    const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null);
+    const [testResult, setTestResult] = useState<{
+        success: boolean;
+        error?: string;
+    } | null>(null);
+    const activeModels = provider.models?.filter((m) => m.isActive) ?? [];
+    const [selectedModel, setSelectedModel] = useState<string | null>(
+        activeModels[0]?.modelCode ?? null
+    );
 
     const handleTest = async () => {
         if (!apiKey.trim()) return;
+        if (!selectedModel) {
+            setTestResult({
+                success: false,
+                error: 'Seleciona um modelo para testar a conexão',
+            });
+            return;
+        }
         setIsTesting(true);
         setTestResult(null);
-        const result = await onTest(apiKey);
+        const result = await onTest(selectedModel, apiKey);
         setTestResult(result);
         setIsTesting(false);
     };
 
     const handleSave = () => {
-        onSave(apiKey);
+        onSave({ apiKey, config });
         onClose();
     };
 
@@ -107,25 +134,42 @@ export function DefaultProviderModal({
                     )}
                 </div>
 
-                {provider.models && provider.models.length > 0 && (
+                {activeModels.length > 0 && (
                     <div>
                         <label className="mb-1 block text-sm font-medium text-gray-700">
-                            Modelos disponíveis
+                            Modelo (o teste de conexão é por modelo)
                         </label>
                         <div className="rounded-md bg-gray-50 p-3">
                             <div className="flex flex-wrap gap-2">
-                                {provider.models.map((model) => (
-                                    <span
+                                {activeModels.map((model) => (
+                                    <button
                                         key={model.modelCode}
-                                        className="inline-flex items-center rounded-full bg-white border border-gray-200 px-2.5 py-0.5 text-xs font-medium text-gray-700"
+                                        type="button"
+                                        onClick={() => {
+                                            setSelectedModel(model.modelCode);
+                                            setTestResult(null);
+                                        }}
+                                        className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ${
+                                            selectedModel === model.modelCode
+                                                ? 'border-blue-600 bg-blue-600 text-white'
+                                                : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300'
+                                        }`}
                                     >
                                         {model.displayName}
-                                    </span>
+                                    </button>
                                 ))}
                             </div>
                         </div>
                     </div>
                 )}
+
+                {/* Configuração padrão do provider */}
+                <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700">
+                        Configuração padrão
+                    </label>
+                    <ConfigFields value={config} onChange={setConfig} />
+                </div>
 
                 <div className="flex justify-end gap-3 pt-4">
                     <button

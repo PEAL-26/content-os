@@ -504,89 +504,521 @@ USING (
 );
 
 -- =============================================================================
--- 17. AI PROVIDERS (globais da conta)
+-- 17. AI PROVIDERS (scoped por utilizador/workspace)
 -- =============================================================================
 
 ALTER TABLE ai_providers        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ai_provider_models  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ai_provider_headers ENABLE ROW LEVEL SECURITY;
 
--- Provedores, modelos e headers de IA são configuração global da conta:
--- qualquer utilizador autenticado pode geri-los (já não dependem de workspace).
+-- Scope:
+--   * user-level:  userId = auth.uid()            (dono é o único escritor)
+--   * workspace:   workspaceId ∈ my_workspace_ids() (todos os membros leem/usam;
+--                  só OWNER escreve)
+-- Modelos/headers herdam a visibilidade do provider via FK.
 
 -- ai_providers
 CREATE POLICY "ai_providers_select"
 ON ai_providers FOR SELECT
-USING (auth.uid() IS NOT NULL);
+USING (
+  "userId" = auth.uid()
+  OR "workspaceId" IN (SELECT my_workspace_ids())
+);
 
-CREATE POLICY "ai_providers_insert"
+-- INSERT user-level: apenas o próprio utilizador
+CREATE POLICY "ai_providers_insert_user"
 ON ai_providers FOR INSERT
-WITH CHECK (auth.uid() IS NOT NULL);
+WITH CHECK ("userId" = auth.uid());
 
-CREATE POLICY "ai_providers_update"
+-- INSERT workspace-level: apenas OWNER do workspace
+CREATE POLICY "ai_providers_insert_workspace"
+ON ai_providers FOR INSERT
+WITH CHECK (
+  "workspaceId" IN (
+    SELECT id FROM workspaces w
+    WHERE EXISTS (
+      SELECT 1 FROM workspace_members wm
+      WHERE wm."workspaceId" = w.id
+        AND wm."userId" = auth.uid()
+        AND wm.role = 'OWNER'
+    )
+  )
+);
+
+-- UPDATE user-level
+CREATE POLICY "ai_providers_update_user"
 ON ai_providers FOR UPDATE
-USING (auth.uid() IS NOT NULL)
-WITH CHECK (auth.uid() IS NOT NULL);
+USING ("userId" = auth.uid())
+WITH CHECK ("userId" = auth.uid());
 
-CREATE POLICY "ai_providers_delete"
+-- UPDATE workspace-level: apenas OWNER
+CREATE POLICY "ai_providers_update_workspace"
+ON ai_providers FOR UPDATE
+USING (
+  "workspaceId" IN (
+    SELECT id FROM workspaces w
+    WHERE EXISTS (
+      SELECT 1 FROM workspace_members wm
+      WHERE wm."workspaceId" = w.id
+        AND wm."userId" = auth.uid()
+        AND wm.role = 'OWNER'
+    )
+  )
+)
+WITH CHECK (
+  "workspaceId" IN (
+    SELECT id FROM workspaces w
+    WHERE EXISTS (
+      SELECT 1 FROM workspace_members wm
+      WHERE wm."workspaceId" = w.id
+        AND wm."userId" = auth.uid()
+        AND wm.role = 'OWNER'
+    )
+  )
+);
+
+-- DELETE user-level
+CREATE POLICY "ai_providers_delete_user"
 ON ai_providers FOR DELETE
-USING (auth.uid() IS NOT NULL);
+USING ("userId" = auth.uid());
 
--- ai_provider_models
+-- DELETE workspace-level: apenas OWNER
+CREATE POLICY "ai_providers_delete_workspace"
+ON ai_providers FOR DELETE
+USING (
+  "workspaceId" IN (
+    SELECT id FROM workspaces w
+    WHERE EXISTS (
+      SELECT 1 FROM workspace_members wm
+      WHERE wm."workspaceId" = w.id
+        AND wm."userId" = auth.uid()
+        AND wm.role = 'OWNER'
+    )
+  )
+);
+
+-- -----------------------------------------------------------------------------
+-- ai_provider_models — herda o scope do provider
+-- -----------------------------------------------------------------------------
+-- Helper: providers visíveis para o utilizador atual
+-- (definido inline em cada política para não exigir CREATE FUNCTION)
+
 CREATE POLICY "ai_provider_models_select"
 ON ai_provider_models FOR SELECT
 USING (
-  "providerId" IN (SELECT id FROM ai_providers)
+  "providerId" IN (
+    SELECT id FROM ai_providers
+    WHERE "userId" = auth.uid()
+       OR "workspaceId" IN (SELECT my_workspace_ids())
+  )
 );
 
 CREATE POLICY "ai_provider_models_insert"
 ON ai_provider_models FOR INSERT
 WITH CHECK (
-  "providerId" IN (SELECT id FROM ai_providers)
+  "providerId" IN (
+    SELECT id FROM ai_providers
+    WHERE "userId" = auth.uid()
+       OR "workspaceId" IN (SELECT id FROM workspaces w WHERE EXISTS (
+            SELECT 1 FROM workspace_members wm
+            WHERE wm."workspaceId" = w.id AND wm."userId" = auth.uid() AND wm.role = 'OWNER'))
+  )
 );
 
 CREATE POLICY "ai_provider_models_update"
 ON ai_provider_models FOR UPDATE
 USING (
-  "providerId" IN (SELECT id FROM ai_providers)
+  "providerId" IN (
+    SELECT id FROM ai_providers
+    WHERE "userId" = auth.uid()
+       OR "workspaceId" IN (SELECT id FROM workspaces w WHERE EXISTS (
+            SELECT 1 FROM workspace_members wm
+            WHERE wm."workspaceId" = w.id AND wm."userId" = auth.uid() AND wm.role = 'OWNER'))
+  )
 )
 WITH CHECK (
-  "providerId" IN (SELECT id FROM ai_providers)
+  "providerId" IN (
+    SELECT id FROM ai_providers
+    WHERE "userId" = auth.uid()
+       OR "workspaceId" IN (SELECT id FROM workspaces w WHERE EXISTS (
+            SELECT 1 FROM workspace_members wm
+            WHERE wm."workspaceId" = w.id AND wm."userId" = auth.uid() AND wm.role = 'OWNER'))
+  )
 );
 
 CREATE POLICY "ai_provider_models_delete"
 ON ai_provider_models FOR DELETE
 USING (
-  "providerId" IN (SELECT id FROM ai_providers)
+  "providerId" IN (
+    SELECT id FROM ai_providers
+    WHERE "userId" = auth.uid()
+       OR "workspaceId" IN (SELECT id FROM workspaces w WHERE EXISTS (
+            SELECT 1 FROM workspace_members wm
+            WHERE wm."workspaceId" = w.id AND wm."userId" = auth.uid() AND wm.role = 'OWNER'))
+  )
 );
 
--- ai_provider_headers
+-- -----------------------------------------------------------------------------
+-- ai_provider_headers — herda o scope do provider
+-- -----------------------------------------------------------------------------
+
 CREATE POLICY "ai_provider_headers_select"
 ON ai_provider_headers FOR SELECT
 USING (
-  "providerId" IN (SELECT id FROM ai_providers)
+  "providerId" IN (
+    SELECT id FROM ai_providers
+    WHERE "userId" = auth.uid()
+       OR "workspaceId" IN (SELECT my_workspace_ids())
+  )
 );
 
 CREATE POLICY "ai_provider_headers_insert"
 ON ai_provider_headers FOR INSERT
 WITH CHECK (
-  "providerId" IN (SELECT id FROM ai_providers)
+  "providerId" IN (
+    SELECT id FROM ai_providers
+    WHERE "userId" = auth.uid()
+       OR "workspaceId" IN (SELECT id FROM workspaces w WHERE EXISTS (
+            SELECT 1 FROM workspace_members wm
+            WHERE wm."workspaceId" = w.id AND wm."userId" = auth.uid() AND wm.role = 'OWNER'))
+  )
 );
 
 CREATE POLICY "ai_provider_headers_update"
 ON ai_provider_headers FOR UPDATE
 USING (
-  "providerId" IN (SELECT id FROM ai_providers)
+  "providerId" IN (
+    SELECT id FROM ai_providers
+    WHERE "userId" = auth.uid()
+       OR "workspaceId" IN (SELECT id FROM workspaces w WHERE EXISTS (
+            SELECT 1 FROM workspace_members wm
+            WHERE wm."workspaceId" = w.id AND wm."userId" = auth.uid() AND wm.role = 'OWNER'))
+  )
 )
 WITH CHECK (
-  "providerId" IN (SELECT id FROM ai_providers)
+  "providerId" IN (
+    SELECT id FROM ai_providers
+    WHERE "userId" = auth.uid()
+       OR "workspaceId" IN (SELECT id FROM workspaces w WHERE EXISTS (
+            SELECT 1 FROM workspace_members wm
+            WHERE wm."workspaceId" = w.id AND wm."userId" = auth.uid() AND wm.role = 'OWNER'))
+  )
 );
 
 CREATE POLICY "ai_provider_headers_delete"
 ON ai_provider_headers FOR DELETE
 USING (
-  "providerId" IN (SELECT id FROM ai_providers)
+  "providerId" IN (
+    SELECT id FROM ai_providers
+    WHERE "userId" = auth.uid()
+       OR "workspaceId" IN (SELECT id FROM workspaces w WHERE EXISTS (
+            SELECT 1 FROM workspace_members wm
+            WHERE wm."workspaceId" = w.id AND wm."userId" = auth.uid() AND wm.role = 'OWNER'))
+  )
 );
+
+-- =============================================================================
+-- 18. AI SYSTEM PROMPTS (overrides por utilizador/workspace)
+-- =============================================================================
+
+ALTER TABLE ai_system_prompts ENABLE ROW LEVEL SECURITY;
+
+-- Leitura: utilizador vê os seus próprios overrides + os dos workspaces de que
+-- é membro.
+CREATE POLICY "ai_system_prompts_select"
+ON ai_system_prompts FOR SELECT
+USING (
+  "userId" = auth.uid()
+  OR "workspaceId" IN (SELECT my_workspace_ids())
+);
+
+-- Escrita user-level: apenas o próprio utilizador.
+CREATE POLICY "ai_system_prompts_insert_user"
+ON ai_system_prompts FOR INSERT
+WITH CHECK ("userId" = auth.uid());
+
+CREATE POLICY "ai_system_prompts_update_user"
+ON ai_system_prompts FOR UPDATE
+USING ("userId" = auth.uid())
+WITH CHECK ("userId" = auth.uid());
+
+CREATE POLICY "ai_system_prompts_delete_user"
+ON ai_system_prompts FOR DELETE
+USING ("userId" = auth.uid());
+
+-- Escrita workspace-level: apenas OWNER do workspace.
+CREATE POLICY "ai_system_prompts_insert_workspace"
+ON ai_system_prompts FOR INSERT
+WITH CHECK (
+  "workspaceId" IN (
+    SELECT id FROM workspaces w
+    WHERE EXISTS (
+      SELECT 1 FROM workspace_members wm
+      WHERE wm."workspaceId" = w.id
+        AND wm."userId" = auth.uid()
+        AND wm.role = 'OWNER'
+    )
+  )
+);
+
+CREATE POLICY "ai_system_prompts_update_workspace"
+ON ai_system_prompts FOR UPDATE
+USING (
+  "workspaceId" IN (
+    SELECT id FROM workspaces w
+    WHERE EXISTS (
+      SELECT 1 FROM workspace_members wm
+      WHERE wm."workspaceId" = w.id
+        AND wm."userId" = auth.uid()
+        AND wm.role = 'OWNER'
+    )
+  )
+)
+WITH CHECK (
+  "workspaceId" IN (
+    SELECT id FROM workspaces w
+    WHERE EXISTS (
+      SELECT 1 FROM workspace_members wm
+      WHERE wm."workspaceId" = w.id
+        AND wm."userId" = auth.uid()
+        AND wm.role = 'OWNER'
+    )
+  )
+);
+
+CREATE POLICY "ai_system_prompts_delete_workspace"
+ON ai_system_prompts FOR DELETE
+USING (
+  "workspaceId" IN (
+    SELECT id FROM workspaces w
+    WHERE EXISTS (
+      SELECT 1 FROM workspace_members wm
+      WHERE wm."workspaceId" = w.id
+        AND wm."userId" = auth.uid()
+        AND wm.role = 'OWNER'
+    )
+  )
+);
+
+-- =============================================================================
+-- 19. CONTENT GENERATION PROMPTS (prompt final portátil de peças/roteiros)
+-- =============================================================================
+
+ALTER TABLE content_generation_prompts ENABLE ROW LEVEL SECURITY;
+
+-- Acesso via target (piece/script) associado a um workspace: resolvido com as
+-- mesmas regras dos targets (peça/roteiro pertence ao utilizador se o artigo do
+-- workspace for dele).
+-- Alavanca: o targetId aponta para content_pieces/video_scripts, que têm
+-- workspaceId com RLS; aqui usamos o artigo→workspace para autorizar.
+
+CREATE POLICY "content_generation_prompts_select"
+ON content_generation_prompts FOR SELECT
+USING (
+  "targetType" = 'PIECE'
+    AND "targetId" IN (
+      SELECT cp.id FROM content_pieces cp
+      WHERE cp."workspaceId" IN (SELECT my_workspace_ids())
+    )
+  OR "targetType" = 'VIDEO_SCRIPT'
+    AND "targetId" IN (
+      SELECT vs.id FROM video_scripts vs
+      WHERE vs."workspaceId" IN (SELECT my_workspace_ids())
+    )
+);
+
+CREATE POLICY "content_generation_prompts_insert"
+ON content_generation_prompts FOR INSERT
+WITH CHECK (
+  "targetType" = 'PIECE'
+    AND "targetId" IN (
+      SELECT cp.id FROM content_pieces cp
+      WHERE cp."workspaceId" IN (SELECT my_workspace_ids())
+    )
+  OR "targetType" = 'VIDEO_SCRIPT'
+    AND "targetId" IN (
+      SELECT vs.id FROM video_scripts vs
+      WHERE vs."workspaceId" IN (SELECT my_workspace_ids())
+    )
+);
+
+CREATE POLICY "content_generation_prompts_update"
+ON content_generation_prompts FOR UPDATE
+USING (
+  "targetType" = 'PIECE'
+    AND "targetId" IN (
+      SELECT cp.id FROM content_pieces cp
+      WHERE cp."workspaceId" IN (SELECT my_workspace_ids())
+    )
+  OR "targetType" = 'VIDEO_SCRIPT'
+    AND "targetId" IN (
+      SELECT vs.id FROM video_scripts vs
+      WHERE vs."workspaceId" IN (SELECT my_workspace_ids())
+    )
+)
+WITH CHECK (
+  "targetType" = 'PIECE'
+    AND "targetId" IN (
+      SELECT cp.id FROM content_pieces cp
+      WHERE cp."workspaceId" IN (SELECT my_workspace_ids())
+    )
+  OR "targetType" = 'VIDEO_SCRIPT'
+    AND "targetId" IN (
+      SELECT vs.id FROM video_scripts vs
+      WHERE vs."workspaceId" IN (SELECT my_workspace_ids())
+    )
+);
+
+CREATE POLICY "content_generation_prompts_delete"
+ON content_generation_prompts FOR DELETE
+USING (
+  "targetType" = 'PIECE'
+    AND "targetId" IN (
+      SELECT cp.id FROM content_pieces cp
+      WHERE cp."workspaceId" IN (SELECT my_workspace_ids())
+    )
+  OR "targetType" = 'VIDEO_SCRIPT'
+    AND "targetId" IN (
+      SELECT vs.id FROM video_scripts vs
+      WHERE vs."workspaceId" IN (SELECT my_workspace_ids())
+    )
+);
+
+-- =============================================================================
+-- 20. CONTENT PUBLICATIONS (publicações multi-plataforma, polimórfico)
+-- =============================================================================
+
+ALTER TABLE content_publications ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "content_publications_select"
+ON content_publications FOR SELECT
+USING (
+  "targetType" = 'ARTICLE'
+    AND "targetId" IN (
+      SELECT a.id FROM articles a
+      WHERE a."workspaceId" IN (SELECT my_workspace_ids())
+    )
+  OR "targetType" = 'PIECE'
+    AND "targetId" IN (
+      SELECT cp.id FROM content_pieces cp
+      WHERE cp."workspaceId" IN (SELECT my_workspace_ids())
+    )
+  OR "targetType" = 'VIDEO_SCRIPT'
+    AND "targetId" IN (
+      SELECT vs.id FROM video_scripts vs
+      WHERE vs."workspaceId" IN (SELECT my_workspace_ids())
+    )
+);
+
+CREATE POLICY "content_publications_insert"
+ON content_publications FOR INSERT
+WITH CHECK (
+  "targetType" = 'ARTICLE'
+    AND "targetId" IN (
+      SELECT a.id FROM articles a
+      WHERE a."workspaceId" IN (SELECT my_workspace_ids())
+    )
+  OR "targetType" = 'PIECE'
+    AND "targetId" IN (
+      SELECT cp.id FROM content_pieces cp
+      WHERE cp."workspaceId" IN (SELECT my_workspace_ids())
+    )
+  OR "targetType" = 'VIDEO_SCRIPT'
+    AND "targetId" IN (
+      SELECT vs.id FROM video_scripts vs
+      WHERE vs."workspaceId" IN (SELECT my_workspace_ids())
+    )
+);
+
+CREATE POLICY "content_publications_update"
+ON content_publications FOR UPDATE
+USING (
+  "targetType" = 'ARTICLE'
+    AND "targetId" IN (
+      SELECT a.id FROM articles a
+      WHERE a."workspaceId" IN (SELECT my_workspace_ids())
+    )
+  OR "targetType" = 'PIECE'
+    AND "targetId" IN (
+      SELECT cp.id FROM content_pieces cp
+      WHERE cp."workspaceId" IN (SELECT my_workspace_ids())
+    )
+  OR "targetType" = 'VIDEO_SCRIPT'
+    AND "targetId" IN (
+      SELECT vs.id FROM video_scripts vs
+      WHERE vs."workspaceId" IN (SELECT my_workspace_ids())
+    )
+)
+WITH CHECK (
+  "targetType" = 'ARTICLE'
+    AND "targetId" IN (
+      SELECT a.id FROM articles a
+      WHERE a."workspaceId" IN (SELECT my_workspace_ids())
+    )
+  OR "targetType" = 'PIECE'
+    AND "targetId" IN (
+      SELECT cp.id FROM content_pieces cp
+      WHERE cp."workspaceId" IN (SELECT my_workspace_ids())
+    )
+  OR "targetType" = 'VIDEO_SCRIPT'
+    AND "targetId" IN (
+      SELECT vs.id FROM video_scripts vs
+      WHERE vs."workspaceId" IN (SELECT my_workspace_ids())
+    )
+);
+
+CREATE POLICY "content_publications_delete"
+ON content_publications FOR DELETE
+USING (
+  "targetType" = 'ARTICLE'
+    AND "targetId" IN (
+      SELECT a.id FROM articles a
+      WHERE a."workspaceId" IN (SELECT my_workspace_ids())
+    )
+  OR "targetType" = 'PIECE'
+    AND "targetId" IN (
+      SELECT cp.id FROM content_pieces cp
+      WHERE cp."workspaceId" IN (SELECT my_workspace_ids())
+    )
+  OR "targetType" = 'VIDEO_SCRIPT'
+    AND "targetId" IN (
+      SELECT vs.id FROM video_scripts vs
+      WHERE vs."workspaceId" IN (SELECT my_workspace_ids())
+    )
+);
+
+-- =============================================================================
+-- SECTION 21 — STORAGE: bucket "assets" (artefactos publicados)
+-- =============================================================================
+
+-- Cria o bucket (se não existir). publico para leitura (getPublicUrl).
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES ('assets', 'assets', true, 52428800, NULL)
+ON CONFLICT (id) DO NOTHING;
+
+-- Uploads autenticados
+CREATE POLICY "assets_authenticated_insert"
+ON storage.objects FOR INSERT
+TO authenticated
+WITH CHECK (bucket_id = 'assets');
+
+-- Uploads/gestão de objeto a nível de owner do ficheiro (update/delete)
+CREATE POLICY "assets_authenticated_update"
+ON storage.objects FOR UPDATE
+TO authenticated
+USING (bucket_id = 'assets')
+WITH CHECK (bucket_id = 'assets');
+
+CREATE POLICY "assets_authenticated_delete"
+ON storage.objects FOR DELETE
+TO authenticated
+USING (bucket_id = 'assets');
+
+-- Leitura pública (bucket público)
+CREATE POLICY "assets_public_read"
+ON storage.objects FOR SELECT
+TO public
+USING (bucket_id = 'assets');
 
 -- =============================================================================
 -- FINAL CHECK

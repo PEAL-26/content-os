@@ -161,6 +161,7 @@ export function useWorkspaceContentPieces(filters?: WorkspaceContentFilters) {
                     slides: generatedPiece.slides,
                     slideCount: generatedPiece.slideCount,
                     aiGenerated: true,
+                    portablePrompts: generatedPiece.portablePrompts,
                 });
 
                 await fetchPieces();

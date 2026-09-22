@@ -15,15 +15,15 @@ export function DefaultProviderSection({
     apiKeys,
     onSetDefault,
 }: DefaultProviderSectionProps) {
-    const activeProviders = providers.filter(p => p.isActive && apiKeys[p.providerId]);
-    const selectedProvider = activeProviders.find(p => p.providerId === defaultProviderId);
+    const activeProviders = providers.filter(p => p.isActive && apiKeys[p.id]);
+    const selectedProvider = activeProviders.find(p => p.id === defaultProviderId);
     const availableModels = selectedProvider?.models?.filter(m => m.isActive) ?? [];
 
-    const handleProviderChange = (providerId: string) => {
-        const provider = activeProviders.find(p => p.providerId === providerId);
-        const firstModel = provider?.models?.[0];
+    const handleProviderChange = (providerRowId: string) => {
+        const provider = activeProviders.find(p => p.id === providerRowId);
+        const firstModel = provider?.models?.find(m => m.isActive);
         if (firstModel) {
-            onSetDefault(providerId, firstModel.modelCode);
+            onSetDefault(providerRowId, firstModel.modelCode);
         }
     };
 
@@ -63,7 +63,7 @@ export function DefaultProviderSection({
                         >
                             <option value="">Selecione um provedor</option>
                             {activeProviders.map((p) => (
-                                <option key={p.providerId} value={p.providerId}>
+                                <option key={p.id} value={p.id}>
                                     {p.name}
                                 </option>
                             ))}

@@ -1,5 +1,7 @@
 import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/stores/auth-store';
 import { v4 as uuidv4 } from 'uuid';
+import type { AIProviderConfigOptions } from '@/lib/ai/types';
 
 // =============================================================================
 // Types
@@ -10,6 +12,8 @@ export interface AIProviderModel {
     providerId: string;
     displayName: string;
     modelCode: string;
+    /** Configuração padrão do modelo (temperature, max_tokens, ...). */
+    config?: AIProviderConfigOptions | null;
     isActive: boolean;
     createdAt: string;
 }
@@ -28,6 +32,16 @@ export interface AIProvider {
     name: string;
     description: string | null;
     baseUrl: string | null;
+    /** Dono a nível de utilizador (acessível em todos os workspaces dele). */
+    userId?: string | null;
+    /** Workspace específico (só membros desse workspace). */
+    workspaceId?: string | null;
+    /** API key cifrada (AES-GCM, chave derivada da password). */
+    apiKeyEncrypted?: string | null;
+    /** IV (base64) usado na cifra da API key. */
+    apiKeyIv?: string | null;
+    /** Configuração padrão do provider (temperature, max_tokens, ...). */
+    config?: AIProviderConfigOptions | null;
     isDefault: boolean;
     isCustom: boolean;
     isActive: boolean;
@@ -38,11 +52,17 @@ export interface AIProvider {
     headers: AIProviderHeader[];
 }
 
+/** Scope onde um provider vive. */
+export type ProviderScope =
+    | { type: 'user' }
+    | { type: 'workspace'; workspaceId: string };
+
 export interface CreateCustomProviderInput {
     name: string;
     baseUrl: string;
     description?: string;
-    models: { displayName: string; modelCode: string }[];
+    config?: AIProviderConfigOptions | null;
+    models: { displayName: string; modelCode: string; config?: AIProviderConfigOptions | null }[];
     headers?: { key: string; value: string }[];
 }
 
@@ -50,9 +70,62 @@ export interface UpdateProviderInput {
     name?: string;
     baseUrl?: string;
     description?: string;
+    config?: AIProviderConfigOptions | null;
     isActive?: boolean;
-    models?: { displayName: string; modelCode: string }[];
+    models?: { displayName: string; modelCode: string; config?: AIProviderConfigOptions | null }[];
     headers?: { key: string; value: string }[];
+}
+
+// =============================================================================
+// Scope helpers
+// =============================================================================
+
+function getCurrentUserId(): string | null {
+    return useAuthStore.getState().user?.id ?? null;
+}
+
+/** Ids dos workspaces onde o utilizador atual é membro (sem duplicados). */
+async function getMyWorkspaceIds(): Promise<string[]> {
+    const uid = getCurrentUserId();
+    if (!uid) return [];
+
+    const { data, error } = await supabase
+        .from('workspace_members')
+        .select('workspaceId')
+        .eq('userId', uid);
+
+    if (error) {
+        throw new Error(`Erro ao buscar workspaces: ${error.message}`);
+    }
+
+    return Array.from(new Set((data ?? []).map((r) => r.workspaceId as string)));
+}
+
+/**
+ * Devolve o scope donde o provider é visível para o utilizador atual:
+ * user-level (dono) ou workspace (membro). Usado pela UI para agrupar.
+ */
+export function getProviderScope(p: AIProvider): ProviderScope | null {
+    const uid = getCurrentUserId();
+    if (p.userId && p.userId === uid) return { type: 'user' };
+    if (p.workspaceId) return { type: 'workspace', workspaceId: p.workspaceId };
+    return null;
+}
+
+/** true se o utilizador atual é OWNER do workspace (configura providers de workspace). */
+export async function isWorkspaceOwner(workspaceId: string): Promise<boolean> {
+    const uid = getCurrentUserId();
+    if (!uid) return false;
+
+    const { data, error } = await supabase
+        .from('workspace_members')
+        .select('role')
+        .eq('workspaceId', workspaceId)
+        .eq('userId', uid)
+        .single();
+
+    if (error) return false;
+    return data?.role === 'OWNER';
 }
 
 // =============================================================================
@@ -73,6 +146,7 @@ export const DEFAULT_AI_PROVIDERS: DefaultProviderConfig[] = [
         providerId: 'anthropic',
         name: 'Anthropic Claude',
         description: 'Modelo mais capaz, ideal para tarefas complexas',
+        baseUrl: 'https://api.anthropic.com/v1/',
         priority: 1,
         models: [
             { displayName: 'Claude Sonnet 4', modelCode: 'claude-sonnet-4-20250514' },
@@ -83,6 +157,7 @@ export const DEFAULT_AI_PROVIDERS: DefaultProviderConfig[] = [
         providerId: 'openai',
         name: 'OpenAI GPT',
         description: 'Excelente equilíbrio entre custo e qualidade',
+        baseUrl: 'https://api.openai.com/v1',
         priority: 2,
         models: [
             { displayName: 'GPT-4o', modelCode: 'gpt-4o' },
@@ -93,6 +168,7 @@ export const DEFAULT_AI_PROVIDERS: DefaultProviderConfig[] = [
         providerId: 'google',
         name: 'Google Gemini',
         description: 'Gratuito com bons limites, muito rápido',
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/',
         priority: 3,
         models: [
             { displayName: 'Gemini 2.0 Flash', modelCode: 'gemini-2.0-flash' },
@@ -103,6 +179,7 @@ export const DEFAULT_AI_PROVIDERS: DefaultProviderConfig[] = [
         providerId: 'opencode',
         name: 'OpenCode Zen',
         description: '1M tokens gratuito',
+        baseUrl: 'https://opencode.ai/zen/v1',
         priority: 4,
         models: [
             { displayName: 'Big Pickle', modelCode: 'big-pickle' },
@@ -113,6 +190,7 @@ export const DEFAULT_AI_PROVIDERS: DefaultProviderConfig[] = [
         providerId: 'groq',
         name: 'Groq',
         description: 'Mais rápido, 30 RPM gratuito',
+        baseUrl: 'https://api.groq.com/openai/v1',
         priority: 5,
         models: [
             { displayName: 'Llama 3.3 70B', modelCode: 'llama-3.3-70b-versatile' },
@@ -123,6 +201,7 @@ export const DEFAULT_AI_PROVIDERS: DefaultProviderConfig[] = [
         providerId: 'deepseek',
         name: 'DeepSeek',
         description: 'Muito barato, bom para tarefas simples',
+        baseUrl: 'https://api.deepseek.com/v1',
         priority: 6,
         models: [
             { displayName: 'DeepSeek Chat', modelCode: 'deepseek-chat' },
@@ -133,6 +212,7 @@ export const DEFAULT_AI_PROVIDERS: DefaultProviderConfig[] = [
         providerId: 'cerebras',
         name: 'Cerebras',
         description: '1M tokens gratuitos por mês',
+        baseUrl: 'https://api.cerebras.ai/v1',
         priority: 7,
         models: [
             { displayName: 'Llama 3.3 70B', modelCode: 'llama3.3-70b' },
@@ -143,6 +223,7 @@ export const DEFAULT_AI_PROVIDERS: DefaultProviderConfig[] = [
         providerId: 'together',
         name: 'Together AI',
         description: 'Bom tier gratuito, vários modelos open source',
+        baseUrl: 'https://api.together.xyz/v1',
         priority: 8,
         models: [
             { displayName: 'Llama 3.3 70B Turbo', modelCode: 'meta-llama/Llama-3.3-70B-Instruct-Turbo' },
@@ -153,6 +234,7 @@ export const DEFAULT_AI_PROVIDERS: DefaultProviderConfig[] = [
         providerId: 'openrouter',
         name: 'OpenRouter',
         description: 'Unified API para 300+ modelos',
+        baseUrl: 'https://openrouter.ai/api/v1',
         priority: 9,
         models: [
             { displayName: 'Claude 3.5 Haiku', modelCode: 'anthropic/claude-3.5-haiku' },
@@ -173,6 +255,7 @@ export const DEFAULT_AI_PROVIDERS: DefaultProviderConfig[] = [
         providerId: 'ollama',
         name: 'Ollama (Local)',
         description: 'Modelos locais no teu computador',
+        baseUrl: 'http://localhost:11434/v1',
         priority: 10,
         models: [
             { displayName: 'Gemma 3 4B', modelCode: 'gemma3:4b' },
@@ -187,17 +270,34 @@ export const DEFAULT_AI_PROVIDERS: DefaultProviderConfig[] = [
 
 export const aiProviderService = {
     /**
-     * Lista global de provedores (configuração de conta, sem workspace).
+     * Lista os provedores visíveis para o utilizador atual: os seus user-level
+     * + os de cada workspace onde é membro. A BD aplica RLS por `auth.uid()`.
      */
     async getProviders(): Promise<AIProvider[]> {
-        const { data, error } = await supabase
+        const uid = getCurrentUserId();
+        if (!uid) return [];
+
+        const workspaceIds = await getMyWorkspaceIds();
+
+        let query = supabase
             .from('ai_providers')
             .select(`
                 *,
                 models:ai_provider_models(*),
                 headers:ai_provider_headers(*)
-            `)
-            .order('priority');
+            `);
+
+        // Filtro explícito além da RLS (defesa em profundidade): os do
+        // utilizador + os dos workspaces onde é membro.
+        if (workspaceIds.length > 0) {
+            query = query.or(
+                `userId.eq.${uid},workspaceId.in.(${workspaceIds.join(',')})`
+            );
+        } else {
+            query = query.eq('userId', uid);
+        }
+
+        const { data, error } = await query.order('priority');
 
         if (error) {
             throw new Error(`Erro ao buscar provedores: ${error.message}`);
@@ -225,21 +325,8 @@ export const aiProviderService = {
         return data as AIProvider;
     },
 
-    async getDefaultProvider(workspaceId: string): Promise<AIProvider | null> {
-        const config = await this.getDefaultProviderConfig(workspaceId);
-        if (!config) return null;
-
-        const providers = await this.getProviders();
-        return (
-            providers.find(
-                (p) => p.providerId === config.providerId
-            ) ?? null
-        );
-    },
-
     /**
-     * Devolve o provedor padrão configurado no workspace (referência por
-     * providerId), sem carregar a lista global de provedores.
+     * Devolve o provedor padrão configurado no workspace (row id) + modelo.
      */
     async getDefaultProviderConfig(workspaceId: string): Promise<{
         providerId: string;
@@ -279,29 +366,46 @@ export const aiProviderService = {
     },
 
     async createCustomProvider(
-        input: CreateCustomProviderInput
+        input: CreateCustomProviderInput,
+        scope: ProviderScope = { type: 'user' }
     ): Promise<AIProvider> {
         const providerId = `custom_${uuidv4().slice(0, 8)}`;
+        const uid = getCurrentUserId();
 
-        // Get max priority
+        // Prioridade: max dentro do scope do dono + 1 (user-level e
+        // workspace-level têm filas de prioridade independentes por scope).
         const existing = await this.getProviders();
-        const maxPriority = existing.reduce((max, p) => Math.max(max, p.priority), 0);
+        const maxPriority = existing.reduce(
+            (max, p) => Math.max(max, p.priority),
+            0
+        );
+
+        const insertData: Record<string, unknown> = {
+            id: uuidv4(),
+            providerId,
+            name: input.name,
+            description: input.description ?? null,
+            baseUrl: input.baseUrl,
+            config: input.config ?? null,
+            isDefault: false,
+            isCustom: true,
+            isActive: true,
+            priority: maxPriority + 1,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+        };
+
+        if (scope.type === 'user') {
+            insertData.userId = uid;
+            insertData.workspaceId = null;
+        } else {
+            insertData.userId = null;
+            insertData.workspaceId = scope.workspaceId;
+        }
 
         const { data: provider, error: providerError } = await supabase
             .from('ai_providers')
-            .insert({
-                id: uuidv4(),
-                providerId,
-                name: input.name,
-                description: input.description ?? null,
-                baseUrl: input.baseUrl,
-                isDefault: false,
-                isCustom: true,
-                isActive: true,
-                priority: maxPriority + 1,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-            })
+            .insert(insertData)
             .select()
             .single();
 
@@ -311,11 +415,12 @@ export const aiProviderService = {
 
         // Insert models
         if (input.models.length > 0) {
-            const modelsToInsert = input.models.map(m => ({
+            const modelsToInsert = input.models.map((m) => ({
                 id: uuidv4(),
                 providerId: provider.id,
                 displayName: m.displayName,
                 modelCode: m.modelCode,
+                config: m.config ?? null,
                 isActive: true,
                 createdAt: new Date().toISOString(),
             }));
@@ -331,7 +436,7 @@ export const aiProviderService = {
 
         // Insert headers
         if (input.headers && input.headers.length > 0) {
-            const headersToInsert = input.headers.map(h => ({
+            const headersToInsert = input.headers.map((h) => ({
                 id: uuidv4(),
                 providerId: provider.id,
                 key: h.key,
@@ -362,7 +467,9 @@ export const aiProviderService = {
 
         if (input.name !== undefined) updateData.name = input.name;
         if (input.baseUrl !== undefined) updateData.baseUrl = input.baseUrl;
-        if (input.description !== undefined) updateData.description = input.description;
+        if (input.description !== undefined)
+            updateData.description = input.description;
+        if (input.config !== undefined) updateData.config = input.config;
         if (input.isActive !== undefined) updateData.isActive = input.isActive;
 
         const { error: providerError } = await supabase
@@ -371,7 +478,9 @@ export const aiProviderService = {
             .eq('id', providerId);
 
         if (providerError) {
-            throw new Error(`Erro ao atualizar provedor: ${providerError.message}`);
+            throw new Error(
+                `Erro ao atualizar provedor: ${providerError.message}`
+            );
         }
 
         // Replace models if provided
@@ -384,11 +493,12 @@ export const aiProviderService = {
 
             // Insert new models
             if (input.models.length > 0) {
-                const modelsToInsert = input.models.map(m => ({
+                const modelsToInsert = input.models.map((m) => ({
                     id: uuidv4(),
                     providerId,
                     displayName: m.displayName,
                     modelCode: m.modelCode,
+                    config: m.config ?? null,
                     isActive: true,
                     createdAt: new Date().toISOString(),
                 }));
@@ -398,7 +508,9 @@ export const aiProviderService = {
                     .insert(modelsToInsert);
 
                 if (modelsError) {
-                    throw new Error(`Erro ao atualizar modelos: ${modelsError.message}`);
+                    throw new Error(
+                        `Erro ao atualizar modelos: ${modelsError.message}`
+                    );
                 }
             }
         }
@@ -413,7 +525,7 @@ export const aiProviderService = {
 
             // Insert new headers
             if (input.headers.length > 0) {
-                const headersToInsert = input.headers.map(h => ({
+                const headersToInsert = input.headers.map((h) => ({
                     id: uuidv4(),
                     providerId,
                     key: h.key,
@@ -426,7 +538,9 @@ export const aiProviderService = {
                     .insert(headersToInsert);
 
                 if (headersError) {
-                    throw new Error(`Erro ao atualizar headers: ${headersError.message}`);
+                    throw new Error(
+                        `Erro ao atualizar headers: ${headersError.message}`
+                    );
                 }
             }
         }
@@ -446,20 +560,34 @@ export const aiProviderService = {
     },
 
     /**
-     * Cria os provedores padrão uma única vez por conta (global).
+     * Cria os provedores padrão uma única vez POR UTILIZADOR (user-level).
      * Devolve true se foram criados, false se já existiam.
      */
     async ensureDefaultProviders(): Promise<boolean> {
-        const existing = await this.getProviders();
+        const uid = getCurrentUserId();
+        if (!uid) return false;
 
-        if (existing.length > 0) return false;
+        const { data: existing, error: existingError } = await supabase
+            .from('ai_providers')
+            .select('id')
+            .eq('userId', uid);
 
-        const providersToInsert = DEFAULT_AI_PROVIDERS.map(dp => ({
+        if (existingError) {
+            throw new Error(
+                `Erro ao verificar provedores padrão: ${existingError.message}`
+            );
+        }
+
+        if ((existing ?? []).length > 0) return false;
+
+        const providersToInsert = DEFAULT_AI_PROVIDERS.map((dp) => ({
             id: uuidv4(),
             providerId: dp.providerId,
             name: dp.name,
             description: dp.description,
             baseUrl: dp.baseUrl ?? null,
+            userId: uid,
+            workspaceId: null,
             isDefault: true,
             isCustom: false,
             isActive: true,
@@ -474,7 +602,9 @@ export const aiProviderService = {
             .select();
 
         if (providersError) {
-            throw new Error(`Erro ao criar provedores padrão: ${providersError.message}`);
+            throw new Error(
+                `Erro ao criar provedores padrão: ${providersError.message}`
+            );
         }
 
         // Insert models for each provider
@@ -489,7 +619,7 @@ export const aiProviderService = {
 
         for (const inserted of insertedProviders) {
             const defaultConfig = DEFAULT_AI_PROVIDERS.find(
-                dp => dp.providerId === inserted.providerId
+                (dp) => dp.providerId === inserted.providerId
             );
 
             if (defaultConfig) {
@@ -512,7 +642,9 @@ export const aiProviderService = {
                 .insert(allModels);
 
             if (modelsError) {
-                throw new Error(`Erro ao criar modelos padrão: ${modelsError.message}`);
+                throw new Error(
+                    `Erro ao criar modelos padrão: ${modelsError.message}`
+                );
             }
         }
 

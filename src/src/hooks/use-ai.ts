@@ -15,6 +15,10 @@ interface GenerateArticleInput {
     topic: string;
     pillar?: PillarConfig;
     product?: Product;
+    /** Instruções adicionais por geração (anexadas ao system prompt). */
+    additionalInstructions?: string;
+    /** Override opcional de provider+modelo para esta geração (null = padrão). */
+    preferred?: { providerId?: string | null; modelCode?: string | null } | null;
 }
 
 interface GenerateArticleResult {
@@ -28,8 +32,6 @@ interface GenerateArticleResult {
 export function useAI() {
     const { currentWorkspace } = useWorkspaceStore();
     const { user } = useAuthContext();
-    const providers = useAIProviderStore((s) => s.providers);
-    const apiKeys = useAIProviderStore((s) => s.apiKeys);
     const [isGenerating, setIsGenerating] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [currentProvider, setCurrentProvider] = useState<string | null>(null);
@@ -61,6 +63,15 @@ export function useAI() {
                 );
 
                 try {
+                    // Hidratação preguiçosa: se os provedores ainda não foram
+                    // carregados nesta sessão, carrega-os com o workspace ativo
+                    // antes de gerar (evita "Nenhum provider configurado").
+                    const aiStore = useAIProviderStore.getState();
+                    if (aiStore.providers.length === 0 && currentWorkspace) {
+                        await aiStore.hydrateProviders(currentWorkspace.id);
+                    }
+                    const fresh = useAIProviderStore.getState();
+
                     const result = await generateArticle(
                         {
                             topic: input.topic,
@@ -68,8 +79,13 @@ export function useAI() {
                             product: input.product,
                             workspace: currentWorkspace,
                         },
-                        providers,
-                        apiKeys
+                        fresh.providers,
+                        fresh.apiKeys,
+                        input.preferred ?? {
+                            providerId: fresh.defaultProviderId,
+                            modelCode: fresh.defaultModelCode,
+                        },
+                        input.additionalInstructions
                     );
 
                     if (!result.success) {
@@ -129,7 +145,7 @@ export function useAI() {
                 setIsGenerating(false);
             }
         },
-        [currentWorkspace, user?.id, providers, apiKeys]
+        [currentWorkspace, user?.id]
     );
 
     const clearError = useCallback(() => {

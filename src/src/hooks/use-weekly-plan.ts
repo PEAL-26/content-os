@@ -143,7 +143,12 @@ export function useWeeklyPlan() {
     const markAsPublished = useCallback(
         async (
             itemId: string,
-            data: { publishedUrl?: string; publishedAt: Date }
+            data: {
+                platform: string;
+                publishedUrl?: string;
+                publishedAt: Date;
+                assetFile?: File | null;
+            }
         ): Promise<boolean> => {
             try {
                 await weeklyPlanService.markAsPublished(itemId, data);

@@ -3,6 +3,8 @@ import type { PlanItemStatus, SocialChannel } from '@/types/database';
 import type { PillarConfig } from '@/types/pillar';
 import { v4 as uuidv4 } from 'uuid';
 import { contentPieceService } from './content-piece.service';
+import { articleService } from './article.service';
+import { uploadAsset } from './publication.service';
 
 export interface WeeklyPlanData {
     id: string;
@@ -470,39 +472,102 @@ export const weeklyPlanService = {
 
     async markAsPublished(
         planItemId: string,
-        data: { publishedUrl?: string; publishedAt: Date }
+        data: {
+            platform: string;
+            publishedUrl?: string;
+            publishedAt: Date;
+            assetFile?: File | null;
+        }
     ): Promise<PlanItemData> {
         const item = await this.getPlanItemWithRelations(planItemId);
         if (!item) {
             throw new Error('Item não encontrado');
         }
 
+        // 1. Artefacto: faz upload para Storage se foi fornecido.
+        let assetUrl: string | null = null;
+        let assetName: string | null = null;
+        if (data.assetFile) {
+            const uploaded = await uploadAsset(data.assetFile, 'published');
+            assetUrl = uploaded.url;
+            assetName = uploaded.name;
+        }
+
+        // 2. Publicação multi-plataforma (content_publications, polimórfico).
+        const targetType = item.contentPieceId
+            ? 'PIECE'
+            : item.articleId
+              ? 'ARTICLE'
+              : null;
+        if (targetType) {
+            const targetId = item.contentPieceId ?? item.articleId!;
+            const { error } = await supabase
+                .from('content_publications')
+                .insert({
+                    id: uuidv4(),
+                    targetType,
+                    targetId,
+                    platform: data.platform || 'outros',
+                    url: data.publishedUrl ?? assetUrl ?? '',
+                    publishedAt: data.publishedAt.toISOString(),
+                    createdAt: new Date().toISOString(),
+                })
+                .select()
+                .single();
+
+            if (error) {
+                throw new Error(
+                    `Erro ao gravar publicação: ${error.message}`
+                );
+            }
+        }
+
+        // 3. Marca o item do plano como publicado (publishedUrl fica
+        //    deprecado — mantém-se para compatibilidade, o registo principal
+        //    é content_publications).
         const updateData: Record<string, unknown> = {
             status: 'PUBLISHED',
             publishedAt: data.publishedAt.toISOString(),
-            publishedUrl: data.publishedUrl || null,
+            publishedUrl: data.publishedUrl || assetUrl || null,
             updatedAt: new Date().toISOString(),
         };
 
-        const { data: result, error } = await supabase
+        const { data: result, error: updateError } = await supabase
             .from('plan_items')
             .update(updateData)
             .eq('id', planItemId)
             .select()
             .single();
 
-        if (error) {
-            throw new Error(`Erro ao marcar como publicado: ${error.message}`);
+        if (updateError) {
+            throw new Error(
+                `Erro ao marcar como publicado: ${updateError.message}`
+            );
         }
 
+        // 4. Atualiza a peça/artigo correspondente (status + artefacto).
         if (item.contentPieceId) {
             await contentPieceService.updateStatus(
                 item.contentPieceId,
                 'PUBLISHED'
             );
-            await contentPieceService.updateContentPiece(item.contentPieceId, {
-                publishedAt: data.publishedAt.toISOString(),
-            });
+            await contentPieceService.updateContentPiece(
+                item.contentPieceId,
+                {
+                    publishedAt: data.publishedAt.toISOString(),
+                    assetUrl: assetUrl ?? undefined,
+                    assetName: assetName ?? undefined,
+                }
+            );
+        } else if (item.articleId) {
+            await articleService.updateStatus(item.articleId, 'PUBLISHED');
+            if (assetUrl || assetName) {
+                await articleService.updateAsset(
+                    item.articleId,
+                    assetUrl,
+                    assetName
+                );
+            }
         }
 
         return result as PlanItemData;

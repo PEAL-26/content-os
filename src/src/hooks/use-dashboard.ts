@@ -177,6 +177,7 @@ export function useDashboard() {
         async (itemId: string) => {
             try {
                 await weeklyPlanService.markAsPublished(itemId, {
+                    platform: 'outros',
                     publishedAt: new Date(),
                 });
                 setWeekItems((prev) =>

@@ -1,6 +1,7 @@
 import { GLOBAL_PATHS } from '@/lib/workspace-paths';
 import { useAuthContext } from '@/context/use-auth-context';
 import { workspaceInitService } from '@/services/workspace-init.service';
+import { useAIProviderStore } from '@/stores/ai-provider-store';
 import {
     getPersistedWorkspaceId,
     useWorkspaceStore,
@@ -15,6 +16,7 @@ export function useWorkspace() {
     const store = useWorkspaceStore();
     const hasCheckedRef = useRef(false);
     const initializedWorkspacesRef = useRef<Set<string>>(new Set());
+    const aiProvidersHydratedRef = useRef<Set<string>>(new Set());
 
     useEffect(() => {
         if (user && !authLoading && !hasCheckedRef.current) {
@@ -26,12 +28,17 @@ export function useWorkspace() {
             hasCheckedRef.current = false;
             store.clearWorkspace();
             initializedWorkspacesRef.current.clear();
+            aiProvidersHydratedRef.current.clear();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps -- store is stable reference
     }, [user, authLoading]);
 
     useEffect(() => {
-        if (!user || authLoading || store.isLoading) {
+        // O efeito de navegação só decide após o fetch de workspaces estar
+        // concluído (hasFetched): antes disso não há informação fiável sobre
+        // o nº de workspaces, e um redirect prematuro (ex.: /onboarding)
+        // causaria flash e perda da página atual no reload.
+        if (!user || authLoading || store.isLoading || !store.hasFetched) {
             return;
         }
 
@@ -107,12 +114,30 @@ export function useWorkspace() {
             initializedWorkspacesRef.current.add(workspaceId);
             workspaceInitService.ensureDefaultConfigs(workspaceId);
         }
+
+        // Hidrata os provedores de IA com o workspace ativo (reload e login).
+        // O ref evita repetir nesta sessão e o store coalesce chamadas
+        // concorrentes — nunca fica em loop.
+        if (
+            workspaceId &&
+            !store.isLoading &&
+            !aiProvidersHydratedRef.current.has(workspaceId)
+        ) {
+            aiProvidersHydratedRef.current.add(workspaceId);
+            void useAIProviderStore.getState().hydrateProviders(workspaceId);
+        }
     }, [store.currentWorkspace?.id, store.isLoading]);
 
     return {
         currentWorkspace: store.currentWorkspace,
         workspaces: store.workspaces,
-        isLoading: store.isLoading || authLoading,
+        hasFetched: store.hasFetched,
+        // Um utilizador autenticado cujos workspaces ainda não foram
+        // carregados (hasFetched = false) está em loading: os guards mostram
+        // o spinner em vez de decidirem redirect com dados incompletos.
+        isLoading:
+            authLoading ||
+            (user ? store.isLoading || !store.hasFetched : false),
         error: store.error,
         fetchWorkspaces: store.fetchWorkspaces,
         setWorkspace: store.setWorkspace,

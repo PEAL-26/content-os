@@ -18,6 +18,10 @@ export interface GeneratePiecesParams {
     channelIds: Partial<Record<ContentFormat, string>>;
     product?: Product;
     pillar?: PillarConfig;
+    /** Instruções adicionais por geração (anexadas ao system prompt). */
+    additionalInstructions?: string;
+    /** Override opcional de provider+modelo para esta geração (null = padrão). */
+    preferred?: { providerId?: string | null; modelCode?: string | null } | null;
 }
 
 export interface UpdatePieceParams {
@@ -29,12 +33,15 @@ export interface UpdatePieceParams {
     slides?: ContentSlide[] | null;
     slideCount?: number | null;
     channelId?: string | null;
+    publishedAt?: string;
+    /** Artefacto publicado: URL (Storage assets ou link externo). */
+    assetUrl?: string | null;
+    /** Nome do ficheiro do artefacto. */
+    assetName?: string | null;
 }
 
 export function useContentPieces(articleId: string) {
     const { currentWorkspace } = useWorkspaceStore();
-    const providers = useAIProviderStore((s) => s.providers);
-    const apiKeys = useAIProviderStore((s) => s.apiKeys);
     const [pieces, setPieces] = useState<ContentPieceWithRelations[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
@@ -90,6 +97,14 @@ export function useContentPieces(articleId: string) {
             setGeneratingFormats(new Set(params.formats));
 
             try {
+                // Hidratação preguiçosa: carrega os provedores de IA com o
+                // workspace ativo antes de gerar, se ainda não estiverem.
+                const aiStore = useAIProviderStore.getState();
+                if (aiStore.providers.length === 0 && currentWorkspace) {
+                    await aiStore.hydrateProviders(currentWorkspace.id);
+                }
+                const fresh = useAIProviderStore.getState();
+
                 const result = await generateContentPieces(
                     {
                         article: params.article,
@@ -98,8 +113,13 @@ export function useContentPieces(articleId: string) {
                         product: params.product,
                         pillar: params.pillar,
                     },
-                    providers,
-                    apiKeys
+                    fresh.providers,
+                    fresh.apiKeys,
+                    params.preferred ?? {
+                        providerId: fresh.defaultProviderId,
+                        modelCode: fresh.defaultModelCode,
+                    },
+                    params.additionalInstructions
                 );
 
                 if (!result.success && result.pieces.length === 0) {
@@ -127,6 +147,7 @@ export function useContentPieces(articleId: string) {
                             slides: piece.slides,
                             slideCount: piece.slideCount,
                             aiGenerated: true,
+                            portablePrompts: piece.portablePrompts,
                         };
                     }
                 );
@@ -160,7 +181,7 @@ export function useContentPieces(articleId: string) {
                 setGeneratingFormats(new Set());
             }
         },
-        [currentWorkspace, fetchPieces, providers, apiKeys]
+        [currentWorkspace, fetchPieces]
     );
 
     const updatePiece = useCallback(

@@ -2,6 +2,7 @@ import {
     WorkspaceFormFields,
     useWorkspaceForm,
 } from '@/components/workspace/workspace-form';
+import { LoadingScreen } from '@/components/auth/workspace-loading';
 import { useAuthContext } from '@/context/use-auth-context';
 import { useWorkspace } from '@/hooks/use-workspace';
 import type { CreateWorkspaceFormData } from '@/lib/schemas/workspace';
@@ -10,9 +11,21 @@ import { useNavigate } from 'react-router-dom';
 export function CreateWorkspacePage() {
     const navigate = useNavigate();
     const { user } = useAuthContext();
-    const { createWorkspace, isLoading, error } = useWorkspace();
-
+    const { createWorkspace, isLoading, error, workspaces, hasFetched } =
+        useWorkspace();
     const form = useWorkspaceForm();
+
+    // Só renderiza o formulário com a certeza de que o utilizador tem 0
+    // workspaces. Enquanto o fetch não termina (ou para um utilizador
+    // existente que vai ser redirecionado para o dashboard), segura no
+    // loader para não haver flash de página.
+    if (!hasFetched || workspaces.length > 0) {
+        return (
+            <div className="flex min-h-screen items-center justify-center bg-gray-50">
+                <LoadingScreen />
+            </div>
+        );
+    }
 
     const onSubmit = async (formData: CreateWorkspaceFormData) => {
         if (!user) return;

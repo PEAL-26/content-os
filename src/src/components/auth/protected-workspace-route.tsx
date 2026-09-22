@@ -7,17 +7,10 @@ import {
 import type { WorkspaceWithRole } from '@/types/database';
 import { useEffect } from 'react';
 import { Navigate, useLocation, useParams } from 'react-router-dom';
+import { LoadingScreen, WorkspaceErrorScreen } from './workspace-loading';
 
 interface ProtectedWorkspaceRouteProps {
     children: React.ReactNode;
-}
-
-function LoadingScreen() {
-    return (
-        <div className="flex h-screen items-center justify-center bg-gray-50">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
-        </div>
-    );
 }
 
 /**
@@ -38,7 +31,12 @@ export function ProtectedWorkspaceRoute({
     children,
 }: ProtectedWorkspaceRouteProps) {
     const { user, isLoading: authLoading } = useAuth();
-    const { isLoading: workspaceLoading, workspaces } = useWorkspace();
+    const {
+        isLoading: workspaceLoading,
+        workspaces,
+        error,
+        fetchWorkspaces,
+    } = useWorkspace();
     const currentWorkspace = useWorkspaceStore((s) => s.currentWorkspace);
     const { workspaceId } = useParams<{ workspaceId: string }>();
     const location = useLocation();
@@ -53,6 +51,14 @@ export function ProtectedWorkspaceRoute({
 
     if (workspaceLoading) {
         return <LoadingScreen />;
+    }
+
+    if (error) {
+        return (
+            <WorkspaceErrorScreen
+                onRetry={() => fetchWorkspaces(user.id)}
+            />
+        );
     }
 
     if (workspaces.length === 0) {

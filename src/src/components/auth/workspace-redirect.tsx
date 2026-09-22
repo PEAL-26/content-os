@@ -2,6 +2,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useWorkspace } from '@/hooks/use-workspace';
 import { getPersistedWorkspaceId } from '@/stores/workspace-store';
 import { Navigate } from 'react-router-dom';
+import { LoadingScreen, WorkspaceErrorScreen } from './workspace-loading';
 
 /**
  * Landing para a raiz ("/"): decide o destino com base no nº de workspaces
@@ -11,18 +12,18 @@ import { Navigate } from 'react-router-dom';
  */
 export function WorkspaceRedirect() {
     const { user, isLoading: authLoading } = useAuth();
-    const { isLoading, workspaces } = useWorkspace();
+    const { isLoading, workspaces, error, fetchWorkspaces } = useWorkspace();
 
     if (authLoading || isLoading) {
-        return (
-            <div className="flex h-screen items-center justify-center bg-gray-50">
-                <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
-            </div>
-        );
+        return <LoadingScreen />;
     }
 
     if (!user) {
         return <Navigate to="/login" replace />;
+    }
+
+    if (error) {
+        return <WorkspaceErrorScreen onRetry={() => fetchWorkspaces(user.id)} />;
     }
 
     if (workspaces.length === 0) {

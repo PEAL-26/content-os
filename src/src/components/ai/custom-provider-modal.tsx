@@ -1,26 +1,41 @@
 import { useState } from 'react';
+import { ConfigFields } from '@/components/ai/config-fields';
 import { Modal } from '@/components/ui/modal';
+import type { AIProviderConfigOptions } from '@/lib/ai/types';
 import type { AIProvider } from '@/services/ai-provider.service';
 
 interface CustomProviderModalProps {
     isOpen: boolean;
     onClose: () => void;
     provider?: AIProvider | null;
+    scope: 'user' | 'workspace';
     onSave: (data: {
         name: string;
         baseUrl: string;
         description?: string;
         apiKey: string;
-        models: { displayName: string; modelCode: string }[];
+        config: AIProviderConfigOptions;
+        models: {
+            displayName: string;
+            modelCode: string;
+            config: AIProviderConfigOptions;
+        }[];
         headers: { key: string; value: string }[];
     }) => void;
-    onTest: (apiKey: string, baseUrl: string, headers: { key: string; value: string }[]) => Promise<{ success: boolean; error?: string }>;
+    /** O teste de conexão é por modelo: passa o modelCode do modelo testado. */
+    onTest: (
+        modelCode: string,
+        apiKey: string,
+        baseUrl: string,
+        headers: { key: string; value: string }[]
+    ) => Promise<{ success: boolean; error?: string }>;
     existingApiKey?: string | null;
 }
 
 interface ModelInput {
     displayName: string;
     modelCode: string;
+    config: AIProviderConfigOptions;
 }
 
 interface HeaderInput {
@@ -32,6 +47,7 @@ export function CustomProviderModal({
     isOpen,
     onClose,
     provider,
+    scope,
     onSave,
     onTest,
     existingApiKey,
@@ -40,10 +56,19 @@ export function CustomProviderModal({
     const [baseUrl, setBaseUrl] = useState('');
     const [description, setDescription] = useState('');
     const [apiKey, setApiKey] = useState('');
-    const [models, setModels] = useState<ModelInput[]>([{ displayName: '', modelCode: '' }]);
+    const [config, setConfig] = useState<AIProviderConfigOptions>({});
+    const [models, setModels] = useState<ModelInput[]>([
+        { displayName: '', modelCode: '', config: {} },
+    ]);
     const [headers, setHeaders] = useState<HeaderInput[]>([]);
     const [isTesting, setIsTesting] = useState(false);
-    const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null);
+    const [testResult, setTestResult] = useState<{
+        success: boolean;
+        error?: string;
+    } | null>(null);
+    const [expandedModelConfig, setExpandedModelConfig] = useState<
+        Record<number, boolean>
+    >({});
 
     // Sincroniza o estado do formulário com o provider selecionado ajustando o
     // estado durante o render (padrão recomendado em vez de setState em effect).
@@ -68,14 +93,22 @@ export function CustomProviderModal({
             setBaseUrl(provider.baseUrl ?? '');
             setDescription(provider.description ?? '');
             setApiKey(existingApiKey ?? '');
+            setConfig(provider.config ?? {});
             setModels(
                 provider.models && provider.models.length > 0
-                    ? provider.models.map(m => ({ displayName: m.displayName, modelCode: m.modelCode }))
-                    : [{ displayName: '', modelCode: '' }]
+                    ? provider.models.map((m) => ({
+                          displayName: m.displayName,
+                          modelCode: m.modelCode,
+                          config: m.config ?? {},
+                      }))
+                    : [{ displayName: '', modelCode: '', config: {} }]
             );
             setHeaders(
                 provider.headers && provider.headers.length > 0
-                    ? provider.headers.map(h => ({ key: h.key, value: h.value }))
+                    ? provider.headers.map((h) => ({
+                          key: h.key,
+                          value: h.value,
+                      }))
                     : []
             );
         } else {
@@ -83,14 +116,19 @@ export function CustomProviderModal({
             setBaseUrl('');
             setDescription('');
             setApiKey('');
-            setModels([{ displayName: '', modelCode: '' }]);
+            setConfig({});
+            setModels([{ displayName: '', modelCode: '', config: {} }]);
             setHeaders([]);
         }
+        setExpandedModelConfig({});
         setTestResult(null);
     }
 
     const addModel = () => {
-        setModels([...models, { displayName: '', modelCode: '' }]);
+        setModels([
+            ...models,
+            { displayName: '', modelCode: '', config: {} },
+        ]);
     };
 
     const removeModel = (index: number) => {
@@ -98,9 +136,22 @@ export function CustomProviderModal({
         setModels(models.filter((_, i) => i !== index));
     };
 
-    const updateModel = (index: number, field: keyof ModelInput, value: string) => {
+    const updateModel = (
+        index: number,
+        field: keyof Omit<ModelInput, 'config'>,
+        value: string
+    ) => {
         const updated = [...models];
         updated[index][field] = value;
+        setModels(updated);
+    };
+
+    const updateModelConfig = (
+        index: number,
+        config: AIProviderConfigOptions
+    ) => {
+        const updated = [...models];
+        updated[index].config = config;
         setModels(updated);
     };
 
@@ -112,7 +163,11 @@ export function CustomProviderModal({
         setHeaders(headers.filter((_, i) => i !== index));
     };
 
-    const updateHeader = (index: number, field: keyof HeaderInput, value: string) => {
+    const updateHeader = (
+        index: number,
+        field: keyof HeaderInput,
+        value: string
+    ) => {
         const updated = [...headers];
         updated[index][field] = value;
         setHeaders(updated);
@@ -120,30 +175,59 @@ export function CustomProviderModal({
 
     const handleTest = async () => {
         if (!apiKey.trim() || !baseUrl.trim()) return;
+        const validModels = models.filter(
+            (m) => m.displayName.trim() && m.modelCode.trim()
+        );
+        const testModel = validModels[0];
+        if (!testModel) {
+            setTestResult({
+                success: false,
+                error: 'Adiciona pelo menos um modelo para testar a conexão',
+            });
+            return;
+        }
         setIsTesting(true);
         setTestResult(null);
-        const validHeaders = headers.filter(h => h.key.trim() && h.value.trim());
-        const result = await onTest(apiKey, baseUrl, validHeaders);
+        const validHeaders = headers.filter(
+            (h) => h.key.trim() && h.value.trim()
+        );
+        const result = await onTest(
+            testModel.modelCode,
+            apiKey,
+            baseUrl,
+            validHeaders
+        );
         setTestResult(result);
         setIsTesting(false);
     };
 
     const handleSave = () => {
-        const validModels = models.filter(m => m.displayName.trim() && m.modelCode.trim());
-        const validHeaders = headers.filter(h => h.key.trim() && h.value.trim());
+        const validModels = models.filter(
+            (m) => m.displayName.trim() && m.modelCode.trim()
+        );
+        const validHeaders = headers.filter(
+            (h) => h.key.trim() && h.value.trim()
+        );
 
         onSave({
             name: name.trim(),
             baseUrl: baseUrl.trim(),
             description: description.trim() || undefined,
             apiKey,
+            config,
             models: validModels,
             headers: validHeaders,
         });
         onClose();
     };
 
-    const isValid = name.trim() && baseUrl.trim() && apiKey.trim() && models.some(m => m.displayName.trim() && m.modelCode.trim());
+    const isValid =
+        name.trim() &&
+        baseUrl.trim() &&
+        apiKey.trim() &&
+        models.some(
+            (m) => m.displayName.trim() && m.modelCode.trim()
+        );
 
     return (
         <Modal
@@ -153,6 +237,29 @@ export function CustomProviderModal({
             size="lg"
         >
             <div className="space-y-6">
+                {/* Scope */}
+                <div className={`rounded-md p-3 text-sm ${scope === 'workspace' ? 'bg-indigo-50 text-indigo-800' : 'bg-gray-50 text-gray-700'}`}>
+                    {scope === 'workspace' ? (
+                        <span className="flex items-center gap-2">
+                            <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                            </svg>
+                            <span>
+                                <strong>Provedor do workspace</strong> — visível a todos os membros. Só o proprietário do workspace gere estes provedores. A chave fica cifrada e só o teu utilizador a pode descifrar.
+                            </span>
+                        </span>
+                    ) : (
+                        <span className="flex items-center gap-2">
+                            <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                            <span>
+                                <strong>Provedor pessoal</strong> — só tu o vês e só os teus conteúdos o usam.
+                            </span>
+                        </span>
+                    )}
+                </div>
+
                 {/* Name */}
                 <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700">
@@ -252,6 +359,14 @@ export function CustomProviderModal({
                     />
                 </div>
 
+                {/* Configuração padrão do provider */}
+                <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700">
+                        Configuração padrão
+                    </label>
+                    <ConfigFields value={config} onChange={setConfig} />
+                </div>
+
                 {/* Models */}
                 <div>
                     <div className="mb-2 flex items-center justify-between">
@@ -271,31 +386,64 @@ export function CustomProviderModal({
                     </div>
                     <div className="space-y-2">
                         {models.map((model, index) => (
-                            <div key={index} className="flex gap-2">
-                                <input
-                                    type="text"
-                                    value={model.displayName}
-                                    onChange={(e) => updateModel(index, 'displayName', e.target.value)}
-                                    placeholder="Nome de exibição"
-                                    className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
-                                />
-                                <input
-                                    type="text"
-                                    value={model.modelCode}
-                                    onChange={(e) => updateModel(index, 'modelCode', e.target.value)}
-                                    placeholder="Código do modelo"
-                                    className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => removeModel(index)}
-                                    disabled={models.length <= 1}
-                                    className="rounded-md p-2 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-30"
-                                >
-                                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                    </svg>
-                                </button>
+                            <div key={index} className="rounded-md border border-gray-100 p-2">
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={model.displayName}
+                                        onChange={(e) => updateModel(index, 'displayName', e.target.value)}
+                                        placeholder="Nome de exibição"
+                                        className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                                    />
+                                    <input
+                                        type="text"
+                                        value={model.modelCode}
+                                        onChange={(e) => updateModel(index, 'modelCode', e.target.value)}
+                                        placeholder="Código do modelo"
+                                        className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            setExpandedModelConfig({
+                                                ...expandedModelConfig,
+                                                [index]:
+                                                    !expandedModelConfig[index],
+                                            })
+                                        }
+                                        title="Configuração do modelo"
+                                        className={`rounded-md p-2 transition-colors ${
+                                            expandedModelConfig[index]
+                                                ? 'bg-blue-50 text-blue-600'
+                                                : 'text-gray-400 hover:bg-gray-50 hover:text-gray-600'
+                                        }`}
+                                    >
+                                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                        </svg>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => removeModel(index)}
+                                        disabled={models.length <= 1}
+                                        className="rounded-md p-2 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-30"
+                                    >
+                                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                    </button>
+                                </div>
+                                {expandedModelConfig[index] && (
+                                    <div className="mt-2">
+                                        <ConfigFields
+                                            value={model.config}
+                                            onChange={(next) =>
+                                                updateModelConfig(index, next)
+                                            }
+                                        />
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>
