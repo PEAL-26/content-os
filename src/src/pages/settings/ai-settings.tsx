@@ -129,18 +129,28 @@ export function AISettingsPage() {
             config: AIProviderConfigOptions;
         }[];
         headers: { key: string; value: string }[];
-    }) => {
-        let result;
-        if (modalState.provider) {
-            result = await handleUpdateCustom(data);
-        } else {
-            result = await handleCreateCustom(data, modalState.scope);
-        }
+    }): Promise<{ success: boolean; error?: string }> => {
+        try {
+            let result;
+            if (modalState.provider) {
+                result = await handleUpdateCustom(data);
+            } else {
+                result = await handleCreateCustom(data, modalState.scope);
+            }
 
-        if (result.success) {
-            showFeedback(modalState.provider ? 'Provedor atualizado com sucesso' : 'Provedor criado com sucesso');
-        } else {
-            showFeedback(result.error || 'Erro ao guardar provedor');
+            if (result.success) {
+                showFeedback(modalState.provider ? 'Provedor atualizado com sucesso' : 'Provedor criado com sucesso');
+            } else {
+                console.error('Erro ao guardar provedor customizado:', result.error);
+                showFeedback(result.error || 'Erro ao guardar provedor', 'error');
+            }
+            return result;
+        } catch (err) {
+            console.error('Erro inesperado ao guardar provedor customizado', err);
+            const message =
+                err instanceof Error ? err.message : 'Erro inesperado ao guardar provedor';
+            showFeedback(message, 'error');
+            return { success: false, error: message };
         }
     };
 

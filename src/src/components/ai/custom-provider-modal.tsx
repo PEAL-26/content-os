@@ -21,7 +21,7 @@ interface CustomProviderModalProps {
             config: AIProviderConfigOptions;
         }[];
         headers: { key: string; value: string }[];
-    }) => void;
+    }) => Promise<{ success: boolean; error?: string }>;
     /** O teste de conexão é por modelo: passa o modelCode do modelo testado. */
     onTest: (
         modelCode: string,
@@ -66,6 +66,8 @@ export function CustomProviderModal({
         success: boolean;
         error?: string;
     } | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
+    const [saveError, setSaveError] = useState<string | null>(null);
     const [expandedModelConfig, setExpandedModelConfig] = useState<
         Record<number, boolean>
     >({});
@@ -201,7 +203,9 @@ export function CustomProviderModal({
         setIsTesting(false);
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
+        if (isSaving) return;
+
         const validModels = models.filter(
             (m) => m.displayName.trim() && m.modelCode.trim()
         );
@@ -209,16 +213,32 @@ export function CustomProviderModal({
             (h) => h.key.trim() && h.value.trim()
         );
 
-        onSave({
-            name: name.trim(),
-            baseUrl: baseUrl.trim(),
-            description: description.trim() || undefined,
-            apiKey,
-            config,
-            models: validModels,
-            headers: validHeaders,
-        });
-        onClose();
+        setSaveError(null);
+        setIsSaving(true);
+        try {
+            const result = await onSave({
+                name: name.trim(),
+                baseUrl: baseUrl.trim(),
+                description: description.trim() || undefined,
+                apiKey,
+                config,
+                models: validModels,
+                headers: validHeaders,
+            });
+
+            if (!result.success) {
+                setSaveError(result.error || 'Erro ao guardar provedor.');
+                return;
+            }
+            onClose();
+        } catch (err) {
+            console.error('Erro inesperado ao guardar provedor customizado', err);
+            setSaveError(
+                err instanceof Error ? err.message : 'Erro inesperado ao guardar provedor.'
+            );
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const isValid =
@@ -504,6 +524,11 @@ export function CustomProviderModal({
                 </div>
 
                 {/* Actions */}
+                {saveError && (
+                    <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                        {saveError}
+                    </div>
+                )}
                 <div className="flex justify-end gap-3 pt-4">
                     <button
                         type="button"
@@ -515,10 +540,14 @@ export function CustomProviderModal({
                     <button
                         type="button"
                         onClick={handleSave}
-                        disabled={!isValid}
+                        disabled={!isValid || isSaving}
                         className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
                     >
-                        {provider ? 'Guardar' : 'Criar Provedor'}
+                        {isSaving
+                            ? 'A guardar…'
+                            : provider
+                              ? 'Guardar'
+                              : 'Criar Provedor'}
                     </button>
                 </div>
             </div>

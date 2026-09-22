@@ -111,7 +111,20 @@ export function useAIProviders() {
             headers: data.headers,
         };
 
-        const result = await createCustomProvider(input, scope);
+        // Scope workspace exige um workspace ativo — falha claro em vez de
+        // criar silenciosamente como provider pessoal.
+        if (scope === 'workspace' && !workspaceId) {
+            return {
+                success: false,
+                error: 'Seleciona um workspace antes de criar o provedor de workspace.',
+            };
+        }
+
+        const result = await createCustomProvider(
+            input,
+            scope,
+            workspaceId ?? null
+        );
 
         if (result.success && result.provider) {
             // Guarda a API key cifrada na BD, associada ao novo provedor.
@@ -128,7 +141,7 @@ export function useAIProviders() {
         }
 
         return result;
-    }, [createCustomProvider, saveApiKey, isUnlocked]);
+    }, [createCustomProvider, saveApiKey, isUnlocked, workspaceId]);
 
     const handleUpdateCustom = useCallback(async (data: {
         name: string;

@@ -38,7 +38,9 @@ interface AIProviderState {
     ) => Promise<void>;
     createCustomProvider: (
         input: CreateCustomProviderInput,
-        scope?: 'user' | 'workspace'
+        scope?: 'user' | 'workspace',
+        /** Workspace onde criar (para scope workspace). Fallback: o último hidratado. */
+        workspaceId?: string | null
     ) => Promise<{ success: boolean; error?: string; provider?: AIProvider }>;
     updateProvider: (
         providerId: string,
@@ -208,7 +210,8 @@ export const useAIProviderStore = create<AIProviderState>((set, get) => ({
 
                 // Carrega os provedores primeiro — a migração legacy (e a validação
                 // da password abaixo) precisa da lista real de linhas da BD.
-                await get().fetchProviders();
+                // Mantém o workspace hidratado para não perder o contexto (default).
+                await get().fetchProviders(get().hydratedWorkspaceId ?? undefined);
 
                 // Valida a password: se existirem chaves cifradas mas nenhuma
                 // descifrar com a chave derivada, a password está errada.
@@ -231,7 +234,7 @@ export const useAIProviderStore = create<AIProviderState>((set, get) => ({
                 await aiProviderKeyService.migrateLegacyKeys(get().providers);
 
                 // Recarrega para descifrar as chaves (incluindo as recém-migradas).
-                await get().fetchProviders();
+                await get().fetchProviders(get().hydratedWorkspaceId ?? undefined);
 
                 // Validação final após a migração: se alguma chave ficou cifrada
                 // (ex.: chaves legacy cifradas com a chave derivada nesta chamada)
@@ -300,15 +303,33 @@ export const useAIProviderStore = create<AIProviderState>((set, get) => ({
 
     createCustomProvider: async (
         input: CreateCustomProviderInput,
-        scope: 'user' | 'workspace' = 'user'
+        scope: 'user' | 'workspace' = 'user',
+        workspaceId?: string | null
     ) => {
         try {
-            const wsId = get().hydratedWorkspaceId;
+            if (scope === 'workspace') {
+                // NUNCA inferir o workspace da hidratação sem garantia: se não
+                // vier explícito (workspace atual) nem hidratado, falha com erro
+                // em vez de criar silenciosamente como provider pessoal.
+                const wsId = workspaceId ?? get().hydratedWorkspaceId;
+                if (!wsId) {
+                    return {
+                        success: false,
+                        error: 'Workspace não definido. Seleciona um workspace antes de criar o provedor de workspace.',
+                    };
+                }
+                const provider =
+                    await aiProviderService.createCustomProvider(input, {
+                        type: 'workspace',
+                        workspaceId: wsId,
+                    });
+                set({ providers: [...get().providers, provider] });
+                return { success: true, provider };
+            }
+
             const provider = await aiProviderService.createCustomProvider(
                 input,
-                scope === 'workspace' && wsId
-                    ? { type: 'workspace', workspaceId: wsId }
-                    : { type: 'user' }
+                { type: 'user' }
             );
             set({ providers: [...get().providers, provider] });
             return { success: true, provider };
