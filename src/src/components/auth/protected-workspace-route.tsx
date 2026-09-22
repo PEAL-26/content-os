@@ -34,7 +34,7 @@ export function ProtectedWorkspaceRoute({
     const {
         isLoading: workspaceLoading,
         workspaces,
-        error,
+        fetchError,
         fetchWorkspaces,
     } = useWorkspace();
     const currentWorkspace = useWorkspaceStore((s) => s.currentWorkspace);
@@ -53,7 +53,7 @@ export function ProtectedWorkspaceRoute({
         return <LoadingScreen />;
     }
 
-    if (error) {
+    if (fetchError) {
         return (
             <WorkspaceErrorScreen
                 onRetry={() => fetchWorkspaces(user.id)}

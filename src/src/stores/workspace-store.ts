@@ -12,7 +12,10 @@ interface WorkspaceState {
     workspaces: WorkspaceWithRole[];
     isLoading: boolean;
     hasFetched: boolean;
+    /** Erro de uma operação (criar/editar workspace) — mostrado nos forms. */
     error: string | null;
+    /** Erro do fetch inicial de workspaces — usado pelos guards de rota. */
+    fetchError: string | null;
 
     fetchWorkspaces: (userId: string) => Promise<void>;
     setWorkspace: (workspace: Workspace) => void;
@@ -45,13 +48,14 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     isLoading: false,
     hasFetched: false,
     error: null,
+    fetchError: null,
 
     fetchWorkspaces: async (userId: string) => {
         if (get().hasFetched && get().workspaces.length > 0) {
             return;
         }
 
-        set({ isLoading: true, error: null });
+        set({ isLoading: true, error: null, fetchError: null });
 
         try {
             const workspaces =
@@ -73,7 +77,11 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
                 err instanceof Error
                     ? err.message
                     : 'Erro ao carregar workspaces';
-            set({ isLoading: false, error, hasFetched: true });
+            // Fetch error é guardado à parte: os guards de rota usam este
+            // campo para decidir se mostram a ecrã de erro. Misturá-lo com o
+            // `error` das operações fazia o ProtectedWorkspaceRoute desmontar
+            // a página (e o modal) logo que uma operação falhasse.
+            set({ isLoading: false, fetchError: error, hasFetched: true });
         }
     },
 

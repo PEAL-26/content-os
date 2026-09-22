@@ -141,26 +141,19 @@ export const workspaceService = {
             throw new Error(`Erro ao criar workspace: ${wsError.message}`);
         }
 
-        // O trigger on_workspace_created (rls.sql) já insere o OWNER via
-        // SECURITY DEFINER — o insert directo falharia por RLS caso o trigger
-        // não exista, e por unique(workspaceId,userId) caso exista. Usamos
-        // upsert ignore-duplicates para ser inofensivo nos dois cenários.
+        // O RLS foi removido (scripts/remove-rls.sql): o OWNER é inserido
+        // directamente aqui, com id gerado no client (o @default(uuid()) do
+        // Prisma não gera default na BD, por isso o id tem de vir no insert).
         const memberId = uuidv4();
 
         const { error: memberError } = await supabase
             .from('workspace_members')
-            .upsert(
-                {
-                    id: memberId,
-                    workspaceId,
-                    userId,
-                    role: 'OWNER',
-                },
-                {
-                    onConflict: 'workspaceId,userId',
-                    ignoreDuplicates: true,
-                }
-            );
+            .insert({
+                id: memberId,
+                workspaceId,
+                userId,
+                role: 'OWNER',
+            });
 
         if (memberError) {
             await supabase.from('workspaces').delete().eq('id', workspaceId);

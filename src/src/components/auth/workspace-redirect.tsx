@@ -12,7 +12,12 @@ import { LoadingScreen, WorkspaceErrorScreen } from './workspace-loading';
  */
 export function WorkspaceRedirect() {
     const { user, isLoading: authLoading } = useAuth();
-    const { isLoading, workspaces, error, fetchWorkspaces } = useWorkspace();
+    const {
+        isLoading,
+        workspaces,
+        fetchError,
+        fetchWorkspaces,
+    } = useWorkspace();
 
     if (authLoading || isLoading) {
         return <LoadingScreen />;
@@ -22,7 +27,7 @@ export function WorkspaceRedirect() {
         return <Navigate to="/login" replace />;
     }
 
-    if (error) {
+    if (fetchError) {
         return <WorkspaceErrorScreen onRetry={() => fetchWorkspaces(user.id)} />;
     }
 

@@ -139,6 +139,7 @@ export function useWorkspace() {
             authLoading ||
             (user ? store.isLoading || !store.hasFetched : false),
         error: store.error,
+        fetchError: store.fetchError,
         fetchWorkspaces: store.fetchWorkspaces,
         setWorkspace: store.setWorkspace,
         createWorkspace: store.createWorkspace,
