@@ -124,9 +124,21 @@ RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
+DECLARE
+  owner_uid uuid := auth.uid();
 BEGIN
-  INSERT INTO workspace_members ("workspaceId", "userId", role)
-  VALUES (NEW.id, auth.uid(), 'OWNER');
+  -- Inserts sem sessão autenticada não têm dono para associar.
+  IF owner_uid IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  -- "id" é TEXT NOT NULL sem default na BD (o @default(uuid()) do Prisma é
+  -- gerado no client) — temos de gerá-lo aqui, senão: null value in column
+  -- "id" violates not-null constraint. ON CONFLICT cobre o caso de o membro
+  -- OWNER já ter sido inserido pelo serviço antes do trigger correr.
+  INSERT INTO workspace_members (id, "workspaceId", "userId", role)
+  VALUES (gen_random_uuid()::text, NEW.id, owner_uid::text, 'OWNER')
+  ON CONFLICT ("workspaceId", "userId") DO NOTHING;
 
   RETURN NEW;
 END;
