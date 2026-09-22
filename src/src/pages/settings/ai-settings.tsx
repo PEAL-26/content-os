@@ -19,11 +19,8 @@ export function AISettingsPage() {
         apiKeys,
         isLoading,
         error,
-        isUnlocked,
         modalState,
         loadProviders,
-        handleUnlock,
-        handleLock,
         openDefaultModal,
         openCustomModal,
         closeModal,
@@ -47,9 +44,6 @@ export function AISettingsPage() {
     const [isDeleting, setIsDeleting] = useState(false);
     const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
     const [feedbackTone, setFeedbackTone] = useState<'success' | 'error'>('success');
-    const [unlockPassword, setUnlockPassword] = useState('');
-    const [isUnlocking, setIsUnlocking] = useState(false);
-    const [unlockError, setUnlockError] = useState<string | null>(null);
     const [promptsTab, setPromptsTab] = useState<'user' | 'workspace'>('user');
 
     useEffect(() => {
@@ -99,21 +93,6 @@ export function AISettingsPage() {
             showFeedback(result.error || 'Erro ao guardar a API Key');
         } else {
             showFeedback('API Key guardada com sucesso');
-        }
-    };
-
-    const handleUnlockClick = async () => {
-        if (!unlockPassword) return;
-        setIsUnlocking(true);
-        setUnlockError(null);
-        const result = await handleUnlock(unlockPassword);
-        setIsUnlocking(false);
-        if (!result.success) {
-            setUnlockError(
-                result.error || 'Não foi possível desbloquear as chaves'
-            );
-        } else {
-            setUnlockPassword('');
         }
     };
 
@@ -201,21 +180,6 @@ export function AISettingsPage() {
                 </p>
             </div>
 
-            {isUnlocked && (
-                <div className="flex justify-end">
-                    <button
-                        type="button"
-                        onClick={handleLock}
-                        className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
-                    >
-                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                        </svg>
-                        Bloquear chaves
-                    </button>
-                </div>
-            )}
-
             {feedbackMessage && (
                 <div
                     className={
@@ -248,47 +212,6 @@ export function AISettingsPage() {
             {error && (
                 <div className="rounded-md bg-red-50 p-3">
                     <p className="text-sm text-red-700">{error}</p>
-                </div>
-            )}
-
-            {/* Unlock AI keys */}
-            {!isUnlocked && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 p-6">
-                    <div>
-                        <h2 className="text-lg font-semibold text-amber-900">
-                            Desbloquear chaves de IA
-                        </h2>
-                        <p className="mt-1 text-sm text-amber-800">
-                            As chaves estão guardadas cifradas com a tua password.
-                            Introduz a password da conta para as descifrar em
-                            memória (as chaves nunca são persistidas em claro).
-                        </p>
-                    </div>
-
-                    {unlockError && (
-                        <p className="mt-2 text-sm text-red-700">{unlockError}</p>
-                    )}
-
-                    <div className="mt-4 flex items-center gap-3">
-                        <input
-                            type="password"
-                            value={unlockPassword}
-                            onChange={(e) => setUnlockPassword(e.target.value)}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter') handleUnlockClick();
-                            }}
-                            placeholder="Password da conta"
-                            className="w-72 rounded-md border border-amber-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-amber-500 focus:outline-none"
-                        />
-                        <button
-                            type="button"
-                            onClick={handleUnlockClick}
-                            disabled={!unlockPassword || isUnlocking}
-                            className="inline-flex items-center gap-2 rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-700 disabled:opacity-50"
-                        >
-                            {isUnlocking ? 'A descifrar…' : 'Desbloquear'}
-                        </button>
-                    </div>
                 </div>
             )}
 

@@ -1,6 +1,6 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { createClient } from '@supabase/supabase-js';
-import { generateText } from 'ai';
+import { APICallError, generateText } from 'ai';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { z } from 'zod';
 
@@ -115,16 +115,28 @@ async function runGeneration(
         generateOptions.temperature = config.temperature;
     }
 
-    const { text } = await generateText({
-        model: openai.chat(model),
-        ...(system ? { system } : {}),
-        prompt,
-        maxOutputTokens: config?.max_tokens ?? defaultMaxTokens,
-        ...generateOptions,
-        timeout: timeoutMs,
-    });
+    try {
+        const { text } = await generateText({
+            model: openai.chat(model),
+            ...(system ? { system } : {}),
+            prompt,
+            maxOutputTokens: config?.max_tokens ?? defaultMaxTokens,
+            ...generateOptions,
+            timeout: timeoutMs,
+        });
 
-    return text;
+        return text;
+    } catch (err) {
+        // Erros HTTP do provider (ex.: 404 Not Found, 401 Unauthorized) chegam
+        // como APICallError — incluir o status para o utilizador perceber a causa.
+        if (err instanceof APICallError) {
+            const status = err.statusCode ?? '?';
+            throw new Error(
+                `O provider respondeu com erro ${status}${err.message ? `: ${err.message}` : ''}`
+            );
+        }
+        throw err;
+    }
 }
 
 // ---------------------------------------------------------------

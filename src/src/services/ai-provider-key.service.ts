@@ -1,73 +1,46 @@
 import { supabase } from '@/lib/supabase';
-import { keyEncryption } from '@/lib/crypto/key-encryption';
 import type { AIProvider } from '@/services/ai-provider.service';
 
 const LEGACY_STORAGE_KEY = 'contentos_ai_keys';
 const LEGACY_WORKSPACE_PREFIX = 'contentos_ai_keys_';
 
 /**
- * Gestão das API keys de IA. As chaves são cifradas (AES-GCM) com a chave
- * derivada da password do utilizador e persistidas em `ai_providers`
- * (`apiKeyEncrypted` + `apiKeyIv`). Em memória, o store mantém o mapa
- * `Record<providerId, key>` descifrado — as chaves em claro nunca são
- * persistidas no browser.
+ * Gestão das API keys de IA — sem password. As chaves são guardadas em claro
+ * na coluna `ai_providers.apiKeyEncrypted` (o nome da coluna ficou do esquema
+ * antigo; `apiKeyIv` fica a null). Ficam imediatamente acessíveis depois de
+ * carregar os providers, sem necessitar de "desbloquear".
+ *
+ * Nota: chaves legacy que ainda tenham `apiKeyIv` (cifradas com a password
+ * antiga) já não podem ser descifradas — o utilizador reintroduz a chave e ela
+ * é gravada em claro.
  */
 export const aiProviderKeyService = {
-    isUnlocked(userId: string): boolean {
-        return keyEncryption.isUnlocked(userId);
+    isUnlocked(): boolean {
+        // Sem bloqueio — as chaves estão sempre disponíveis.
+        return true;
     },
 
     getUserId(): string | null {
-        return keyEncryption.getUserId();
+        return null;
     },
 
-    /** Deriva a chave mestra a partir da password do utilizador. */
-    async unlock(userId: string, password: string): Promise<void> {
-        await keyEncryption.unlock(userId, password);
+    async unlock(): Promise<void> {
+        // Sem password — chaves sempre acessíveis.
     },
 
     lock(): void {
-        keyEncryption.lock();
+        // Sem bloqueio — as chaves ficam sempre acessíveis.
     },
 
-    /**
-     * Cifra e persiste uma chave na BD (linha `ai_providers` pelo row id).
-     * Requer chave mestra desbloqueada. Se a linha já tiver uma chave cifrada,
-     * garante que a chave mestra atual a consegue descifrar antes de a
-     * substituir — caso contrário recusa a operação para não perder a chave
-     * antiga ao sobreescrever com uma chave derivada de password errada.
-     */
+    /** Guarda a chave em claro na BD (linha `ai_providers` pelo row id). */
     async saveApiKey(providerRowId: string, key: string): Promise<void> {
         if (!key || !key.trim()) return;
-
-        const { data: existing, error: fetchError } = await supabase
-            .from('ai_providers')
-            .select('apiKeyEncrypted, apiKeyIv')
-            .eq('id', providerRowId)
-            .single();
-
-        if (fetchError) {
-            throw new Error(`Erro ao guardar a chave: ${fetchError.message}`);
-        }
-
-        if (existing?.apiKeyEncrypted && existing?.apiKeyIv) {
-            const current = await this.decryptApiKey(
-                existing as unknown as AIProvider
-            );
-            if (!current) {
-                throw new Error(
-                    'Não foi possível guardar a nova chave: a chave existente não pode ser descifrada com esta password. Desbloqueia as chaves com a password correta primeiro.'
-                );
-            }
-        }
-
-        const { ciphertext, iv } = await keyEncryption.encrypt(key);
 
         const { error } = await supabase
             .from('ai_providers')
             .update({
-                apiKeyEncrypted: ciphertext,
-                apiKeyIv: iv,
+                apiKeyEncrypted: key.trim(),
+                apiKeyIv: null,
                 updatedAt: new Date().toISOString(),
             })
             .eq('id', providerRowId);
@@ -77,7 +50,7 @@ export const aiProviderKeyService = {
         }
     },
 
-    /** Apaga a chave cifrada da BD (linha `ai_providers` pelo row id). */
+    /** Apaga a chave da BD (linha `ai_providers` pelo row id). */
     async removeApiKey(providerRowId: string): Promise<void> {
         const { error } = await supabase
             .from('ai_providers')
@@ -93,20 +66,20 @@ export const aiProviderKeyService = {
         }
     },
 
-    /** Descifra a chave de um provider (null se bloqueada/errada/ausente). */
+    /**
+     * Devolve a chave do provider (null se ausente ou se for uma chave legacy
+     * cifrada com IV — já não descifrável sem password).
+     */
     async decryptApiKey(provider: AIProvider): Promise<string | null> {
-        if (!provider.apiKeyEncrypted || !provider.apiKeyIv) return null;
-        return keyEncryption.decrypt({
-            ciphertext: provider.apiKeyEncrypted,
-            iv: provider.apiKeyIv,
-        });
+        if (provider.apiKeyIv) return null;
+        return provider.apiKeyEncrypted ?? null;
     },
 
     /**
      * Migra as chaves antigas (localStorage indexadas por providerId lógico)
-     * para a BD cifrada. Best-effort — corre no primeiro desbloqueio.
-     * Também funde as chaves legacy por workspace (`contentos_ai_keys_<id>`)
-     * para o mapa global, como a migração anterior fazia.
+     * para a BD em claro. Best-effort — corre uma vez por sessão, no primeiro
+     * carregamento dos providers. Também funde as chaves legacy por workspace
+     * (`contentos_ai_keys_<id>`) para o mapa global.
      */
     async migrateLegacyKeys(providers: AIProvider[]): Promise<void> {
         if (providers.length === 0) return;
@@ -149,7 +122,7 @@ export const aiProviderKeyService = {
             // best-effort
         }
 
-        // 2. Cifra as chaves legacy para a BD.
+        // 2. Guarda as chaves legacy na BD (em claro).
         let legacy: Record<string, string> = {};
         try {
             const stored = localStorage.getItem(LEGACY_STORAGE_KEY);
@@ -165,7 +138,7 @@ export const aiProviderKeyService = {
 
         for (const provider of providers) {
             const key = legacy[provider.providerId];
-            if (!key || provider.apiKeyEncrypted) continue;
+            if (!key || provider.apiKeyEncrypted || provider.apiKeyIv) continue;
             try {
                 await this.saveApiKey(provider.id, key);
             } catch (err) {

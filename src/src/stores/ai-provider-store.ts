@@ -5,7 +5,6 @@ import {
     type UpdateProviderInput,
 } from '@/services/ai-provider.service';
 import { aiProviderKeyService } from '@/services/ai-provider-key.service';
-import { useAuthStore } from '@/stores/auth-store';
 import { pickModel, providerHeadersToRecord } from '@/lib/ai/provider';
 import { resolveProviderConfig } from '@/lib/ai/resolver';
 import { testLLM } from '@/lib/ai/transport';
@@ -15,9 +14,9 @@ interface AIProviderState {
     providers: AIProvider[];
     defaultProviderId: string | null;
     defaultModelCode: string | null;
-    /** Chaves descifradas por row id (provider.id) — apenas em memória. */
+    /** Chaves por row id (provider.id) — sempre disponíveis (sem password). */
     apiKeys: Record<string, string>;
-    /** true quando a chave mestra (derivada da password) está ativa na sessão. */
+    /** true quando carregado — as chaves ficam logo acessíveis. */
     isUnlocked: boolean;
     isLoading: boolean;
     error: string | null;
@@ -29,6 +28,7 @@ interface AIProviderState {
     fetchProviders: (workspaceId?: string) => Promise<void>;
     /** Hidrata os provedores uma vez, coalescendo chamadas concorrentes. */
     hydrateProviders: (workspaceId?: string) => Promise<void>;
+    /** Mantido por compatibilidade — não requer password. */
     unlock: (password: string) => Promise<{ success: boolean; error?: string }>;
     lock: () => void;
     setDefaultProvider: (
@@ -49,7 +49,7 @@ interface AIProviderState {
     deleteProvider: (
         providerId: string
     ) => Promise<{ success: boolean; error?: string }>;
-    /** Cifra e persiste a chave de um provider (row id da BD). */
+    /** Guarda a chave de um provider (row id da BD). */
     saveApiKey: (
         providerRowId: string,
         key: string
@@ -67,42 +67,22 @@ interface AIProviderState {
     ) => Promise<{ success: boolean; error?: string }>;
 }
 
-function getCurrentUserId(): string | null {
-    return useAuthStore.getState().user?.id ?? null;
-}
-
 /** Coalesce de hidratação — evita disparar fetchProviders em duplicado. */
 let hydratePromise: Promise<void> | null = null;
 
-/** Coalesce de desbloqueio — chamadas concorrentes partilham a mesma derivação. */
-let unlockPromise: Promise<{ success: boolean; error?: string }> | null = null;
-
-const UNLOCK_PASSWORD_ERROR =
-    'Password incorreta. As chaves de IA guardadas não podem ser descifradas com esta password.';
+/** Migração legacy das chaves — corre uma vez por sessão. */
+let legacyMigrated = false;
 
 async function decryptKeys(
     providers: AIProvider[]
 ): Promise<Record<string, string>> {
     const apiKeys: Record<string, string> = {};
     for (const provider of providers) {
-        if (!provider.apiKeyEncrypted || !provider.apiKeyIv) continue;
+        if (!provider.apiKeyEncrypted) continue;
         const key = await aiProviderKeyService.decryptApiKey(provider);
         if (key) apiKeys[provider.id] = key;
     }
     return apiKeys;
-}
-
-/**
- * true se existir pelo menos uma linha com ciphertext que descifra com a chave
- * mestra atual — usado para validar a password contra as chaves guardadas.
- */
-async function anyRowDecrypts(providers: AIProvider[]): Promise<boolean> {
-    for (const provider of providers) {
-        if (!provider.apiKeyEncrypted || !provider.apiKeyIv) continue;
-        const key = await aiProviderKeyService.decryptApiKey(provider);
-        if (key) return true;
-    }
-    return false;
 }
 
 export const useAIProviderStore = create<AIProviderState>((set, get) => ({
@@ -132,10 +112,19 @@ export const useAIProviderStore = create<AIProviderState>((set, get) => ({
                 providers = await aiProviderService.getProviders();
             }
 
-            const userId = getCurrentUserId();
-            const isUnlocked =
-                !!userId && aiProviderKeyService.isUnlocked(userId);
-            const apiKeys = isUnlocked ? await decryptKeys(providers) : {};
+            // Migração das chaves antigas (localStorage) para a BD — best-effort,
+            // uma vez por sessão. Depois recarrega para incluir as migradas.
+            if (!legacyMigrated) {
+                legacyMigrated = true;
+                try {
+                    await aiProviderKeyService.migrateLegacyKeys(providers);
+                    providers = await aiProviderService.getProviders();
+                } catch {
+                    // best-effort — seguimos com a lista atual
+                }
+            }
+
+            const apiKeys = await decryptKeys(providers);
 
             let defaultProviderId: string | null = null;
             let defaultModelCode: string | null = null;
@@ -151,7 +140,7 @@ export const useAIProviderStore = create<AIProviderState>((set, get) => ({
             set({
                 providers,
                 apiKeys,
-                isUnlocked,
+                isUnlocked: true,
                 defaultProviderId,
                 defaultModelCode,
                 isLoading: false,
@@ -193,84 +182,23 @@ export const useAIProviderStore = create<AIProviderState>((set, get) => ({
         return hydratePromise;
     },
 
-    unlock: (password: string) => {
-        if (unlockPromise) return unlockPromise;
-
-        unlockPromise = (async (): Promise<{
-            success: boolean;
-            error?: string;
-        }> => {
-            const userId = getCurrentUserId();
-            if (!userId) {
-                return { success: false, error: 'Sessão não encontrada' };
-            }
-
-            try {
-                await aiProviderKeyService.unlock(userId, password);
-
-                // Carrega os provedores primeiro — a migração legacy (e a validação
-                // da password abaixo) precisa da lista real de linhas da BD.
-                // Mantém o workspace hidratado para não perder o contexto (default).
-                await get().fetchProviders(get().hydratedWorkspaceId ?? undefined);
-
-                // Valida a password: se existirem chaves cifradas mas nenhuma
-                // descifrar com a chave derivada, a password está errada.
-                const providers = get().providers;
-                const rowsWithCiphertext = providers.filter(
-                    (p) => p.apiKeyEncrypted && p.apiKeyIv
-                );
-                if (
-                    rowsWithCiphertext.length > 0 &&
-                    !(await anyRowDecrypts(providers))
-                ) {
-                    // Descarta a chave derivada errada para manter isUnlocked=false.
-                    aiProviderKeyService.lock();
-                    set({ isUnlocked: false, apiKeys: {}, isLoading: false });
-                    return { success: false, error: UNLOCK_PASSWORD_ERROR };
-                }
-
-                // Migra as chaves antigas do localStorage (best-effort) — agora com
-                // a lista de provedores carregada.
-                await aiProviderKeyService.migrateLegacyKeys(get().providers);
-
-                // Recarrega para descifrar as chaves (incluindo as recém-migradas).
-                await get().fetchProviders(get().hydratedWorkspaceId ?? undefined);
-
-                // Validação final após a migração: se alguma chave ficou cifrada
-                // (ex.: chaves legacy cifradas com a chave derivada nesta chamada)
-                // mas nenhuma descifra, a password está errada — descarta a chave
-                // derivada para não persistir segredos sob uma chave incorreta.
-                const postMigrationProviders = get().providers;
-                const migratedRows = postMigrationProviders.filter(
-                    (p) => p.apiKeyEncrypted && p.apiKeyIv
-                );
-                if (
-                    migratedRows.length > 0 &&
-                    !(await anyRowDecrypts(postMigrationProviders))
-                ) {
-                    aiProviderKeyService.lock();
-                    set({ isUnlocked: false, apiKeys: {}, isLoading: false });
-                    return { success: false, error: UNLOCK_PASSWORD_ERROR };
-                }
-
-                set({ isUnlocked: true, error: null });
-                return { success: true };
-            } catch (err) {
-                const error =
-                    err instanceof Error
-                        ? err.message
-                        : 'Erro ao desbloquear as chaves';
-                return { success: false, error };
-            }
-        })().finally(() => {
-            unlockPromise = null;
-        });
-
-        return unlockPromise;
+    unlock: async () => {
+        try {
+            // Sem password — recarrega os provedores (e chaves) e fica ativo.
+            await get().fetchProviders(get().hydratedWorkspaceId ?? undefined);
+            set({ isUnlocked: true, error: null });
+            return { success: true };
+        } catch (err) {
+            const error =
+                err instanceof Error
+                    ? err.message
+                    : 'Erro ao carregar as chaves';
+            return { success: false, error };
+        }
     },
 
     lock: () => {
-        aiProviderKeyService.lock();
+        // Só usado no sign-out: descarta os dados em memória.
         set({
             isUnlocked: false,
             apiKeys: {},
@@ -387,12 +315,6 @@ export const useAIProviderStore = create<AIProviderState>((set, get) => ({
     },
 
     saveApiKey: async (providerRowId: string, key: string) => {
-        if (!get().isUnlocked) {
-            return {
-                success: false,
-                error: 'As chaves estão bloqueadas. Desbloqueia as chaves de IA primeiro.',
-            };
-        }
         if (!key || !key.trim()) {
             return { success: false, error: 'A API Key não pode estar vazia' };
         }

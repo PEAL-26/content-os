@@ -36,7 +36,7 @@ export interface AIProvider {
     userId?: string | null;
     /** Workspace específico (só membros desse workspace). */
     workspaceId?: string | null;
-    /** API key cifrada (AES-GCM, chave derivada da password). */
+    /** API key (em claro — sem password). */
     apiKeyEncrypted?: string | null;
     /** IV (base64) usado na cifra da API key. */
     apiKeyIv?: string | null;

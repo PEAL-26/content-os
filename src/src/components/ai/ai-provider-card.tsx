@@ -38,11 +38,9 @@ export function AIProviderCard({
 }: AIProviderCardProps) {
     const icon = provider.isCustom ? '🔧' : PROVIDER_ICONS[provider.providerId] ?? '🤖';
 
-    // Uma chave está "guardada" quando a linha tem ciphertext (apiKeyEncrypted/apiKeyIv)
-    // — independentemente de estar descifrada em memória (apiKeys). Só assim o botão
-    // "Remover chave" serve de escape hatch nos cenários de password errada ou chave
-    // corrompida, em que apiKeys[] está vazio mas a chave continua guardada na BD.
-    const hasStoredKey = !!(provider.apiKeyEncrypted && provider.apiKeyIv);
+    // Uma chave está "guardada" quando a linha tem texto em apiKeyEncrypted
+    // (sem IV — chaves em claro; com IV são chaves legacy já não descifráveis).
+    const hasStoredKey = !!provider.apiKeyEncrypted;
 
     return (
         <div className="flex items-center gap-4 rounded-lg border border-gray-200 bg-white px-4 py-3 shadow-sm hover:border-gray-300 transition-colors">

@@ -42,8 +42,8 @@ export const useAuthStore = create<AuthState>((set) => ({
             error: null,
         });
 
-        // Desbloqueia as chaves de IA com a password introduzida (best-effort:
-        // se falhar, há um botão "Desbloquear chaves" nas Definições).
+        // Recarrega os provedores de IA (e chaves) com a sessão ativa.
+        // Sem password — as chaves ficam logo acessíveis.
         if (result.user) {
             const providerStore = useAIProviderStore.getState();
             void providerStore.unlock(password);
@@ -74,7 +74,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     signOut: async () => {
         set({ isLoading: true });
         await authService.signOut();
-        // Descarta a chave mestra e limpa as chaves em memória
+        // Descarta os dados de IA em memória (chaves, providers)
         useAIProviderStore.getState().lock();
         set({ user: null, session: null, isLoading: false, error: null });
     },
@@ -95,7 +95,7 @@ export function initializeAuth() {
         // Hidrata os provedores de IA na restauração da sessão, para que a
         // geração funcione logo após um reload sem visitar as definições.
         // Usa o workspace persistido (se existir) para carregar também o
-        // provedor/modelo padrão. Não desbloqueia chaves: apenas metadados.
+        // provedor/modelo padrão e as chaves.
         if (session?.user) {
             const persistedWorkspaceId = getPersistedWorkspaceId();
             void useAIProviderStore

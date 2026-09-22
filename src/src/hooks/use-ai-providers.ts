@@ -13,10 +13,7 @@ export function useAIProviders() {
         apiKeys,
         isLoading,
         error,
-        isUnlocked,
         fetchProviders,
-        unlock,
-        lock,
         setDefaultProvider,
         createCustomProvider,
         updateProvider,
@@ -66,7 +63,7 @@ export function useAIProviders() {
             return { success: false, error: 'Sem provider selecionado' };
         }
 
-        // Cifra e guarda a chave na BD (requer chave mestra desbloqueada)
+        // Guarda a chave na BD (em claro — sem password)
         const saveResult = await saveApiKey(
             modalState.provider.id,
             data.apiKey
@@ -95,13 +92,6 @@ export function useAIProviders() {
         }[];
         headers: { key: string; value: string }[];
     }, scope: 'user' | 'workspace' = 'user') => {
-        if (!isUnlocked) {
-            return {
-                success: false,
-                error: 'As chaves estão bloqueadas. Desbloqueia as chaves de IA antes de criar o provedor.',
-            };
-        }
-
         const input: CreateCustomProviderInput = {
             name: data.name,
             baseUrl: data.baseUrl,
@@ -127,10 +117,9 @@ export function useAIProviders() {
         );
 
         if (result.success && result.provider) {
-            // Guarda a API key cifrada na BD, associada ao novo provedor.
-            // Se as chaves estiverem bloqueadas — ou a gravação falhar (ex.:
-            // a chave existente não pode ser descifrada) — devolve o erro em
-            // vez de reportar sucesso com a chave descartada.
+            // Guarda a API key na BD, associada ao novo provedor.
+            // Se a gravação falhar devolve o erro em vez de reportar sucesso
+            // com a chave descartada.
             const saveResult = await saveApiKey(
                 result.provider.id,
                 data.apiKey
@@ -141,7 +130,7 @@ export function useAIProviders() {
         }
 
         return result;
-    }, [createCustomProvider, saveApiKey, isUnlocked, workspaceId]);
+    }, [createCustomProvider, saveApiKey, workspaceId]);
 
     const handleUpdateCustom = useCallback(async (data: {
         name: string;
@@ -157,13 +146,6 @@ export function useAIProviders() {
         headers: { key: string; value: string }[];
     }) => {
         if (!modalState.provider) return { success: false, error: 'No provider' };
-
-        if (!isUnlocked) {
-            return {
-                success: false,
-                error: 'As chaves estão bloqueadas. Desbloqueia as chaves de IA antes de guardar a API key.',
-            };
-        }
 
         const result = await updateProvider(modalState.provider.id, {
             name: data.name,
@@ -185,7 +167,7 @@ export function useAIProviders() {
         }
 
         return result;
-    }, [modalState.provider, updateProvider, saveApiKey, isUnlocked]);
+    }, [modalState.provider, updateProvider, saveApiKey]);
 
     const handleDelete = useCallback(async (provider: AIProvider) => {
         return deleteProvider(provider.id);
@@ -223,14 +205,6 @@ export function useAIProviders() {
         return providers.find((p) => p.id === defaultProviderId) ?? null;
     }, [providers, defaultProviderId]);
 
-    const handleUnlock = useCallback(async (password: string) => {
-        return unlock(password);
-    }, [unlock]);
-
-    const handleLock = useCallback(() => {
-        lock();
-    }, [lock]);
-
     const handleRemoveApiKey = useCallback(async (provider: AIProvider) => {
         return removeApiKey(provider.id);
     }, [removeApiKey]);
@@ -243,11 +217,8 @@ export function useAIProviders() {
         apiKeys,
         isLoading,
         error,
-        isUnlocked,
         modalState,
         loadProviders,
-        handleUnlock,
-        handleLock,
         openDefaultModal,
         openCustomModal,
         closeModal,

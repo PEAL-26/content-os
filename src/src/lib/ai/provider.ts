@@ -29,7 +29,7 @@ export function providerHeadersToRecord(
 // =============================================================================
 
 /**
- * Providers activos com chave (desbloqueada) disponível. As chaves estão
+ * Providers activos com chave disponível. As chaves estão
  * indexadas por `provider.id` (row id da BD).
  */
 export function getAvailableProvidersFromStore(
@@ -87,7 +87,7 @@ export function buildGenerateOptions(
 export interface GenerateWithFallbackOptions<T> {
     /** Providers disponíveis (já filtrados por chave). */
     providers: AIProvider[];
-    /** Chaves descifradas por row id (provider.id). */
+    /** Chaves por row id (provider.id). */
     apiKeys: Record<string, string>;
     /** Modelo preferido (default do workspace), se existir. */
     preferred?: { providerId?: string | null; modelCode?: string | null };
@@ -149,7 +149,7 @@ export async function generateWithFallback<T>(
             providerName: '',
             modelCode: '',
             prompt: '',
-            error: 'Nenhum provider de IA configurado. Configura pelo menos um provedor nas definições e desbloqueia as chaves.',
+            error: 'Nenhum provider de IA configurado. Configura pelo menos um provedor nas definições e adiciona a chave.',
         };
     }
 
@@ -246,6 +246,6 @@ export async function generateWithFallback<T>(
                 ? `Todos os providers falharam. ${providerFailures
                       .map((f) => `${f.provider}: ${f.error}`)
                       .join('; ')}`
-                : 'Nenhum provider disponível com chave desbloqueada.',
+                : 'Nenhum provider disponível com chave configurada.',
     };
 }
