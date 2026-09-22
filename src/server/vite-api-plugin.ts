@@ -25,12 +25,20 @@ export function apiAiDevPlugin(): Plugin {
 
             const middleware: Connect.NextHandleFunction = (req, res) => {
                 const url = req.url ?? '';
-                const clean = url.split('?')[0];
-                if (clean === '/api/ai/generate') {
+                const clean = url.split('?')[0].replace(/\/+$/, '');
+                // O Connect (mount '/api/ai') remove o prefixo do req.url dentro
+                // do handler — aceitamos as duas formas (com e sem o prefixo)
+                // para não depender desse comportamento.
+                const isGenerate =
+                    clean === '/api/ai/generate' || clean === '/generate';
+                const isTest =
+                    clean === '/api/ai/test' || clean === '/test';
+
+                if (isGenerate) {
                     void handleAiGenerate(req, res, apiEnv);
                     return;
                 }
-                if (clean === '/api/ai/test') {
+                if (isTest) {
                     void handleAiTest(req, res, apiEnv);
                     return;
                 }
