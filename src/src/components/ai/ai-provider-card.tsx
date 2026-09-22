@@ -8,6 +8,8 @@ interface AIProviderCardProps {
     onDelete?: () => void;
     onRemoveApiKey?: () => void;
     canDelete: boolean;
+    /** Badge mostrado a membros quando o provider é de um workspace que não gerem. */
+    ownerKeyBadge?: boolean;
 }
 
 const PROVIDER_ICONS: Record<string, string> = {
@@ -32,6 +34,7 @@ export function AIProviderCard({
     onDelete,
     onRemoveApiKey,
     canDelete,
+    ownerKeyBadge = false,
 }: AIProviderCardProps) {
     const icon = provider.isCustom ? '🔧' : PROVIDER_ICONS[provider.providerId] ?? '🤖';
 
@@ -62,6 +65,14 @@ export function AIProviderCard({
                     {provider.isCustom && (
                         <span className="inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800 shrink-0">
                             Custom
+                        </span>
+                    )}
+                    {ownerKeyBadge && (
+                        <span
+                            className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 shrink-0"
+                            title="Este provedor usa a chave do proprietário do workspace — só o dono descifra e usa esta chave. Usa os teus provedores pessoais para gerar."
+                        >
+                            Chave do proprietário
                         </span>
                     )}
                 </div>

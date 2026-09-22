@@ -36,6 +36,20 @@ AS $$
   WHERE "userId"::uuid = auth.uid();
 $$;
 
+-- Ids dos workspaces onde o utilizador atual é OWNER (usado pelas policies
+-- de workspace_members e afins). SECURITY DEFINER para que as policies
+-- NUNCA auto-referenciem workspace_members (evita 42P17 recursão infinita).
+CREATE OR REPLACE FUNCTION my_owned_workspace_ids()
+RETURNS SETOF uuid
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+AS $$
+  SELECT "workspaceId"::uuid
+  FROM workspace_members
+  WHERE "userId"::uuid = auth.uid() AND role = 'OWNER';
+$$;
+
 -- =============================================================================
 -- 3. WORKSPACES
 -- =============================================================================
@@ -74,46 +88,32 @@ USING (
 
 CREATE POLICY "workspace_members_select"
 ON workspace_members FOR SELECT
-USING ("userId"::uuid = auth.uid() OR "workspaceId"::uuid IN (
-    SELECT "workspaceId"::uuid 
-    FROM workspace_members
-    WHERE "userId"::uuid = auth.uid() AND role = 'OWNER'
-));
+USING (
+    "userId"::uuid = auth.uid()
+    OR "workspaceId"::uuid IN (SELECT my_workspace_ids())
+);
 
--- Inserção
+-- Inserção (só OWNER pode adicionar; usa my_owned_workspace_ids para evitar
+-- a recursão da subconsulta à própria tabela)
 CREATE POLICY "workspace_members_insert"
 ON workspace_members FOR INSERT
 WITH CHECK (
-    -- só OWNER pode adicionar
-    "workspaceId"::uuid IN (
-        SELECT "workspaceId"::uuid 
-        FROM workspace_members
-        WHERE "userId"::uuid = auth.uid() AND role = 'OWNER'
-    )
+    "workspaceId"::uuid IN (SELECT my_owned_workspace_ids())
 );
 
--- Deleção
+-- Deleção (o próprio pode sair; só OWNER remove outros)
 CREATE POLICY "workspace_members_delete"
 ON workspace_members FOR DELETE
 USING (
     "userId"::uuid = auth.uid()
-    OR "workspaceId"::uuid IN (
-        SELECT "workspaceId"::uuid
-        FROM workspace_members
-        WHERE "userId"::uuid = auth.uid() AND role = 'OWNER'
-    )
+    OR "workspaceId"::uuid IN (SELECT my_owned_workspace_ids())
 );
 
--- Update (alterar role)
+-- Update (alterar role — só OWNER)
 CREATE POLICY "workspace_members_update"
 ON workspace_members FOR UPDATE
-USING (
-    "workspaceId"::uuid IN (
-        SELECT "workspaceId"::uuid
-        FROM workspace_members
-        WHERE "userId"::uuid = auth.uid() AND role = 'OWNER'
-    )
-);
+USING ("workspaceId"::uuid IN (SELECT my_owned_workspace_ids()))
+WITH CHECK ("workspaceId"::uuid IN (SELECT my_owned_workspace_ids()));
 
 -- =============================================================================
 -- 5. WORKSPACE OWNER TRIGGER

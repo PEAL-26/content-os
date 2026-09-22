@@ -23,6 +23,16 @@ interface ContentPromptParams {
     durationSec?: number;
 }
 
+/**
+ * Params mínimos dos builders de system prompt — só o workspace (idioma/tom)
+ * é usado no system; o artigo/contexto entra no user prompt. Subconjunto que
+ * permite mostrar os defaults no editor de prompts sem um artigo falso.
+ */
+export interface SystemPromptParams {
+    workspace: Workspace;
+    durationSec?: number;
+}
+
 // -----------------------------------------------------------------------------
 // Contexto (user prompt) — partilhado por todos os formatos
 // -----------------------------------------------------------------------------
@@ -96,7 +106,7 @@ function voiceToneOf(workspace: Workspace, fallback = 'profissional e acessível
 // System prompts por formato (defaults configuráveis em ai_system_prompts)
 // -----------------------------------------------------------------------------
 
-export function buildCarouselSystemPrompt(params: ContentPromptParams): string {
+export function buildCarouselSystemPrompt(params: SystemPromptParams): string {
     const language = languageLabelOf(params.workspace);
     const tone = voiceToneOf(params.workspace, 'profissional');
 
@@ -131,7 +141,7 @@ Cria um carrossel de slides otimizado para LinkedIn com base no artigo fornecido
 `;
 }
 
-export function buildLinkedInPostSystemPrompt(params: ContentPromptParams): string {
+export function buildLinkedInPostSystemPrompt(params: SystemPromptParams): string {
     const language = languageLabelOf(params.workspace);
     const tone = voiceToneOf(params.workspace, 'profissional e directo');
 
@@ -165,7 +175,7 @@ Cria um post opinativo para LinkedIn baseado no artigo.
 `;
 }
 
-export function buildInstagramPostSystemPrompt(params: ContentPromptParams): string {
+export function buildInstagramPostSystemPrompt(params: SystemPromptParams): string {
     const language = languageLabelOf(params.workspace);
 
     return `És um copywriter especialista em Instagram.
@@ -196,7 +206,7 @@ Cria um post curto e visual para Instagram baseado no artigo.
 `;
 }
 
-export function buildShortVideoSystemPrompt(params: ContentPromptParams): string {
+export function buildShortVideoSystemPrompt(params: SystemPromptParams): string {
     const language = languageLabelOf(params.workspace);
 
     return `És um especialista em vídeos curtos (TikTok/Reels).
@@ -225,7 +235,7 @@ Cria um gancho e CTA para um vídeo curto (TikTok/Reels) baseado no artigo.
 `;
 }
 
-export function buildCtaPostSystemPrompt(params: ContentPromptParams): string {
+export function buildCtaPostSystemPrompt(params: SystemPromptParams): string {
     const language = languageLabelOf(params.workspace);
     const tone = voiceToneOf(params.workspace, 'directo e convincente');
 
@@ -258,7 +268,7 @@ Cria um post directo com call-to-action forte para LinkedIn, baseado no artigo.
 `;
 }
 
-export function buildThreadSystemPrompt(params: ContentPromptParams): string {
+export function buildThreadSystemPrompt(params: SystemPromptParams): string {
     const language = languageLabelOf(params.workspace);
 
     return `És um especialista em storytelling no X/Twitter.
@@ -295,7 +305,7 @@ Cria uma thread (série de posts) para X/Twitter baseada no artigo.
 `;
 }
 
-export function buildVideoScriptSystemPrompt(params: ContentPromptParams): string {
+export function buildVideoScriptSystemPrompt(params: SystemPromptParams): string {
     const durationSec = params.durationSec || 60;
     const language = languageLabelOf(params.workspace);
 
@@ -359,7 +369,7 @@ export const CONTENT_TYPE_LABELS: Record<string, string> = {
 
 export function buildSystemPromptForFormat(
     format: ContentFormat,
-    params: ContentPromptParams
+    params: SystemPromptParams
 ): string {
     switch (format) {
         case 'CAROUSEL':
@@ -427,14 +437,14 @@ descritos acima, sem incluir nenhum outro item.
 export function buildCarouselItemPortablePrompt(
     params: ContentPromptParams,
     slide: ContentSlide,
-    index: number
+    index: number,
+    systemOverride?: string
 ): string {
-    const total = params.article ? 'carrossel' : 'carrossel';
     const body = slide.body || '';
-    const title = `Slide ${slide.order ?? index + 1} (${total})`;
+    const title = `Slide ${slide.order ?? index + 1} (carrossel)`;
     return buildPortablePrompt(
         params,
-        buildCarouselSystemPrompt(params),
+        systemOverride ?? buildCarouselSystemPrompt(params),
         `slide-${slide.order ?? index + 1}`,
         title,
         slide.title ? `Título: ${slide.title}\n\n${body}` : body
@@ -445,10 +455,11 @@ export function buildCarouselItemPortablePrompt(
 export function buildThreadItemPortablePrompt(
     params: ContentPromptParams,
     tweet: { order: number; text: string },
+    systemOverride?: string
 ): string {
     return buildPortablePrompt(
         params,
-        buildThreadSystemPrompt(params),
+        systemOverride ?? buildThreadSystemPrompt(params),
         `tweet-${tweet.order}`,
         null,
         tweet.text
@@ -460,11 +471,12 @@ export function buildSingleItemPortablePrompt(
     format: ContentFormat,
     params: ContentPromptParams,
     title: string | null,
-    body: string
+    body: string,
+    systemOverride?: string
 ): string {
     return buildPortablePrompt(
         params,
-        buildSystemPromptForFormat(format, params),
+        systemOverride ?? buildSystemPromptForFormat(format, params),
         'main',
         title,
         body

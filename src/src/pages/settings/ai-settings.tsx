@@ -5,6 +5,7 @@ import { DefaultProviderModal } from '@/components/ai/default-provider-modal';
 import { CustomProviderModal } from '@/components/ai/custom-provider-modal';
 import { SystemPromptsEditor } from '@/components/ai/system-prompts-editor';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAIProviders } from '@/hooks/use-ai-providers';
 import type { AIProviderConfigOptions } from '@/lib/ai/types';
 import type { AIProvider } from '@/services/ai-provider.service';
@@ -49,6 +50,7 @@ export function AISettingsPage() {
     const [unlockPassword, setUnlockPassword] = useState('');
     const [isUnlocking, setIsUnlocking] = useState(false);
     const [unlockError, setUnlockError] = useState<string | null>(null);
+    const [promptsTab, setPromptsTab] = useState<'user' | 'workspace'>('user');
 
     useEffect(() => {
         loadProviders();
@@ -162,6 +164,10 @@ export function AISettingsPage() {
             provider={provider}
             hasApiKey={isConfigured(provider.id)}
             isDefault={provider.id === defaultProviderId}
+            ownerKeyBadge={
+                provider.workspaceId === currentWorkspace?.id &&
+                !isWorkspaceOwner
+            }
             onConfigure={() =>
                 provider.isCustom
                     ? openCustomModal(provider, provider.workspaceId ? 'workspace' : 'user')
@@ -387,38 +393,66 @@ export function AISettingsPage() {
                         Prompts de IA
                     </h2>
                     <p className="mt-0.5 text-sm text-gray-500">
-                        Os prompts de sistema usados para cada tipo de conteúdo.
-                        O default em código aplica-se quando não há
-                        personalização. Os prompts do workspace têm prioridade
-                        sobre os pessoais.
+                        Prompt de sistema usado para cada tipo de conteúdo. Vês
+                        o predefinido em cada campo — edita e guarda para
+                        personalizar, ou usa "Restaurar padrão". Os do
+                        workspace têm prioridade sobre os pessoais.
                     </p>
                 </div>
 
-                <div className="grid gap-6 lg:grid-cols-2">
-                    <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-                        <h3 className="mb-1 text-sm font-semibold text-gray-900">
-                            Pessoais
-                        </h3>
-                        <p className="mb-4 text-xs text-gray-500">
-                            Aplicam-se aos teus conteúdos em todos os workspaces.
-                        </p>
-                        <SystemPromptsEditor scope="user" workspace={currentWorkspace} />
+                <Tabs
+                    value={promptsTab}
+                    onValueChange={(v) =>
+                        setPromptsTab(v as 'user' | 'workspace')
+                    }
+                >
+                    <TabsList>
+                        <TabsTrigger value="user">Pessoais</TabsTrigger>
+                        <TabsTrigger value="workspace">
+                            {isWorkspaceOwner
+                                ? 'Workspace'
+                                : 'Workspace (só leitura)'}
+                        </TabsTrigger>
+                    </TabsList>
+
+                    {/* Ambos os painéis ficam montados (oculto via CSS) para
+                        não perder edições não guardadas ao alternar de tab. */}
+                    <div
+                        role="tabpanel"
+                        className={
+                            promptsTab === 'user' ? 'mt-4' : 'mt-4 hidden'
+                        }
+                    >
+                        <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+                            <p className="mb-4 text-xs text-gray-500">
+                                Aplicam-se aos teus conteúdos em todos os
+                                workspaces.
+                            </p>
+                            <SystemPromptsEditor scope="user" workspace={currentWorkspace} />
+                        </div>
                     </div>
 
-                    <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-                        <h3 className="mb-1 text-sm font-semibold text-gray-900">
-                            {isWorkspaceOwner ? 'Workspace' : 'Workspace (só leitura)'}
-                        </h3>
-                        <p className="mb-4 text-xs text-gray-500">
-                            Aplicam-se a todos os membros. Só o proprietário edita.
-                        </p>
-                        <SystemPromptsEditor
-                            scope="workspace"
-                            workspace={currentWorkspace}
-                            readOnly={!isWorkspaceOwner}
-                        />
+                    <div
+                        role="tabpanel"
+                        className={
+                            promptsTab === 'workspace'
+                                ? 'mt-4'
+                                : 'mt-4 hidden'
+                        }
+                    >
+                        <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+                            <p className="mb-4 text-xs text-gray-500">
+                                Aplicam-se a todos os membros. Só o proprietário
+                                edita.
+                            </p>
+                            <SystemPromptsEditor
+                                scope="workspace"
+                                workspace={currentWorkspace}
+                                readOnly={!isWorkspaceOwner}
+                            />
+                        </div>
                     </div>
-                </div>
+                </Tabs>
             </div>
 
             {/* Default Provider Modal */}

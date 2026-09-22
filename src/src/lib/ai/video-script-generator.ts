@@ -39,7 +39,7 @@ export async function generateVideoScript(
         workspaceId: workspace.id,
         contentType: 'VIDEO_SCRIPT',
         buildDefault: () =>
-            buildVideoScriptSystemPrompt({ article, workspace, durationSec }),
+            buildVideoScriptSystemPrompt({ workspace, durationSec }),
     });
     const fullSystem = additionalInstructions?.trim()
         ? `${systemPrompt}\n\n## Instruções Adicionais\n${additionalInstructions.trim()}`
@@ -87,7 +87,8 @@ export async function generateVideoScript(
                 'VIDEO_SCRIPT',
                 promptParams,
                 result.data.title,
-                result.data.fullScript || result.data.solution || ''
+                result.data.fullScript || result.data.solution || '',
+                fullSystem
             ),
         },
     ];

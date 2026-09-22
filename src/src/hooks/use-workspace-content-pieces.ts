@@ -8,6 +8,7 @@ import type {
     ContentSlide,
 } from '@/types/database';
 import { generateContentPieces, type GeneratedPiece } from '@/lib/ai';
+import { useAIProviderStore } from '@/stores/ai-provider-store';
 import { useCallback, useEffect, useState } from 'react';
 
 export interface WorkspaceContentFilters {
@@ -132,11 +133,27 @@ export function useWorkspaceContentPieces(filters?: WorkspaceContentFilters) {
                     return { success: false, error: 'Artigo não encontrado' };
                 }
 
-                const result = await generateContentPieces({
-                    article,
-                    formats: [piece.format],
-                    workspace: currentWorkspace,
-                });
+                // Hidratação preguiçosa: garante provedores + chaves (default do
+                // workspace) antes de gerar — igual aos restantes pontos de geração.
+                const aiStore = useAIProviderStore.getState();
+                if (aiStore.providers.length === 0 && currentWorkspace) {
+                    await aiStore.hydrateProviders(currentWorkspace.id);
+                }
+                const fresh = useAIProviderStore.getState();
+
+                const result = await generateContentPieces(
+                    {
+                        article,
+                        formats: [piece.format],
+                        workspace: currentWorkspace,
+                    },
+                    fresh.providers,
+                    fresh.apiKeys,
+                    {
+                        providerId: fresh.defaultProviderId,
+                        modelCode: fresh.defaultModelCode,
+                    }
+                );
 
                 if (!result.success || result.pieces.length === 0) {
                     return {

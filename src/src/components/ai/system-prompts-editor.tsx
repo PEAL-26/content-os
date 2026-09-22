@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CONTENT_TYPE_LABELS } from '@/lib/ai/content-prompts';
+import { buildDefaultSystemPrompt } from '@/lib/ai/default-system-prompts';
 import {
     deleteSystemPrompt,
     getSystemPrompts,
@@ -25,8 +26,10 @@ const CONTENT_TYPES: { key: string; label: string }[] = [
 
 /**
  * Editor dos system prompts globais por tipo de conteúdo (workspace ou user).
- * Cada tipo tem um editor com "Guardar" e "Restaurar padrão" (volta ao default
- * em código).
+ * Os inputs mostram SEMPRE o prompt efetivo: override gravado na BD ou o
+ * default em código (pré-preenchido). "Guardar" só fica ativo quando há
+ * alterações face ao efetivo atual — gravar cria/atualiza um override;
+ * "Restaurar padrão" remove o override e volta ao default em código.
  */
 export function SystemPromptsEditor({
     scope,
@@ -34,6 +37,10 @@ export function SystemPromptsEditor({
     readOnly = false,
 }: SystemPromptsEditorProps) {
     const [values, setValues] = useState<Record<string, string>>({});
+    /** Overrides gravados na BD ('', ou key ausente, = sem override). */
+    const [overrides, setOverrides] = useState<Record<string, string>>({});
+    /** Defaults em código, derivados do workspace (idioma/tom). */
+    const [defaults, setDefaults] = useState<Record<string, string>>({});
     const [saved, setSaved] = useState<Record<string, boolean>>({});
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -48,22 +55,33 @@ export function SystemPromptsEditor({
             setIsLoading(true);
             setError(null);
             try {
-                const overrides =
+                const rows =
                     scope === 'workspace' && workspace
                         ? await getWorkspaceSystemPrompts(workspace.id)
                         : await getSystemPrompts('user');
 
-                const initial: Record<string, string> = {};
-                for (const o of overrides) {
-                    initial[o.contentType] = o.systemPrompt;
+                const loadedOverrides: Record<string, string> = {};
+                for (const o of rows) {
+                    loadedOverrides[o.contentType] = o.systemPrompt;
                 }
-                // Valores guardados existentes prevalecem sobre os defaults.
-                const merged: Record<string, string> = {};
+
+                const nextDefaults: Record<string, string> = {};
+                const nextValues: Record<string, string> = {};
                 for (const ct of contentTypes) {
-                    merged[ct.key] = initial[ct.key] ?? '';
+                    nextDefaults[ct.key] = buildDefaultSystemPrompt(
+                        ct.key,
+                        workspace
+                    );
+                    const override = loadedOverrides[ct.key]?.trim();
+                    nextValues[ct.key] = override
+                        ? loadedOverrides[ct.key]
+                        : nextDefaults[ct.key];
                 }
+
                 if (!cancelled) {
-                    setValues(merged);
+                    setDefaults(nextDefaults);
+                    setOverrides(loadedOverrides);
+                    setValues(nextValues);
                     setIsLoading(false);
                 }
             } catch (err) {
@@ -88,12 +106,28 @@ export function SystemPromptsEditor({
         setSavingKey(key);
         setError(null);
         try {
-            await upsertSystemPrompt({
-                scope,
-                workspaceId: scope === 'workspace' ? workspace?.id : undefined,
-                contentType: key,
-                systemPrompt: values[key],
-            });
+            const value = values[key] ?? '';
+            if (!value.trim()) {
+                // Guardar vazio = sem override (o runtime cai no default) →
+                // remove a linha e volta a mostrar o predefinido.
+                await deleteSystemPrompt({
+                    scope,
+                    workspaceId:
+                        scope === 'workspace' ? workspace?.id : undefined,
+                    contentType: key,
+                });
+                setOverrides((prev) => ({ ...prev, [key]: '' }));
+                setValues((prev) => ({ ...prev, [key]: defaults[key] }));
+            } else {
+                await upsertSystemPrompt({
+                    scope,
+                    workspaceId:
+                        scope === 'workspace' ? workspace?.id : undefined,
+                    contentType: key,
+                    systemPrompt: value,
+                });
+                setOverrides((prev) => ({ ...prev, [key]: value }));
+            }
             setSaved((prev) => ({ ...prev, [key]: true }));
             setTimeout(() => {
                 setSaved((prev) => ({ ...prev, [key]: false }));
@@ -118,7 +152,8 @@ export function SystemPromptsEditor({
                 workspaceId: scope === 'workspace' ? workspace?.id : undefined,
                 contentType: key,
             });
-            setValues((prev) => ({ ...prev, [key]: '' }));
+            setOverrides((prev) => ({ ...prev, [key]: '' }));
+            setValues((prev) => ({ ...prev, [key]: defaults[key] }));
             setSaved((prev) => ({ ...prev, [key]: true }));
             setTimeout(() => {
                 setSaved((prev) => ({ ...prev, [key]: false }));
@@ -159,7 +194,13 @@ export function SystemPromptsEditor({
 
             <div className="space-y-4">
                 {contentTypes.map((ct) => {
-                    const isCustom = !!values[ct.key]?.trim();
+                    const overrideValue = (overrides[ct.key] ?? '').trim();
+                    const isCustom = overrideValue.length > 0;
+                    const baseline = isCustom
+                        ? overrides[ct.key]
+                        : defaults[ct.key];
+                    const currentValue = values[ct.key] ?? '';
+                    const isDirty = currentValue !== baseline;
                     const savedOk = saved[ct.key];
 
                     return (
@@ -175,15 +216,19 @@ export function SystemPromptsEditor({
                                     <p className="text-xs text-gray-500">
                                         {isCustom
                                             ? 'Prompt personalizado ativo'
-                                            : 'Usa o padrão do sistema'}
+                                            : 'Prompt predefinido — edita e guarda para personalizar'}
                                     </p>
                                 </div>
                                 <div className="flex shrink-0 gap-2">
                                     {isCustom && (
                                         <button
                                             type="button"
-                                            disabled={readOnly || savingKey !== null}
-                                            onClick={() => handleRestore(ct.key)}
+                                            disabled={
+                                                readOnly || savingKey !== null
+                                            }
+                                            onClick={() =>
+                                                handleRestore(ct.key)
+                                            }
                                             className="rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
                                         >
                                             Restaurar padrão
@@ -191,7 +236,11 @@ export function SystemPromptsEditor({
                                     )}
                                     <button
                                         type="button"
-                                        disabled={readOnly || savingKey !== null}
+                                        disabled={
+                                            readOnly ||
+                                            savingKey !== null ||
+                                            !isDirty
+                                        }
                                         onClick={() => handleSave(ct.key)}
                                         className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                                     >
@@ -204,7 +253,7 @@ export function SystemPromptsEditor({
                                 </div>
                             </div>
                             <textarea
-                                value={values[ct.key] ?? ''}
+                                value={currentValue}
                                 onChange={(e) =>
                                     setValues((prev) => ({
                                         ...prev,
@@ -212,7 +261,7 @@ export function SystemPromptsEditor({
                                     }))
                                 }
                                 disabled={readOnly}
-                                rows={5}
+                                rows={8}
                                 placeholder="Deixa em branco para usar o prompt padrão. Escreve o prompt do sistema (função, regras e formato)."
                                 className="w-full rounded-md border border-gray-300 px-3 py-2 font-mono text-xs text-gray-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-50"
                             />

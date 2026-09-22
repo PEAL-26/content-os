@@ -111,7 +111,8 @@ async function generateSinglePiece(
         portablePrompts: buildPortablePromptsForPiece(
             format,
             params,
-            result.data
+            result.data,
+            fullSystem
         ),
     };
 }
@@ -119,7 +120,8 @@ async function generateSinglePiece(
 function buildPortablePromptsForPiece(
     format: ContentFormat,
     params: GenerateContentPiecesParams,
-    piece: Omit<GeneratedPiece, 'provider' | 'portablePrompts'>
+    piece: Omit<GeneratedPiece, 'provider' | 'portablePrompts'>,
+    systemOverride?: string
 ): PortablePromptItem[] {
     const promptParams = {
         article: params.article,
@@ -135,7 +137,8 @@ function buildPortablePromptsForPiece(
                 prompt: buildCarouselItemPortablePrompt(
                     promptParams,
                     slide,
-                    slide.order - 1
+                    slide.order - 1,
+                    systemOverride
                 ),
             }));
 
@@ -143,7 +146,11 @@ function buildPortablePromptsForPiece(
             const tweets = extractThreadTweets(piece.body);
             return tweets.map((tweet) => ({
                 itemKey: `tweet-${tweet.order}`,
-                prompt: buildThreadItemPortablePrompt(promptParams, tweet),
+                prompt: buildThreadItemPortablePrompt(
+                    promptParams,
+                    tweet,
+                    systemOverride
+                ),
             }));
         }
 
@@ -155,7 +162,8 @@ function buildPortablePromptsForPiece(
                         format,
                         promptParams,
                         piece.title,
-                        piece.body
+                        piece.body,
+                        systemOverride
                     ),
                 },
             ];

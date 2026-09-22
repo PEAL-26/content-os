@@ -32,18 +32,14 @@ export function WorkspaceFormModal({
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={title} size="xl">
-            <div className="px-6 pb-6">
-                <div className="max-h-[65vh] overflow-y-auto pr-1">
-                    <WorkspaceFormModalBody
-                        initialData={initialData}
-                        submitLabel={submitLabel}
-                        isLoading={isLoading}
-                        error={error}
-                        onSubmit={onSubmit}
-                        onClose={onClose}
-                    />
-                </div>
-            </div>
+            <WorkspaceFormModalBody
+                initialData={initialData}
+                submitLabel={submitLabel}
+                isLoading={isLoading}
+                error={error}
+                onSubmit={onSubmit}
+                onClose={onClose}
+            />
         </Modal>
     );
 }
