@@ -36,8 +36,7 @@ export function apiAiDevPlugin(): Plugin {
                 // para não depender desse comportamento.
                 const isGenerate =
                     clean === '/api/ai/generate' || clean === '/generate';
-                const isTest =
-                    clean === '/api/ai/test' || clean === '/test';
+                const isTest = clean === '/api/ai/test' || clean === '/test';
                 const isEnqueue =
                     clean === '/api/ai/enqueue' || clean === '/enqueue';
 
@@ -54,8 +53,16 @@ export function apiAiDevPlugin(): Plugin {
                     return;
                 }
                 res.statusCode = 404;
-                res.setHeader('Content-Type', 'application/json; charset=utf-8');
-                res.end(JSON.stringify({ ok: false, error: 'Rota API não encontrada.' }));
+                res.setHeader(
+                    'Content-Type',
+                    'application/json; charset=utf-8'
+                );
+                res.end(
+                    JSON.stringify({
+                        ok: false,
+                        error: 'Rota API não encontrada.',
+                    })
+                );
             };
 
             server.middlewares.use('/api/ai', middleware);
@@ -66,15 +73,37 @@ export function apiAiDevPlugin(): Plugin {
             // intacto ao serve para os intents register/sync/send). Rotas
             // fora do path seguem o pipeline normal.
             // -------------------------------------------------------------
-            server.middlewares.use(
-                (req, res, next: Connect.NextFunction) => {
-                    if (!isInngestUrl(req.url)) {
-                        next();
-                        return;
-                    }
-                    void handleInngestWithPathCheck(req, res);
+            server.middlewares.use((req, res, next: Connect.NextFunction) => {
+                if (!isInngestUrl(req.url)) {
+                    next();
+                    return;
                 }
-            );
+                // Nunca propagar rejeições: um pedido malformado não pode
+                // derrubar o dev server (o serve() rejeita em JSON inválido).
+                void handleInngestWithPathCheck(req, res).catch(
+                    (error: unknown) => {
+                        if (res.writableEnded) {
+                            res.destroy();
+                            return;
+                        }
+                        const message =
+                            error instanceof Error
+                                ? error.message
+                                : String(error);
+                        res.statusCode = 500;
+                        res.setHeader(
+                            'Content-Type',
+                            'application/json; charset=utf-8'
+                        );
+                        res.end(
+                            JSON.stringify({
+                                ok: false,
+                                error: `Inngest handler error: ${message}`,
+                            })
+                        );
+                    }
+                );
+            });
         },
     };
 }
