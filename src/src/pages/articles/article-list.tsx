@@ -5,11 +5,13 @@ import { ProductSelector } from '@/components/products/product-selector';
 import { Modal } from '@/components/ui/modal';
 import { useArticles, type ArticlesFilters } from '@/hooks/use-articles';
 import { useDebounce } from '@/hooks/use-debounce';
+import { useGenerationJobsForTargets } from '@/hooks/use-generation-jobs';
 import { usePillars } from '@/hooks/use-pillars';
 import { useProducts } from '@/hooks/use-products';
 import { useWorkspace } from '@/hooks/use-workspace';
 import type { CreateArticleInput } from '@/lib/schemas/article';
 import { workspacePath } from '@/lib/workspace-paths';
+import type { GenerationJob } from '@/services/generation-job.service';
 import type { ArticleStatus, ArticleWithRelations } from '@/types/database';
 import type { ContentPillar } from '@/types/pillar';
 import { useQueryState } from 'nuqs';
@@ -37,10 +39,13 @@ function ArticleCard({
     article,
     onDuplicate,
     onDelete,
+    generationJob,
 }: {
     article: ArticleWithRelations;
     onDuplicate: () => void;
     onDelete: () => void;
+    /** Job de geração em segundo plano deste artigo (null = sem job). */
+    generationJob?: GenerationJob | null;
 }) {
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
@@ -67,6 +72,13 @@ function ArticleCard({
                                 status={article.status}
                                 size="sm"
                             />
+                            {generationJob &&
+                                generationJob.status !== 'COMPLETED' && (
+                                    <GenerationCardBadge
+                                        status={generationJob.status}
+                                        error={generationJob.error}
+                                    />
+                                )}
                         </div>
 
                         <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -244,6 +256,50 @@ function ArticleCard({
                 </div>
             )}
         </>
+    );
+}
+
+function GenerationCardBadge({
+    status,
+    error,
+}: {
+    status: GenerationJob['status'];
+    error: string | null;
+}) {
+    if (status === 'FAILED') {
+        return (
+            <span
+                title={error ?? 'A geração falhou'}
+                className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700"
+            >
+                Falha na geração
+            </span>
+        );
+    }
+
+    return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+            <svg
+                className="h-3 w-3 animate-spin"
+                fill="none"
+                viewBox="0 0 24 24"
+            >
+                <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                />
+                <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
+            </svg>
+            A gerar…
+        </span>
     );
 }
 
@@ -629,6 +685,13 @@ function ArticleListContent({
         deleteArticle,
     } = useArticles({ filters });
 
+    // Estado da geração assíncrona (NEW_ARTICLE) por artigo.
+    const articleIds = useMemo(() => articles.map((a) => a.id), [articles]);
+    const { jobsByTarget } = useGenerationJobsForTargets(
+        'NEW_ARTICLE',
+        articleIds
+    );
+
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showGenerateModal, setShowGenerateModal] = useState(false);
     const [actionFeedback, setActionFeedback] = useState<{
@@ -775,6 +838,7 @@ function ArticleListContent({
                                 article={article}
                                 onDuplicate={() => handleDuplicate(article.id)}
                                 onDelete={() => handleDelete(article.id)}
+                                generationJob={jobsByTarget[article.id] ?? null}
                             />
                         ))}
                     </div>

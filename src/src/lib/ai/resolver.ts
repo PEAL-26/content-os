@@ -1,5 +1,9 @@
-import type { AIProviderConfig, AIProviderConfigOptions } from './types';
-import type { AIProvider, AIProviderModel } from '@/services/ai-provider.service';
+import type {
+    AIProviderConfig,
+    AIProviderConfigOptions,
+    AIProviderLike,
+    AIProviderModelLike,
+} from './types';
 
 export type ReasoningEffort =
     | 'none'
@@ -83,8 +87,8 @@ export function normalizeConfig(raw: unknown): AIProviderConfigOptions {
  * default por providerId.
  */
 export function resolveProviderConfig(
-    provider: AIProvider,
-    model: AIProviderModel,
+    provider: AIProviderLike,
+    model: AIProviderModelLike,
     apiKey: string,
     overrides?: {
         baseUrl?: string | null;

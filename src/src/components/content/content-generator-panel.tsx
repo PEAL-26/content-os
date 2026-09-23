@@ -5,6 +5,14 @@ import {
 } from '@/components/ai/ai-provider-picker';
 import { useChannels } from '@/hooks/use-channels';
 import { useContentPieces } from '@/hooks/use-content-pieces';
+import { useGenerationJob } from '@/hooks/use-generation-job';
+import {
+    defaultJobParams,
+    generationJobService,
+    type GenerationJobItem,
+} from '@/services/generation-job.service';
+import { useWorkspaceStore } from '@/stores/workspace-store';
+import { useGenerationJobStore } from '@/stores/generation-jobs-store';
 import type {
     Article,
     ContentFormat,
@@ -19,7 +27,7 @@ import {
     CONTENT_PIECE_STATUS_LABELS,
 } from '@/types/database';
 import type { PillarConfig } from '@/types/pillar';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ContentPieceModal } from './content-piece-modal';
 
 interface ContentGeneratorPanelProps {
@@ -55,13 +63,25 @@ export function ContentGeneratorPanel({
 }: ContentGeneratorPanelProps) {
     const {
         pieces,
-        isGenerating,
-        generatingFormats,
-        generatePieces,
         updatePiece,
         approvePiece,
         deletePiece,
+        refetch: refetchPieces,
     } = useContentPieces(article.id);
+
+    const { currentWorkspace } = useWorkspaceStore();
+    const rememberJob = useGenerationJobStore((s) => s.rememberJob);
+
+    // Estado da geração assíncrona (CONTENT_PIECES) deste artigo — segue o
+    // job mais recente (retry/regenerar criam jobs novos no mesmo alvo).
+    const genJob = useGenerationJob({
+        kind: 'target',
+        jobType: 'CONTENT_PIECES',
+        targetId: article.id,
+    });
+
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [enqueueError, setEnqueueError] = useState<string | null>(null);
 
     const { channels } = useChannels();
 
@@ -120,6 +140,12 @@ export function ContentGeneratorPanel({
         if (selectedFormats.size === 0) return;
 
         setErrors([]);
+        setEnqueueError(null);
+
+        if (!currentWorkspace) {
+            setEnqueueError('Workspace não carregado.');
+            return;
+        }
 
         const channelIds: Partial<Record<ContentFormat, string>> = {};
         for (const format of selectedFormats) {
@@ -127,24 +153,88 @@ export function ContentGeneratorPanel({
                 selectedChannels[format] || getDefaultChannel(format);
         }
 
-        const result = await generatePieces({
-            article,
-            formats: Array.from(selectedFormats),
-            channelIds,
-            product,
-            pillar,
-            additionalInstructions:
-                additionalInstructions.trim() || undefined,
-            preferred,
-        });
+        setIsGenerating(true);
+        try {
+            const result = await generationJobService.enqueue({
+                workspaceId: currentWorkspace.id,
+                jobType: 'CONTENT_PIECES',
+                params: {
+                    articleId: article.id,
+                    formats: Array.from(selectedFormats),
+                    channelIds,
+                    productId: product?.id ?? null,
+                    pillarId: pillar?.id ?? null,
+                    additionalInstructions:
+                        additionalInstructions.trim() || undefined,
+                    preferred,
+                },
+            });
 
-        if (result.errors.length > 0) {
-            setErrors(
-                result.errors.map((e) => ({
-                    format: e.format,
-                    message: e.error,
-                }))
+            rememberJob({
+                jobType: 'CONTENT_PIECES',
+                targetId: article.id,
+                jobId: result.jobId,
+            });
+
+            // Mostra os placeholders imediatamente (o resto chega via Realtime).
+            await refetchPieces();
+        } catch (error) {
+            setEnqueueError(
+                error instanceof Error
+                    ? error.message
+                    : 'Erro ao agendar a geração das peças.'
             );
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
+    // Mapa pieceId → estado de geração (itens do job mais recente).
+    const pieceJobs = useMemo(() => {
+        const map = new Map<string, GenerationJobItem>();
+        for (const item of genJob.job?.items ?? []) {
+            map.set(item.targetId, item);
+        }
+        return map;
+    }, [genJob.job]);
+
+    // Quando há um job para este artigo, refresca as peças (novos placeholders
+    // no enqueue e conteúdo quando os itens concluem).
+    useEffect(() => {
+        if (genJob.job) {
+            void refetchPieces();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [genJob.job]);
+
+    const handleRetryPiece = async (piece: ContentPieceWithRelations) => {
+        const job = genJob.job;
+        if (!currentWorkspace || !job) return;
+
+        setEnqueueError(null);
+        try {
+            const result = await generationJobService.enqueue({
+                workspaceId: currentWorkspace.id,
+                jobType: 'CONTENT_PIECES',
+                params: job.params ?? defaultJobParams('CONTENT_PIECES'),
+                targets: [{ format: piece.format, targetId: piece.id }],
+            });
+            rememberJob({
+                jobType: 'CONTENT_PIECES',
+                targetId: article.id,
+                jobId: result.jobId,
+            });
+            await refetchPieces();
+        } catch (error) {
+            setErrors([
+                {
+                    format: piece.format,
+                    message:
+                        error instanceof Error
+                            ? error.message
+                            : 'Falha ao tentar novamente.',
+                },
+            ]);
         }
     };
 
@@ -317,15 +407,16 @@ export function ContentGeneratorPanel({
                                 d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
                             />
                         </svg>
-                        A gerar...
-                        {Array.from(generatingFormats)
-                            .map((f) => CONTENT_FORMAT_LABELS[f])
-                            .join(', ')}
+                        A agendar...
                     </span>
                 ) : (
                     <>Gerar {selectedFormats.size} peça(s)</>
                 )}
             </button>
+
+            {enqueueError && (
+                <p className="text-xs text-red-600">{enqueueError}</p>
+            )}
 
             {errors.map((error, index) => (
                 <p key={index} className="text-xs text-red-600">
@@ -338,6 +429,34 @@ export function ContentGeneratorPanel({
                     Configura pelo menos um canal em Settings para gerar
                     conteúdo.
                 </p>
+            )}
+
+            {genJob.isActive && (
+                <div className="rounded-md bg-blue-50 p-3">
+                    <p className="flex items-center gap-2 text-sm text-blue-700">
+                        <svg
+                            className="h-4 w-4 animate-spin"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                        >
+                            <circle
+                                className="opacity-25"
+                                cx="12"
+                                cy="12"
+                                r="10"
+                                stroke="currentColor"
+                                strokeWidth="4"
+                            />
+                            <path
+                                className="opacity-75"
+                                fill="currentColor"
+                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                            />
+                        </svg>
+                        A gerar as peças em segundo plano… vais vê-las aqui assim
+                        que estiverem prontas.
+                    </p>
+                </div>
             )}
 
             {groupedPieces.length > 0 && (
@@ -359,6 +478,7 @@ export function ContentGeneratorPanel({
                                             <ContentPieceCard
                                                 key={piece.id}
                                                 piece={piece}
+                                                gen={pieceJobs.get(piece.id)}
                                                 onEdit={() =>
                                                     setEditingPiece(piece)
                                                 }
@@ -367,6 +487,9 @@ export function ContentGeneratorPanel({
                                                 }
                                                 onApprove={() =>
                                                     handleApprovePiece(piece.id)
+                                                }
+                                                onRetryPiece={() =>
+                                                    handleRetryPiece(piece)
                                                 }
                                             />
                                         ))}
@@ -398,14 +521,19 @@ export function ContentGeneratorPanel({
 
 function ContentPieceCard({
     piece,
+    gen,
     onEdit,
     onDelete,
     onApprove,
+    onRetryPiece,
 }: {
     piece: ContentPieceWithRelations;
+    /** Estado de geração (item do job) — null quando não há job ativo. */
+    gen?: GenerationJobItem | null;
     onEdit: () => void;
     onDelete: () => void;
     onApprove: () => void;
+    onRetryPiece: () => void;
 }) {
     const statusColors = CONTENT_PIECE_STATUS_COLORS[piece.status];
 
@@ -431,6 +559,49 @@ function ContentPieceCard({
                     {CONTENT_PIECE_STATUS_LABELS[piece.status]}
                 </span>
             </div>
+
+            {gen && gen.status !== 'COMPLETED' && (
+                <div className="mb-2">
+                    {gen.status === 'FAILED' ? (
+                        <div className="flex items-start justify-between gap-2 rounded-md bg-red-50 p-2">
+                            <p className="min-w-0 flex-1 text-xs text-red-600">
+                                {gen.error || 'A geração desta peça falhou.'}
+                            </p>
+                            <button
+                                onClick={onRetryPiece}
+                                className="shrink-0 rounded border border-red-200 bg-white px-2 py-0.5 text-xs font-medium text-red-600 hover:bg-red-50"
+                            >
+                                Repetir
+                            </button>
+                        </div>
+                    ) : (
+                        <p className="flex items-center gap-1.5 text-xs text-blue-600">
+                            <svg
+                                className="h-3.5 w-3.5 animate-spin"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                            >
+                                <circle
+                                    className="opacity-25"
+                                    cx="12"
+                                    cy="12"
+                                    r="10"
+                                    stroke="currentColor"
+                                    strokeWidth="4"
+                                />
+                                <path
+                                    className="opacity-75"
+                                    fill="currentColor"
+                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                                />
+                            </svg>
+                            {gen.status === 'QUEUED'
+                                ? 'Na fila de geração…'
+                                : 'A gerar em segundo plano…'}
+                        </p>
+                    )}
+                </div>
+            )}
 
             <p className="mb-3 line-clamp-2 text-xs text-gray-500">
                 {piece.body.substring(0, 150)}

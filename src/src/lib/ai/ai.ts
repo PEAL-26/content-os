@@ -7,6 +7,7 @@ import {
     generateWithFallback,
     getAvailableProvidersFromStore,
 } from './provider';
+import { callLLM } from './transport';
 import type {
     AIProviderId,
     GenerateArticleParams,
@@ -49,6 +50,7 @@ export async function generateArticle(
         buildPrompt: () => buildArticleUserPrompt(params),
         parse: (text) => parseArticleResponse(text).article,
         defaultMaxTokens: 8000,
+        transport: callLLM,
     });
 
     if (!result.ok || !result.data) {

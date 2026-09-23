@@ -8,23 +8,17 @@ import type {
 import type { PillarConfig } from '@/types/pillar';
 import pLimit from 'p-limit';
 import {
-    buildCarouselItemPortablePrompt,
     buildContext,
-    buildSingleItemPortablePrompt,
+    buildPortablePromptsForPiece,
     buildSystemPromptForFormat,
-    buildThreadItemPortablePrompt,
-    parseCarouselResponse,
-    parseCtaPostResponse,
-    parseInstagramPostResponse,
-    parseLinkedInPostResponse,
-    parseShortVideoResponse,
-    parseThreadResponse,
-    parseVideoScriptResponse,
+    parseGeneratedContent,
+    type ParsedGeneratedPiece,
 } from './content-prompts';
 import {
     generateWithFallback,
     getAvailableProvidersFromStore,
 } from './provider';
+import { callLLM } from './transport';
 import type { AIProviderId } from './types';
 import type { AIProvider } from '@/services/ai-provider.service';
 import type { PortablePromptItem } from '@/services/ai-prompt.service';
@@ -81,7 +75,7 @@ async function generateSinglePiece(
         ? `${systemPrompt}\n\n## Instruções Adicionais\n${additionalInstructions.trim()}`
         : systemPrompt;
 
-    const result = await generateWithFallback<Omit<GeneratedPiece, 'provider' | 'portablePrompts'>>({
+    const result = await generateWithFallback<ParsedGeneratedPiece>({
         providers: getAvailableProvidersFromStore(
             storeProviders ?? [],
             storeApiKeys ?? {}
@@ -99,6 +93,7 @@ async function generateSinglePiece(
         parse: (text) => parseGeneratedContent(format, text),
         maxAttempts: 2,
         defaultMaxTokens: 4000,
+        transport: callLLM,
     });
 
     if (!result.ok || !result.data) {
@@ -110,205 +105,16 @@ async function generateSinglePiece(
         provider: result.providerId as AIProviderId,
         portablePrompts: buildPortablePromptsForPiece(
             format,
-            params,
+            {
+                article: params.article,
+                workspace: params.workspace,
+                product: params.product,
+                pillar: params.pillar,
+            },
             result.data,
             fullSystem
         ),
     };
-}
-
-function buildPortablePromptsForPiece(
-    format: ContentFormat,
-    params: GenerateContentPiecesParams,
-    piece: Omit<GeneratedPiece, 'provider' | 'portablePrompts'>,
-    systemOverride?: string
-): PortablePromptItem[] {
-    const promptParams = {
-        article: params.article,
-        workspace: params.workspace,
-        product: params.product,
-        pillar: params.pillar,
-    };
-
-    switch (format) {
-        case 'CAROUSEL':
-            return (piece.slides ?? []).map((slide) => ({
-                itemKey: `slide-${slide.order}`,
-                prompt: buildCarouselItemPortablePrompt(
-                    promptParams,
-                    slide,
-                    slide.order - 1,
-                    systemOverride
-                ),
-            }));
-
-        case 'THREAD': {
-            const tweets = extractThreadTweets(piece.body);
-            return tweets.map((tweet) => ({
-                itemKey: `tweet-${tweet.order}`,
-                prompt: buildThreadItemPortablePrompt(
-                    promptParams,
-                    tweet,
-                    systemOverride
-                ),
-            }));
-        }
-
-        default:
-            return [
-                {
-                    itemKey: 'main',
-                    prompt: buildSingleItemPortablePrompt(
-                        format,
-                        promptParams,
-                        piece.title,
-                        piece.body,
-                        systemOverride
-                    ),
-                },
-            ];
-    }
-}
-
-/** Extrai os tweets individuais a partir do body (separados por linha em branco). */
-function extractThreadTweets(body: string): Array<{ order: number; text: string }> {
-    return body
-        .split(/\n\s*\n/)
-        .map((text) => text.trim())
-        .filter(Boolean)
-        .map((text, i) => ({ order: i + 1, text }));
-}
-
-function parseGeneratedContent(
-    format: ContentFormat,
-    text: string
-): Omit<GeneratedPiece, 'provider' | 'portablePrompts'> | null {
-    switch (format) {
-        case 'CAROUSEL': {
-            const parsed = parseCarouselResponse(text);
-            if (!parsed) return null;
-
-            const slides = parsed.slides || [];
-            const body = slides
-                .map((s) => `## ${s.title}\n${s.body}`)
-                .join('\n\n');
-
-            return {
-                format,
-                title: parsed.title,
-                body,
-                slides,
-                slideCount: slides.length,
-                hookText: slides[0]?.title || null,
-                ctaText: slides[slides.length - 1]?.body || null,
-                hashtags: [],
-            };
-        }
-
-        case 'LINKEDIN_POST': {
-            const parsed = parseLinkedInPostResponse(text);
-            if (!parsed) return null;
-
-            return {
-                format,
-                title: parsed.title,
-                body: parsed.body,
-                hashtags: parsed.hashtags,
-                hookText: parsed.body.split('\n')[0] || null,
-                ctaText: null,
-                slides: null,
-                slideCount: null,
-            };
-        }
-
-        case 'IMAGE': {
-            const parsed = parseInstagramPostResponse(text);
-            if (!parsed) return null;
-
-            return {
-                format,
-                title: parsed.title,
-                body: parsed.body,
-                hashtags: parsed.hashtags,
-                hookText: parsed.body.split('\n')[0] || null,
-                ctaText: null,
-                slides: null,
-                slideCount: null,
-            };
-        }
-
-        case 'SHORT_VIDEO': {
-            const parsed = parseShortVideoResponse(text);
-            if (!parsed) return null;
-
-            return {
-                format,
-                title: parsed.title,
-                body: `Hook: ${parsed.hookText || ''}\n\nCTA: ${parsed.ctaText || ''}`,
-                hookText: parsed.hookText,
-                ctaText: parsed.ctaText,
-                hashtags: [],
-                slides: null,
-                slideCount: null,
-            };
-        }
-
-        case 'CTA_POST': {
-            const parsed = parseCtaPostResponse(text);
-            if (!parsed) return null;
-
-            return {
-                format,
-                title: parsed.title,
-                body: parsed.body,
-                ctaText: parsed.ctaText,
-                hashtags: [],
-                hookText: parsed.body.split('\n')[0] || null,
-                slides: null,
-                slideCount: null,
-            };
-        }
-
-        case 'THREAD': {
-            const parsed = parseThreadResponse(text);
-            if (!parsed) return null;
-
-            const tweets = parsed.tweets || [];
-            const body = tweets.map((t) => t.text).join('\n\n');
-
-            return {
-                format,
-                title: parsed.title,
-                body,
-                hashtags: [],
-                hookText: tweets[0]?.text || null,
-                ctaText: tweets[tweets.length - 1]?.text || null,
-                slides: null,
-                slideCount: null,
-            };
-        }
-
-        case 'VIDEO_SCRIPT': {
-            const parsed = parseVideoScriptResponse(text);
-            if (!parsed) return null;
-
-            const body = `## Hook\n${parsed.hook || ''}\n\n## Problema\n${parsed.problem || ''}\n\n## Solução\n${parsed.solution || ''}\n\n## CTA\n${parsed.cta || ''}`;
-
-            return {
-                format,
-                title: parsed.title,
-                body,
-                hookText: parsed.hook,
-                ctaText: parsed.cta,
-                hashtags: [],
-                slides: null,
-                slideCount: null,
-            };
-        }
-
-        default:
-            return null;
-    }
 }
 
 export async function generateContentPieces(

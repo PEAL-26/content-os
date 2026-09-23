@@ -2,13 +2,14 @@ import {
     buildContext,
     buildSingleItemPortablePrompt,
     buildVideoScriptSystemPrompt,
+    convertParsedToScript,
     parseVideoScriptResponse,
-    type ParsedVideoScript,
 } from './content-prompts';
 import {
     generateWithFallback,
     getAvailableProvidersFromStore,
 } from './provider';
+import { callLLM } from './transport';
 import type {
     AIProviderId,
     GenerateVideoScriptParams,
@@ -67,6 +68,7 @@ export async function generateVideoScript(
             return null;
         },
         defaultMaxTokens: 4000,
+        transport: callLLM,
     });
 
     if (!result.ok || !result.data) {
@@ -99,23 +101,6 @@ export async function generateVideoScript(
         provider: result.providerId as AIProviderId,
         prompt: result.prompt,
         portablePrompts,
-    };
-}
-
-function convertParsedToScript(
-    parsed: ParsedVideoScript,
-    requestedDuration: number
-): GeneratedVideoScript {
-    return {
-        title: parsed.title || 'Sem título',
-        hook: parsed.hook || '',
-        problem: parsed.problem,
-        solution: parsed.solution,
-        cta: parsed.cta || '',
-        fullScript: parsed.fullScript,
-        durationSec: parsed.durationSec || requestedDuration,
-        onScreenText: parsed.onScreenText,
-        bRoll: parsed.bRoll,
     };
 }
 

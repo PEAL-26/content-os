@@ -3,9 +3,14 @@ import {
     AIProviderPicker,
     type AIProviderSelection,
 } from '@/components/ai/ai-provider-picker';
-import { useAI } from '@/hooks/use-ai';
 import { usePillars } from '@/hooks/use-pillars';
 import { useProducts } from '@/hooks/use-products';
+import {
+    generationJobService,
+    type GenerationEnqueueError,
+} from '@/services/generation-job.service';
+import { useWorkspaceStore } from '@/stores/workspace-store';
+import { useGenerationJobStore } from '@/stores/generation-jobs-store';
 import { useEffect, useState } from 'react';
 
 interface ArticleGeneratorModalProps {
@@ -14,6 +19,11 @@ interface ArticleGeneratorModalProps {
     onGenerated: (articleId: string) => void;
 }
 
+/**
+ * Gera um artigo em segundo plano (Inngest): ao confirmar, cria o job +
+ * placeholder e navega logo para o editor. O estado (a gerar / falha /
+ * concluído) chega via Realtime ao banner do editor. Sem bloqueio de 120s.
+ */
 export function ArticleGeneratorModal({
     isOpen,
     onClose,
@@ -21,7 +31,8 @@ export function ArticleGeneratorModal({
 }: ArticleGeneratorModalProps) {
     const { pillars } = usePillars();
     const { activeProducts } = useProducts();
-    const { isGenerating, error, generateArticle, clearError } = useAI();
+    const { currentWorkspace } = useWorkspaceStore();
+    const rememberJob = useGenerationJobStore((s) => s.rememberJob);
 
     const [topic, setTopic] = useState('');
     const [pillarId, setPillarId] = useState<string | null>(null);
@@ -29,19 +40,19 @@ export function ArticleGeneratorModal({
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [preferred, setPreferred] = useState<AIProviderSelection | null>(null);
     const [additionalInstructions, setAdditionalInstructions] = useState('');
+    const [isGenerating, setIsGenerating] = useState(false);
 
     useEffect(() => {
         if (!isOpen) {
-            // eslint-disable-next-line react-hooks/set-state-in-effect
             setTopic('');
             setPillarId(null);
             setProductId(null);
             setErrorMessage(null);
             setPreferred(null);
             setAdditionalInstructions('');
-            clearError();
+            setIsGenerating(false);
         }
-    }, [isOpen, clearError]);
+    }, [isOpen]);
 
     const handleGenerate = async () => {
         if (!topic.trim()) {
@@ -49,27 +60,41 @@ export function ArticleGeneratorModal({
             return;
         }
 
-        setErrorMessage(null);
+        if (!currentWorkspace) {
+            setErrorMessage('Workspace não carregado.');
+            return;
+        }
 
-        const selectedPillar = pillars.find((p) => p.id === pillarId);
-        const selectedProduct = activeProducts.find((p) => p.id === productId);
+        setErrorMessage(null);
+        setIsGenerating(true);
 
         try {
-            const result = await generateArticle({
-                topic: topic.trim(),
-                pillar: selectedPillar,
-                product: selectedProduct || undefined,
-                additionalInstructions:
-                    additionalInstructions.trim() || undefined,
-                preferred,
+            const result = await generationJobService.enqueue({
+                workspaceId: currentWorkspace.id,
+                jobType: 'NEW_ARTICLE',
+                params: {
+                    topic: topic.trim(),
+                    pillarId: pillarId ?? null,
+                    productId: productId ?? null,
+                    additionalInstructions:
+                        additionalInstructions.trim() || undefined,
+                    preferred,
+                },
             });
 
-            if (result.success && result.articleId) {
-                onGenerated(result.articleId);
-                onClose();
-            }
+            rememberJob({
+                jobType: 'NEW_ARTICLE',
+                targetId: result.targetId,
+                jobId: result.jobId,
+            });
+
+            onGenerated(result.targetId);
+            onClose();
         } catch (error) {
-            console.error(error);
+            const err = error as GenerationEnqueueError;
+            setErrorMessage(parseEnqueueError(err));
+        } finally {
+            setIsGenerating(false);
         }
     };
 
@@ -147,27 +172,6 @@ export function ArticleGeneratorModal({
                     </select>
                 </div>
 
-                {error && (
-                    <div className="rounded-md bg-red-50 p-3">
-                        <div className="flex gap-2">
-                            <svg
-                                className="mt-0.5 h-5 w-5 shrink-0 text-red-500"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                            >
-                                <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                />
-                            </svg>
-                            <p className="text-sm text-red-700">{error}</p>
-                        </div>
-                    </div>
-                )}
-
                 <div>
                     <label className="mb-1.5 block text-sm font-medium text-gray-700">
                         Provedor / Modelo
@@ -185,7 +189,9 @@ export function ArticleGeneratorModal({
                     </label>
                     <textarea
                         value={additionalInstructions}
-                        onChange={(e) => setAdditionalInstructions(e.target.value)}
+                        onChange={(e) =>
+                            setAdditionalInstructions(e.target.value)
+                        }
                         disabled={isGenerating}
                         rows={2}
                         placeholder="Indicações extra para esta geração (opcional)..."
@@ -216,8 +222,7 @@ export function ArticleGeneratorModal({
                                 />
                             </svg>
                             <p className="text-sm text-blue-700">
-                                A gerar artigo com IA. Isto pode demorar alguns
-                                segundos...
+                                A preparar a geração...
                             </p>
                         </div>
                     </div>
@@ -257,7 +262,7 @@ export function ArticleGeneratorModal({
                                         d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
                                     />
                                 </svg>
-                                A gerar...
+                                A agendar...
                             </>
                         ) : (
                             <>
@@ -282,4 +287,15 @@ export function ArticleGeneratorModal({
             </div>
         </Modal>
     );
+}
+
+function parseEnqueueError(error: GenerationEnqueueError): string {
+    switch (error.code) {
+        case 'NO_PROVIDER':
+            return 'Ainda não tens nenhum provider de IA configurado com chave. Adiciona um nas Definições de IA antes de gerar.';
+        case 'QUEUE_ERROR':
+            return error.message;
+        default:
+            return error.message;
+    }
 }

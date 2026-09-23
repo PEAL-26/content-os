@@ -1,6 +1,58 @@
 import type { Product, SocialChannel, Workspace } from '@/types/database';
 import type { PillarConfig } from '@/types/pillar';
 
+// =============================================================================
+// Tipos estruturais dos providers de IA — definidos aqui (sem import de
+// serviços browser) para que este núcleo permaneça 100% puro e importável
+// server-side (jobs Inngest). O client usa os mesmos tipos do serviço
+// `ai-provider.service`; como são estruturalmente compatíveis, não há cast.
+// =============================================================================
+
+export interface AIProviderModelLike {
+    id: string;
+    providerId: string;
+    displayName: string;
+    modelCode: string;
+    /** Configuração padrão do modelo (temperature, max_tokens, ...). */
+    config?: AIProviderConfigOptions | null;
+    isActive: boolean;
+    createdAt: string;
+}
+
+export interface AIProviderHeaderLike {
+    id: string;
+    providerId: string;
+    key: string;
+    value: string;
+    createdAt: string;
+}
+
+export interface AIProviderLike {
+    id: string;
+    providerId: string;
+    name: string;
+    description: string | null;
+    baseUrl: string | null;
+    /** Dono a nível de utilizador (acessível em todos os workspaces dele). */
+    userId?: string | null;
+    /** Workspace específico (só membros desse workspace). */
+    workspaceId?: string | null;
+    /** API key (em claro — sem password). */
+    apiKeyEncrypted?: string | null;
+    /** IV (base64) usado na cifra da API key. */
+    apiKeyIv?: string | null;
+    /** Configuração padrão do provider (temperature, max_tokens, ...). */
+    config?: AIProviderConfigOptions | null;
+    isDefault: boolean;
+    isCustom: boolean;
+    isActive: boolean;
+    priority: number;
+    createdAt: string;
+    updatedAt: string;
+    models: AIProviderModelLike[];
+    headers: AIProviderHeaderLike[];
+}
+
 export interface AIGeneratedArticle {
     title: string;
     slug: string;
@@ -110,8 +162,14 @@ export type GenerateVideoScriptResult =
           provider: AIProviderId;
           prompt: string;
           /** Prompt final portátil por item (para content_generation_prompts). */
-          portablePrompts?: import('@/services/ai-prompt.service').PortablePromptItem[];
+          portablePrompts?: PortablePromptItem[];
       }
     | { success: false; error: string; code: AIProviderResult['code'] };
+
+/** Prompt final portátil — título/índice para registo em content_generation_prompts. */
+export interface PortablePromptItem {
+    itemKey: string;
+    prompt: string;
+}
 
 type Article = import('@/types/database').Article;

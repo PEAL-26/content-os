@@ -1,5 +1,5 @@
 import type { GenerateArticleParams } from './types';
-import { generateSlug } from '@/helpers/slug';
+import { generateSlug } from '../../helpers/slug';
 
 // =============================================================================
 // Prompt do artigo — dividido em system (função + regras + formato) e user

@@ -89,6 +89,19 @@ enum PublicationTargetType {
   VIDEO_SCRIPT
 }
 
+enum GenerationJobType {
+  NEW_ARTICLE
+  CONTENT_PIECES
+  VIDEO_SCRIPT
+}
+
+enum GenerationJobStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
 // =============================================================================
 // WORKSPACE (Multi-tenant root)
 // =============================================================================
@@ -586,4 +599,30 @@ model ContentPublication {
 
   @@index([targetType, targetId])
   @@map("content_publications")
+}
+
+// =============================================================================
+// GENERATION JOBS (Geração de IA assíncrona via Inngest)
+// Polimórfico: um job por pedido de geração. `targetId` aponta ao objeto de
+// destino (article placeholder, content piece no batch, script placeholder) e
+// `items` guarda o estado por item nos batches de CONTENT_PIECES.
+// =============================================================================
+
+model GenerationJob {
+  id          String              @id @default(uuid())
+  jobType     GenerationJobType
+  workspaceId String
+  userId      String? // Criador (auth.users UUID)
+  status      GenerationJobStatus @default(QUEUED)
+  error       String? // Motivo de falha (visível na UI)
+  items       Json? // [{ format, targetId, status, error }] por item (CONTENT_PIECES)
+  params      Json? // Snapshot dos parâmetros da geração (para retry)
+  runId       String? // Inngest run id (idempotência/pista)
+  targetId    String? // NEW_ARTICLE/VIDEO_SCRIPT → id do placeholder; CONTENT_PIECES → articleId
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@index([workspaceId, status])
+  @@index([jobType, targetId, status])
+  @@map("generation_jobs")
 }

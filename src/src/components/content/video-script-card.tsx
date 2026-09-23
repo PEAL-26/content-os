@@ -19,6 +19,12 @@ interface VideoScriptCardProps {
         assetName: string | null;
     }) => Promise<void>;
     isApproving?: boolean;
+    /** Estado de geração em segundo plano deste roteiro. */
+    generation?: {
+        status: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+        error: string | null;
+    } | null;
+    onRetryGeneration?: () => void;
 }
 
 export function VideoScriptCard({
@@ -28,6 +34,8 @@ export function VideoScriptCard({
     onCopy,
     onAssetChange,
     isApproving = false,
+    generation = null,
+    onRetryGeneration,
 }: VideoScriptCardProps) {
     const [isExpanded, setIsExpanded] = useState(false);
     const [copied, setCopied] = useState(false);
@@ -108,6 +116,56 @@ export function VideoScriptCard({
                     </svg>
                 </div>
             </div>
+
+            {generation && generation.status !== 'COMPLETED' && (
+                <div
+                    className={
+                        generation.status === 'FAILED'
+                            ? 'border-b border-red-100 bg-red-50 px-4 py-2'
+                            : 'border-b border-blue-100 bg-blue-50 px-4 py-2'
+                    }
+                >
+                    {generation.status === 'FAILED' ? (
+                        <div className="flex items-center justify-between gap-2">
+                            <p className="min-w-0 flex-1 text-xs text-red-700">
+                                {generation.error ||
+                                    'A geração deste roteiro falhou.'}
+                            </p>
+                            {onRetryGeneration && (
+                                <button
+                                    onClick={onRetryGeneration}
+                                    className="shrink-0 rounded-md bg-red-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-red-700"
+                                >
+                                    Tentar novamente
+                                </button>
+                            )}
+                        </div>
+                    ) : (
+                        <p className="flex items-center gap-2 text-xs text-blue-700">
+                            <svg
+                                className="h-3.5 w-3.5 animate-spin"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                            >
+                                <circle
+                                    className="opacity-25"
+                                    cx="12"
+                                    cy="12"
+                                    r="10"
+                                    stroke="currentColor"
+                                    strokeWidth="4"
+                                />
+                                <path
+                                    className="opacity-75"
+                                    fill="currentColor"
+                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                                />
+                            </svg>
+                            A gerar o roteiro em segundo plano…
+                        </p>
+                    )}
+                </div>
+            )}
 
             {isExpanded && (
                 <div className="border-t border-gray-200 p-4 space-y-4">

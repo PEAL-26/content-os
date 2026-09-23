@@ -3,12 +3,18 @@ import { ArticleStatusBadge } from '@/components/articles/article-status-badge';
 import { ContentGeneratorPanel } from '@/components/content/content-generator-panel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useDebounce } from '@/hooks/use-debounce';
+import { useGenerationJob } from '@/hooks/use-generation-job';
 import { usePillars } from '@/hooks/use-pillars';
 import { useProducts } from '@/hooks/use-products';
 import { cn } from '@/lib/utils';
 import { workspacePath } from '@/lib/workspace-paths';
 import { articleService } from '@/services/article.service';
+import {
+    defaultJobParams,
+    generationJobService,
+} from '@/services/generation-job.service';
 import { useWorkspaceStore } from '@/stores/workspace-store';
+import { useGenerationJobStore } from '@/stores/generation-jobs-store';
 import {
     calculateReadingTime,
     canTransitionTo,
@@ -18,7 +24,7 @@ import {
 import type { ArticleStatus, ArticleWithRelations } from '@/types/database';
 import MDEditor from '@uiw/react-md-editor';
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 const SESSION_STORAGE_KEY = 'article-editor-draft-';
@@ -52,6 +58,14 @@ export function ArticleEditor() {
     const [isCheckingSlug, setIsCheckingSlug] = useState(false);
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const [showMetadata, setShowMetadata] = useState(true);
+    const [reloadTick, setReloadTick] = useState(0);
+
+    // Geração assíncrona em segundo plano (NEW_ARTICLE deste artigo).
+    const rememberJob = useGenerationJobStore((s) => s.rememberJob);
+    const genJob = useGenerationJob(
+        id ? { kind: 'target', jobType: 'NEW_ARTICLE', targetId: id } : null
+    );
+    const lastReloadedJobRef = useRef<string | null>(null);
 
     const [state, setState] = useState<EditorState>({
         title: '',
@@ -107,7 +121,46 @@ export function ArticleEditor() {
         };
 
         loadArticle();
-    }, [id, navigate, workspaceId]);
+    }, [id, navigate, workspaceId, reloadTick]);
+
+    // Quando um job de geração deste artigo conclui, recarrega o artigo
+    // (o servidor gravou o conteúdo nos placeholders).
+    useEffect(() => {
+        if (!genJob.job || genJob.job.status !== 'COMPLETED') return;
+        if (lastReloadedJobRef.current === genJob.job.id) return;
+        lastReloadedJobRef.current = genJob.job.id;
+        setReloadTick((t) => t + 1);
+    }, [genJob.job]);
+
+    const handleGenerationRetry = async () => {
+        const job = genJob.job;
+        if (!job || !id) return;
+
+        try {
+            const result = await generationJobService.enqueue({
+                workspaceId: job.workspaceId,
+                jobType: 'NEW_ARTICLE',
+                params: job.params ?? defaultJobParams(job.jobType),
+                targets:
+                    job.items?.map((item) => ({
+                        format: item.format,
+                        targetId: item.targetId,
+                    })) ?? [{ format: 'NEW_ARTICLE', targetId: id }],
+            });
+            rememberJob({
+                jobType: 'NEW_ARTICLE',
+                targetId: result.targetId,
+                jobId: result.jobId,
+            });
+            await genJob.refresh();
+        } catch (err) {
+            setSaveError(
+                err instanceof Error
+                    ? `Falha ao tentar novamente: ${err.message}`
+                    : 'Falha ao tentar novamente.'
+            );
+        }
+    };
 
     useEffect(() => {
         if (!id) return;
@@ -362,6 +415,14 @@ export function ArticleEditor() {
                 </div>
             )}
 
+            {genJob.job && genJob.job.status !== 'COMPLETED' && (
+                <GenerationStatusBanner
+                    status={genJob.job.status}
+                    error={genJob.job.error}
+                    onRetry={handleGenerationRetry}
+                />
+            )}
+
             <div className="flex flex-1 overflow-hidden">
                 <div
                     className={cn(
@@ -471,6 +532,71 @@ export function ArticleEditor() {
                     </div>
                 )}
             </div>
+        </div>
+    );
+}
+
+// -----------------------------------------------------------------------------
+// Banner de estado da geração em segundo plano (NEW_ARTICLE)
+// -----------------------------------------------------------------------------
+
+function GenerationStatusBanner({
+    status,
+    error,
+    onRetry,
+}: {
+    status: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+    error: string | null;
+    onRetry: () => void;
+}) {
+    if (status === 'FAILED') {
+        return (
+            <div className="mx-6 mt-4 rounded-md border border-red-200 bg-red-50 p-3">
+                <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                        <p className="text-sm font-medium text-red-700">
+                            A geração deste artigo falhou
+                        </p>
+                        <p className="mt-0.5 text-xs text-red-600">
+                            {error || 'Erro desconhecido'}
+                        </p>
+                    </div>
+                    <button
+                        onClick={onRetry}
+                        className="shrink-0 rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700"
+                    >
+                        Tentar novamente
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="mx-6 mt-4 flex items-center gap-3 rounded-md border border-blue-200 bg-blue-50 p-3">
+            <svg
+                className="h-5 w-5 shrink-0 animate-spin text-blue-500"
+                fill="none"
+                viewBox="0 0 24 24"
+            >
+                <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                />
+                <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
+            </svg>
+            <p className="text-sm text-blue-700">
+                A gerar artigo em segundo plano… o conteúdo aparece aqui assim
+                que estiver pronto.
+            </p>
         </div>
     );
 }

@@ -1,7 +1,9 @@
+import 'dotenv/config';
 import type { Connect, Plugin } from 'vite';
 import { loadEnv } from 'vite';
 import type { AiApiEnv } from './ai-api';
-import { handleAiGenerate, handleAiTest } from './ai-api';
+import { handleAiEnqueue, handleAiGenerate, handleAiTest } from './ai-api';
+import { handleInngestWithPathCheck } from './generation/inngest';
 
 /**
  * Plugin de dev do Vite: regista os handlers /api/ai/* como middleware do dev
@@ -17,12 +19,15 @@ export function apiAiDevPlugin(): Plugin {
             const apiEnv: AiApiEnv = {
                 supabaseUrl: env.VITE_SUPABASE_URL ?? '',
                 supabaseAnonKey: env.VITE_SUPABASE_PUBLISHABLE_KEY ?? '',
-                // Em dev, se o env do Supabase não estiver presente, segue sem
-                // validar (o acesso à BD da app já falha sem essas variáveis,
-                // portanto não há risco real de relay).
-                skipAuth: !env.VITE_SUPABASE_URL || !env.VITE_SUPABASE_PUBLISHABLE_KEY,
+                // Dev local: sem auth (plano — tudo corre localmente, RLS off).
+                // Em produção os MESMOS handlers correm nas Vercel Functions
+                // `api/ai/*`, onde skipAuth=false e o JWT é validado.
+                skipAuth: server.config.mode !== 'production',
             };
 
+            // -------------------------------------------------------------
+            // /api/ai/* — generated handlers (same-origin, CORS-free).
+            // -------------------------------------------------------------
             const middleware: Connect.NextHandleFunction = (req, res) => {
                 const url = req.url ?? '';
                 const clean = url.split('?')[0].replace(/\/+$/, '');
@@ -33,6 +38,8 @@ export function apiAiDevPlugin(): Plugin {
                     clean === '/api/ai/generate' || clean === '/generate';
                 const isTest =
                     clean === '/api/ai/test' || clean === '/test';
+                const isEnqueue =
+                    clean === '/api/ai/enqueue' || clean === '/enqueue';
 
                 if (isGenerate) {
                     void handleAiGenerate(req, res, apiEnv);
@@ -42,12 +49,37 @@ export function apiAiDevPlugin(): Plugin {
                     void handleAiTest(req, res, apiEnv);
                     return;
                 }
+                if (isEnqueue) {
+                    void handleAiEnqueue(req, res, apiEnv);
+                    return;
+                }
                 res.statusCode = 404;
                 res.setHeader('Content-Type', 'application/json; charset=utf-8');
                 res.end(JSON.stringify({ ok: false, error: 'Rota API não encontrada.' }));
             };
 
             server.middlewares.use('/api/ai', middleware);
+
+            // -------------------------------------------------------------
+            // /api/inngest — endpoint do Inngest (dev). Serve o handler com
+            // verificação manual do path (sem mount: o path precisa chegar
+            // intacto ao serve para os intents register/sync/send). Rotas
+            // fora do path seguem o pipeline normal.
+            // -------------------------------------------------------------
+            server.middlewares.use(
+                (req, res, next: Connect.NextFunction) => {
+                    if (!isInngestUrl(req.url)) {
+                        next();
+                        return;
+                    }
+                    void handleInngestWithPathCheck(req, res);
+                }
+            );
         },
     };
+}
+
+function isInngestUrl(url: string | undefined): boolean {
+    const clean = (url ?? '').split('?')[0].replace(/\/+$/, '');
+    return clean === '/api/inngest' || clean.startsWith('/api/inngest/');
 }

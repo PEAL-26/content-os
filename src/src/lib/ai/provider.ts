@@ -1,14 +1,34 @@
-import type { AIProviderConfigOptions } from './types';
-import type { AIProvider, AIProviderModel } from '@/services/ai-provider.service';
+import type {
+    AIProviderConfigOptions,
+    AIProviderLike,
+    AIProviderModelLike,
+} from './types';
 import { resolveProviderConfig } from './resolver';
 import type { GenerateOptionsResult } from './resolver';
-import { callLLM } from './transport';
 
 // =============================================================================
-// Transporte — todas as chamadas LLM passam pelo servidor próprio (`callLLM`),
-// que resolve o CORS. A orquestração (fallback, preferido, config) mantém-se
-// aqui no cliente.
+// Transporte — no browser, todas as chamadas LLM passam pelo servidor próprio
+// (`callLLM` → /api/ai/generate), que resolve o CORS. No servidor, o job
+// Inngest injeta o seu próprio transport (chamada direta ao provider). A
+// orquestração (fallback, preferido, config) mantém-se aqui, partilhada.
 // =============================================================================
+
+/** Payload que qualquer transport recebe (browser ou servidor). */
+export interface GenerationTransportInput {
+    baseUrl: string;
+    apiKey: string;
+    model: string;
+    system?: string;
+    prompt: string;
+    /** Config resolvida (temperature, max_tokens). */
+    config?: AIProviderConfigOptions;
+    headers?: Record<string, string>;
+}
+
+/** Assinatura comum de um transport: do browser (HTTP) ou direto (server). */
+export type GenerationTransport = (
+    input: GenerationTransportInput
+) => Promise<string>;
 
 /** Converte os headers de um provider (BD) numa Record para o transporte. */
 export function providerHeadersToRecord(
@@ -33,9 +53,9 @@ export function providerHeadersToRecord(
  * indexadas por `provider.id` (row id da BD).
  */
 export function getAvailableProvidersFromStore(
-    providers: AIProvider[],
+    providers: AIProviderLike[],
     apiKeys: Record<string, string>
-): AIProvider[] {
+): AIProviderLike[] {
     return providers
         .filter((p) => p.isActive && apiKeys[p.id])
         .sort((a, b) => a.priority - b.priority);
@@ -43,9 +63,9 @@ export function getAvailableProvidersFromStore(
 
 /** Escolhe o modelo preferido (default do workspace) ou o primeiro activo. */
 export function pickModel(
-    provider: AIProvider,
+    provider: AIProviderLike,
     preferredModelCode?: string | null
-): AIProviderModel {
+): AIProviderModelLike {
     const models = provider.models?.filter((m) => m.isActive) ?? [];
     if (models.length === 0) {
         throw new Error(`O provider ${provider.name} não tem modelos activos.`);
@@ -86,7 +106,7 @@ export function buildGenerateOptions(
 
 export interface GenerateWithFallbackOptions<T> {
     /** Providers disponíveis (já filtrados por chave). */
-    providers: AIProvider[];
+    providers: AIProviderLike[];
     /** Chaves por row id (provider.id). */
     apiKeys: Record<string, string>;
     /** Modelo preferido (default do workspace), se existir. */
@@ -101,8 +121,15 @@ export interface GenerateWithFallbackOptions<T> {
     maxAttempts?: number;
     /** Atraso entre tentativas. Default 2000 ms. */
     retryDelayMs?: number;
-    /** maxOutputTokens a usar quando o provider/modelo não define nos configs. */
+    /**
+     * maxOutputTokens a usar quando o provider/modelo não define nos configs.
+     */
     defaultMaxTokens?: number;
+    /**
+     * Transport usado para a chamada LLM. O client passa `callLLM` (browser →
+     * /api/ai/generate); o servidor injeta um transport direto ao provider.
+     */
+    transport: GenerationTransport;
 }
 
 export interface GenerateWithFallbackResult<T> {
@@ -139,6 +166,7 @@ export async function generateWithFallback<T>(
         maxAttempts = 2,
         retryDelayMs = 2000,
         defaultMaxTokens = 8000,
+        transport,
     } = options;
 
     if (providers.length === 0) {
@@ -190,7 +218,7 @@ export async function generateWithFallback<T>(
                     providerConfig.config
                 );
 
-                const text = await callLLM({
+                const text = await transport({
                     baseUrl: providerConfig.base_url,
                     apiKey: providerConfig.api_key,
                     model: providerConfig.model,

@@ -3,6 +3,9 @@ import { createClient } from '@supabase/supabase-js';
 import { APICallError, generateText } from 'ai';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { z } from 'zod';
+import { enqueueGeneration, EnqueueError } from './generation/enqueue';
+import { sendGenerationRequested } from './generation/inngest';
+import { markJobFailed } from './generation/job-store';
 
 // =============================================================================
 // Handler partilhado das rotas /api/ai/* — corre dentro da Vercel Function em
@@ -264,6 +267,179 @@ export async function handleAiTest(
             ok: false,
             error: message,
             code: 'PROVIDER_ERROR',
+        });
+    }
+}
+
+// ---------------------------------------------------------------
+// Rota /api/ai/enqueue — cria o job + placeholders e dispara o Inngest.
+// O browser responde logo (navega para o alvo) e recebe o estado via
+// Realtime; a geração corre em segundo plano no handler Inngest.
+// ---------------------------------------------------------------
+
+const enqueuePreferredSchema = z
+    .object({
+        providerId: z.string().max(200).nullable().optional(),
+        modelCode: z.string().max(300).nullable().optional(),
+    })
+    .nullable()
+    .optional();
+
+const newArticleEnqueueParamsSchema = z.object({
+    topic: z
+        .string()
+        .trim()
+        .min(3, 'O tema do artigo é demasiado curto.')
+        .max(1000),
+    pillarId: z.string().min(1).max(100).nullable().optional(),
+    productId: z.string().min(1).max(100).nullable().optional(),
+    additionalInstructions: z.string().max(60000).optional(),
+    preferred: enqueuePreferredSchema,
+});
+
+const contentPiecesEnqueueParamsSchema = z.object({
+    articleId: z.string().min(1).max(100),
+    formats: z
+        .array(z.string().min(1).max(50))
+        .min(1, 'Seleciona pelo menos um formato.')
+        .max(10),
+    channelIds: z.record(z.string(), z.string()).optional(),
+    productId: z.string().min(1).max(100).nullable().optional(),
+    pillarId: z.string().min(1).max(100).nullable().optional(),
+    additionalInstructions: z.string().max(60000).optional(),
+    preferred: enqueuePreferredSchema,
+});
+
+const videoScriptEnqueueParamsSchema = z.object({
+    articleId: z.string().min(1).max(100),
+    targetChannel: z.string().min(1).max(50),
+    durationSec: z.number().int().min(15).max(600),
+    additionalInstructions: z.string().max(60000).optional(),
+    preferred: enqueuePreferredSchema,
+});
+
+const enqueueSchema = z.object({
+    jobType: z.enum(['NEW_ARTICLE', 'CONTENT_PIECES', 'VIDEO_SCRIPT']),
+    workspaceId: z.string().min(1).max(100),
+    params: z.unknown(),
+    targets: z
+        .array(
+            z.object({
+                format: z.string().min(1).max(50),
+                targetId: z.string().min(1).max(100),
+            })
+        )
+        .max(10)
+        .optional(),
+});
+
+const enqueueParamsSchemas = {
+    NEW_ARTICLE: newArticleEnqueueParamsSchema,
+    CONTENT_PIECES: contentPiecesEnqueueParamsSchema,
+    VIDEO_SCRIPT: videoScriptEnqueueParamsSchema,
+} as const;
+
+export async function handleAiEnqueue(
+    req: IncomingMessage,
+    res: ServerResponse,
+    env: AiApiEnv
+): Promise<void> {
+    let bodyText = '';
+    try {
+        bodyText = await readBody(req);
+    } catch (err) {
+        sendJson(res, 413, {
+            ok: false,
+            error: err instanceof Error ? err.message : 'Corpo do pedido inválido.',
+            code: 'BODY_TOO_LARGE',
+        });
+        return;
+    }
+
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(bodyText);
+    } catch {
+        sendJson(res, 400, { ok: false, error: 'JSON inválido no corpo do pedido.', code: 'INVALID_JSON' });
+        return;
+    }
+
+    const envelope = enqueueSchema.safeParse(parsed);
+    if (!envelope.success) {
+        sendJson(res, 400, {
+            ok: false,
+            error: 'Parâmetros inválidos: ' + envelope.error.issues[0]?.message,
+            code: 'VALIDATION_ERROR',
+        });
+        return;
+    }
+
+    const paramsSchema = enqueueParamsSchemas[envelope.data.jobType];
+    const paramsValidation = paramsSchema.safeParse(envelope.data.params);
+    if (!paramsValidation.success) {
+        sendJson(res, 400, {
+            ok: false,
+            error: 'Parâmetros inválidos: ' + paramsValidation.error.issues[0]?.message,
+            code: 'VALIDATION_ERROR',
+        });
+        return;
+    }
+
+    const auth = await verifyAuth(req, env);
+    if (!auth.ok) {
+        sendJson(res, auth.status, { ok: false, error: auth.error, code: 'UNAUTHORIZED' });
+        return;
+    }
+
+    try {
+        const created = await enqueueGeneration({
+            jobType: envelope.data.jobType,
+            workspaceId: envelope.data.workspaceId,
+            params: paramsValidation.data,
+            targets: envelope.data.targets,
+        });
+
+        try {
+            await sendGenerationRequested(created.jobId);
+        } catch (queueErr) {
+            const message =
+                queueErr instanceof Error
+                    ? `Falha ao enviar para a fila de geração: ${queueErr.message}`
+                    : 'Falha ao enviar para a fila de geração.';
+            console.warn('[api/ai/enqueue] evento falhou:', message);
+            await markJobFailed(created.jobId, message);
+            sendJson(res, 502, {
+                ok: false,
+                error: message,
+                code: 'QUEUE_ERROR',
+                jobId: created.jobId,
+                targetId: created.targetId,
+            });
+            return;
+        }
+
+        sendJson(res, 200, {
+            ok: true,
+            jobId: created.jobId,
+            targetId: created.targetId,
+        });
+    } catch (err) {
+        if (err instanceof EnqueueError) {
+            const status = err.code.endsWith('_NOT_FOUND') ? 404 : 400;
+            sendJson(res, status, {
+                ok: false,
+                error: err.message,
+                code: err.code,
+            });
+            return;
+        }
+        const message =
+            err instanceof Error ? err.message : 'Erro desconhecido ao criar a geração.';
+        console.error('[api/ai/enqueue] falhou:', message);
+        sendJson(res, 500, {
+            ok: false,
+            error: message,
+            code: 'INTERNAL_ERROR',
         });
     }
 }

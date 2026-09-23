@@ -6,8 +6,17 @@ import {
 } from '@/components/ai/ai-provider-picker';
 import { useVideoScripts } from '@/hooks/use-video-scripts';
 import { useArticles } from '@/hooks/use-articles';
+import { useGenerationJobsForTargets } from '@/hooks/use-generation-jobs';
+import {
+    defaultJobParams,
+    generationJobService,
+    type GenerationJobStatusValue,
+} from '@/services/generation-job.service';
+import { useWorkspaceStore } from '@/stores/workspace-store';
+import { useGenerationJobStore } from '@/stores/generation-jobs-store';
 import type { ArticleStatus, SocialChannel } from '@/types/database';
-import { useState } from 'react';
+import type { VideoScriptWithRelations } from '@/services/video-script.service';
+import { useEffect, useMemo, useState } from 'react';
 
 const STATUS_OPTIONS: Array<{ value: ArticleStatus | 'ALL'; label: string }> = [
     { value: 'ALL', label: 'Todos' },
@@ -41,6 +50,8 @@ export function VideoScriptsPage() {
     const [approvingIds, setApprovingIds] = useState<Set<string>>(new Set());
     const [preferred, setPreferred] = useState<AIProviderSelection | null>(null);
     const [additionalInstructions, setAdditionalInstructions] = useState('');
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [localError, setLocalError] = useState<string | null>(null);
 
     const filters = {
         status: statusFilter !== 'ALL' ? statusFilter : undefined,
@@ -50,15 +61,33 @@ export function VideoScriptsPage() {
     const {
         scripts,
         isLoading,
-        isGenerating,
         error,
         approvedCount,
         totalCount,
-        generateScript,
         updateScript,
         approveScript,
         deleteScript,
+        refetch: refetchScripts,
     } = useVideoScripts(filters);
+
+    const { currentWorkspace } = useWorkspaceStore();
+    const rememberJob = useGenerationJobStore((s) => s.rememberJob);
+
+    // Estado da geração assíncrona (VIDEO_SCRIPT) por roteiro.
+    const scriptIds = useMemo(() => scripts.map((s) => s.id), [scripts]);
+    const { jobsByTarget } = useGenerationJobsForTargets(
+        'VIDEO_SCRIPT',
+        scriptIds
+    );
+
+    // Quando um job conclui, refresca a lista (placeholder → conteúdo).
+    useEffect(() => {
+        const completed = Object.values(jobsByTarget).some(
+            (job) => job.status === 'COMPLETED'
+        );
+        if (completed) void refetchScripts();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [jobsByTarget]);
 
     const { articles } = useArticles({
         filters: {
@@ -71,24 +100,75 @@ export function VideoScriptsPage() {
 
     const handleGenerate = async () => {
         if (!selectedArticleId) return;
+        if (!currentWorkspace) {
+            alert('Workspace não carregado.');
+            return;
+        }
 
-        const result = await generateScript({
-            articleId: selectedArticleId,
-            targetChannel: selectedChannel,
-            durationSec: selectedDuration,
-            additionalInstructions:
-                additionalInstructions.trim() || undefined,
-            preferred,
-        });
+        setLocalError(null);
+        setIsGenerating(true);
+        try {
+            const result = await generationJobService.enqueue({
+                workspaceId: currentWorkspace.id,
+                jobType: 'VIDEO_SCRIPT',
+                params: {
+                    articleId: selectedArticleId,
+                    targetChannel: selectedChannel,
+                    durationSec: selectedDuration,
+                    additionalInstructions:
+                        additionalInstructions.trim() || undefined,
+                    preferred,
+                },
+            });
 
-        if (result.success) {
+            rememberJob({
+                jobType: 'VIDEO_SCRIPT',
+                targetId: result.targetId,
+                jobId: result.jobId,
+            });
+
             setShowGenerateModal(false);
             setSelectedArticleId('');
             setArticleSearch('');
             setAdditionalInstructions('');
             setPreferred(null);
-        } else {
-            alert(result.error || 'Erro ao gerar roteiro');
+
+            // Mostra o placeholder ("A gerar roteiro…") de imediato.
+            await refetchScripts();
+        } catch (err) {
+            const message =
+                err instanceof Error ? err.message : 'Erro ao gerar roteiro';
+            setLocalError(message);
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
+    const handleRetryScript = async (script: VideoScriptWithRelations) => {
+        if (!currentWorkspace) return;
+        const job = jobsByTarget[script.id];
+        if (!job) return;
+
+        try {
+            const result = await generationJobService.enqueue({
+                workspaceId: currentWorkspace.id,
+                jobType: 'VIDEO_SCRIPT',
+                params:
+                    job.params ?? defaultJobParams('VIDEO_SCRIPT'),
+                targets: [{ format: 'VIDEO_SCRIPT', targetId: script.id }],
+            });
+            rememberJob({
+                jobType: 'VIDEO_SCRIPT',
+                targetId: script.id,
+                jobId: result.jobId,
+            });
+            await refetchScripts();
+        } catch (err) {
+            setLocalError(
+                err instanceof Error
+                    ? `Falha ao tentar novamente: ${err.message}`
+                    : 'Falha ao tentar novamente.'
+            );
         }
     };
 
@@ -180,6 +260,12 @@ export function VideoScriptsPage() {
                 </div>
             )}
 
+            {localError && (
+                <div className="rounded-md bg-red-50 p-4">
+                    <p className="text-sm text-red-700">{localError}</p>
+                </div>
+            )}
+
             {isLoading ? (
                 <div className="flex items-center justify-center py-12">
                     <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
@@ -221,6 +307,19 @@ export function VideoScriptsPage() {
                                 await updateScript(script.id, data);
                             }}
                             isApproving={approvingIds.has(script.id)}
+                            generation={
+                                jobsByTarget[script.id]
+                                    ? {
+                                          status:
+                                              jobsByTarget[script.id]
+                                                  .status as GenerationJobStatusValue,
+                                          error: jobsByTarget[script.id].error,
+                                      }
+                                    : null
+                            }
+                            onRetryGeneration={() =>
+                                handleRetryScript(script)
+                            }
                         />
                     ))}
                 </div>

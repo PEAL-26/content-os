@@ -6,6 +6,7 @@ import type {
     Workspace,
 } from '@/types/database';
 import type { PillarConfig } from '@/types/pillar';
+import type { GeneratedVideoScript, PortablePromptItem } from './types';
 
 // =============================================================================
 // Prompts de conteúdo — divididos em system (função + regras + formato) e user
@@ -648,5 +649,239 @@ export function parseVideoScriptResponse(text: string): ParsedVideoScript | null
         };
     } catch {
         return null;
+    }
+}
+
+/** Converte a resposta parsaada num roteiro pronto a persistir. */
+export function convertParsedToScript(
+    parsed: ParsedVideoScript,
+    requestedDuration: number
+): GeneratedVideoScript {
+    return {
+        title: parsed.title || 'Sem título',
+        hook: parsed.hook || '',
+        problem: parsed.problem,
+        solution: parsed.solution,
+        cta: parsed.cta || '',
+        fullScript: parsed.fullScript,
+        durationSec: parsed.durationSec || requestedDuration,
+        onScreenText: parsed.onScreenText,
+        bRoll: parsed.bRoll,
+    };
+}
+
+// -----------------------------------------------------------------------------
+// Peças geradas — mapeamento uniforme (por formato) da resposta JSON para o
+// shape persistível de uma peça de conteúdo. Puro (partilhado client/server).
+// -----------------------------------------------------------------------------
+
+export interface ParsedGeneratedPiece {
+    format: ContentFormat;
+    title: string | null;
+    body: string;
+    hookText: string | null;
+    ctaText: string | null;
+    hashtags: string[];
+    slides: ContentSlide[] | null;
+    slideCount: number | null;
+}
+
+/** Extrai os tweets individuais a partir do body (separados por linha em branco). */
+export function extractThreadTweets(
+    body: string
+): Array<{ order: number; text: string }> {
+    return body
+        .split(/\n\s*\n/)
+        .map((text) => text.trim())
+        .filter(Boolean)
+        .map((text, i) => ({ order: i + 1, text }));
+}
+
+export function parseGeneratedContent(
+    format: ContentFormat,
+    text: string
+): ParsedGeneratedPiece | null {
+    switch (format) {
+        case 'CAROUSEL': {
+            const parsed = parseCarouselResponse(text);
+            if (!parsed) return null;
+
+            const slides = parsed.slides || [];
+            const body = slides
+                .map((s) => `## ${s.title}\n${s.body}`)
+                .join('\n\n');
+
+            return {
+                format,
+                title: parsed.title,
+                body,
+                slides,
+                slideCount: slides.length,
+                hookText: slides[0]?.title || null,
+                ctaText: slides[slides.length - 1]?.body || null,
+                hashtags: [],
+            };
+        }
+
+        case 'LINKEDIN_POST': {
+            const parsed = parseLinkedInPostResponse(text);
+            if (!parsed) return null;
+
+            return {
+                format,
+                title: parsed.title,
+                body: parsed.body,
+                hashtags: parsed.hashtags,
+                hookText: parsed.body.split('\n')[0] || null,
+                ctaText: null,
+                slides: null,
+                slideCount: null,
+            };
+        }
+
+        case 'IMAGE': {
+            const parsed = parseInstagramPostResponse(text);
+            if (!parsed) return null;
+
+            return {
+                format,
+                title: parsed.title,
+                body: parsed.body,
+                hashtags: parsed.hashtags,
+                hookText: parsed.body.split('\n')[0] || null,
+                ctaText: null,
+                slides: null,
+                slideCount: null,
+            };
+        }
+
+        case 'SHORT_VIDEO': {
+            const parsed = parseShortVideoResponse(text);
+            if (!parsed) return null;
+
+            return {
+                format,
+                title: parsed.title,
+                body: `Hook: ${parsed.hookText || ''}\n\nCTA: ${parsed.ctaText || ''}`,
+                hookText: parsed.hookText,
+                ctaText: parsed.ctaText,
+                hashtags: [],
+                slides: null,
+                slideCount: null,
+            };
+        }
+
+        case 'CTA_POST': {
+            const parsed = parseCtaPostResponse(text);
+            if (!parsed) return null;
+
+            return {
+                format,
+                title: parsed.title,
+                body: parsed.body,
+                ctaText: parsed.ctaText,
+                hashtags: [],
+                hookText: parsed.body.split('\n')[0] || null,
+                slides: null,
+                slideCount: null,
+            };
+        }
+
+        case 'THREAD': {
+            const parsed = parseThreadResponse(text);
+            if (!parsed) return null;
+
+            const tweets = parsed.tweets || [];
+            const body = tweets.map((t) => t.text).join('\n\n');
+
+            return {
+                format,
+                title: parsed.title,
+                body,
+                hashtags: [],
+                hookText: tweets[0]?.text || null,
+                ctaText: tweets[tweets.length - 1]?.text || null,
+                slides: null,
+                slideCount: null,
+            };
+        }
+
+        case 'VIDEO_SCRIPT': {
+            const parsed = parseVideoScriptResponse(text);
+            if (!parsed) return null;
+
+            const body = `## Hook\n${parsed.hook || ''}\n\n## Problema\n${parsed.problem || ''}\n\n## Solução\n${parsed.solution || ''}\n\n## CTA\n${parsed.cta || ''}`;
+
+            return {
+                format,
+                title: parsed.title,
+                body,
+                hookText: parsed.hook,
+                ctaText: parsed.cta,
+                hashtags: [],
+                slides: null,
+                slideCount: null,
+            };
+        }
+
+        default:
+            return null;
+    }
+}
+
+/**
+ * Prompts finais portáteis de uma peça gerada — por item (slide, tweet) ou
+ * item único, para registo em content_generation_prompts. Puro (partilhado).
+ */
+export interface PortablePromptsForPieceParams {
+    article: Article;
+    workspace: Workspace;
+    product?: Product;
+    pillar?: PillarConfig;
+}
+
+export function buildPortablePromptsForPiece(
+    format: ContentFormat,
+    params: PortablePromptsForPieceParams,
+    piece: ParsedGeneratedPiece,
+    systemOverride?: string
+): PortablePromptItem[] {
+    switch (format) {
+        case 'CAROUSEL':
+            return (piece.slides ?? []).map((slide) => ({
+                itemKey: `slide-${slide.order}`,
+                prompt: buildCarouselItemPortablePrompt(
+                    params,
+                    slide,
+                    slide.order - 1,
+                    systemOverride
+                ),
+            }));
+
+        case 'THREAD': {
+            const tweets = extractThreadTweets(piece.body);
+            return tweets.map((tweet) => ({
+                itemKey: `tweet-${tweet.order}`,
+                prompt: buildThreadItemPortablePrompt(
+                    params,
+                    tweet,
+                    systemOverride
+                ),
+            }));
+        }
+
+        default:
+            return [
+                {
+                    itemKey: 'main',
+                    prompt: buildSingleItemPortablePrompt(
+                        format,
+                        params,
+                        piece.title,
+                        piece.body,
+                        systemOverride
+                    ),
+                },
+            ];
     }
 }
