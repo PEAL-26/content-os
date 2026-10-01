@@ -1,6 +1,11 @@
 import type { ContentFormat, Workspace } from '@/types/database';
 import { buildSystemPromptForFormat } from './content-prompts';
 import { buildArticleSystemPrompt } from './prompts';
+import {
+    buildPromptWriterSystemPrompt,
+    PROMPT_WRITER_FORMATS,
+    PROMPT_WRITER_PREFIX,
+} from './prompt-writer';
 
 /**
  * Default em código do system prompt para um tipo de conteúdo, tal como é
@@ -21,6 +26,17 @@ export function buildDefaultSystemPrompt(
     if (contentType === 'article') {
         return buildArticleSystemPrompt({ workspace: ws, topic: '' });
     }
+
+    // Escritor de prompts ("Gerar apenas o prompt"): `prompt_<FORMATO>`.
+    if (contentType.startsWith(PROMPT_WRITER_PREFIX)) {
+        const format = contentType.slice(
+            PROMPT_WRITER_PREFIX.length
+        ) as ContentFormat;
+        if (PROMPT_WRITER_FORMATS.includes(format)) {
+            return buildPromptWriterSystemPrompt(format, { workspace: ws });
+        }
+    }
+
     return buildSystemPromptForFormat(contentType as ContentFormat, {
         workspace: ws,
     });

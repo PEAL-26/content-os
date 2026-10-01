@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CONTENT_TYPE_LABELS } from '@/lib/ai/content-prompts';
 import { buildDefaultSystemPrompt } from '@/lib/ai/default-system-prompts';
+import { PROMPT_WRITER_LABELS } from '@/lib/ai/prompt-writer';
 import {
     deleteSystemPrompt,
     getSystemPrompts,
@@ -22,6 +23,11 @@ const CONTENT_TYPES: { key: string; label: string }[] = [
     ...Object.entries(CONTENT_TYPE_LABELS)
         .filter(([k]) => k !== 'article')
         .map(([k, label]) => ({ key: k, label })),
+    // Escritores de prompt ("Gerar apenas o prompt") — um por formato.
+    ...Object.entries(PROMPT_WRITER_LABELS).map(([k, label]) => ({
+        key: k,
+        label,
+    })),
 ];
 
 /**

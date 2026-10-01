@@ -23,6 +23,9 @@ interface ContentPieceModalProps {
         assetUrl: string | null;
         assetName: string | null;
     }) => Promise<void>;
+    /** Reescreve o prompt da peça com IA (CONTENT_PROMPT). */
+    onRewritePrompt?: () => void;
+    isRewritingPrompt?: boolean;
     isSaving?: boolean;
 }
 
@@ -32,6 +35,8 @@ export function ContentPieceModal({
     piece,
     onSave,
     onAssetChange,
+    onRewritePrompt,
+    isRewritingPrompt = false,
     isSaving = false,
 }: ContentPieceModalProps) {
     const { channels } = useChannels();
@@ -341,6 +346,14 @@ export function ContentPieceModal({
                     assetUrl={piece.assetUrl}
                     assetName={piece.assetName}
                     onAssetChange={onAssetChange}
+                    piece={{
+                        id: piece.id,
+                        format: piece.format,
+                        body: piece.body,
+                        slideCount: piece.slideCount,
+                    }}
+                    onRewritePrompt={onRewritePrompt}
+                    isRewritingPrompt={isRewritingPrompt}
                 />
             </div>
 

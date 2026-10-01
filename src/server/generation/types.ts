@@ -5,6 +5,7 @@
 // =============================================================================
 
 export type {
+    ContentItemJobParams,
     ContentPiecesJobParams,
     GenerationJob,
     GenerationJobItem,
@@ -13,6 +14,7 @@ export type {
     GenerationJobTypeValue,
     GenerationPreferred,
     NewArticleJobParams,
+    TargetMode,
     VideoScriptJobParams,
 } from '../../src/lib/ai/generation-job-types';
 import type { GenerationPreferred } from '../../src/lib/ai/generation-job-types';

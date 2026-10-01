@@ -189,6 +189,7 @@ export type ContentFormat =
     | 'VIDEO_SCRIPT';
 
 export type ContentPieceStatus =
+    | 'PROMPT_READY'
     | 'DRAFT'
     | 'APPROVED'
     | 'SCHEDULED'
@@ -231,6 +232,7 @@ export const CONTENT_FORMAT_DEFAULTS: Record<ContentFormat, SocialChannel> = {
 };
 
 export const CONTENT_PIECE_STATUS_LABELS: Record<ContentPieceStatus, string> = {
+    PROMPT_READY: 'Prompt pronto',
     DRAFT: 'Rascunho',
     APPROVED: 'Aprovado',
     SCHEDULED: 'Agendado',
@@ -241,6 +243,7 @@ export const CONTENT_PIECE_STATUS_COLORS: Record<
     ContentPieceStatus,
     { bg: string; text: string }
 > = {
+    PROMPT_READY: { bg: 'bg-amber-100', text: 'text-amber-800' },
     DRAFT: { bg: 'bg-gray-100', text: 'text-gray-700' },
     APPROVED: { bg: 'bg-green-100', text: 'text-green-700' },
     SCHEDULED: { bg: 'bg-blue-100', text: 'text-blue-700' },

@@ -1,14 +1,19 @@
+import { ContentMetaManager } from '@/components/content/content-meta-manager';
 import { ContentPieceCard } from '@/components/content/content-piece-card';
 import { ContentPieceEditor } from '@/components/content/content-piece-editor';
 import { useArticles } from '@/hooks/use-articles';
+import { useGenerationJob } from '@/hooks/use-generation-job';
 import { useWorkspaceContentPieces } from '@/hooks/use-workspace-content-pieces';
+import { generationJobService } from '@/services/generation-job.service';
+import { useGenerationJobStore } from '@/stores/generation-jobs-store';
+import { useWorkspaceStore } from '@/stores/workspace-store';
 import type {
     ContentFormat,
     ContentPieceStatus,
     ContentPieceWithRelations,
 } from '@/types/database';
 import { CONTENT_FORMAT_ICONS, CONTENT_FORMAT_LABELS } from '@/types/database';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 type ViewMode = 'list' | 'grid';
 
@@ -27,6 +32,7 @@ const STATUS_OPTIONS: Array<{
     label: string;
 }> = [
     { value: 'ALL', label: 'Todos' },
+    { value: 'PROMPT_READY', label: 'Só com prompt' },
     { value: 'DRAFT', label: 'Rascunho' },
     { value: 'APPROVED', label: 'Aprovado' },
     { value: 'SCHEDULED', label: 'Agendado' },
@@ -40,6 +46,9 @@ export function ContentPiecesPage() {
     const [statusFilter, setStatusFilter] = useState<
         ContentPieceStatus | 'ALL'
     >('ALL');
+    // Peças só com prompt (PROMPT_READY) são estado de trabalho do artigo: por
+    // omissão ficam fora desta listagem, que é de conteúdo publicável.
+    const [showPromptOnly, setShowPromptOnly] = useState(false);
     const [articleFilter, setArticleFilter] = useState<string>('');
     const [channelFilter, setChannelFilter] = useState<string>('');
     const [viewMode, setViewMode] = useState<ViewMode>('grid');
@@ -51,6 +60,14 @@ export function ContentPiecesPage() {
         new Set()
     );
     const [searchArticle, setSearchArticle] = useState('');
+    const [isRewritingPromptRequest, setIsRewritingPromptRequest] =
+        useState(false);
+    const [rewriteMsg, setRewriteMsg] = useState<{
+        ok: boolean;
+        text: string;
+    } | null>(null);
+    const { currentWorkspace } = useWorkspaceStore();
+    const rememberJob = useGenerationJobStore((s) => s.rememberJob);
 
     const filters = {
         format: formatFilter !== 'ALL' ? formatFilter : undefined,
@@ -63,12 +80,31 @@ export function ContentPiecesPage() {
         isLoading,
         error,
         approvedCount,
-        totalCount,
         updatePiece,
         approvePiece,
         deletePiece,
         regeneratePiece,
     } = useWorkspaceContentPieces(filters);
+
+    // "Reescrever prompt" tem de ficar desligado enquanto o job corre. Com o
+    // estado local sozinho, o `finally` limpava-o assim que o POST voltava e
+    // dois cliques enfileiravam dois CONTENT_PROMPT para a mesma peça.
+    const promptJob = useGenerationJob(
+        editingPiece
+            ? {
+                  kind: 'target',
+                  jobType: 'CONTENT_PROMPT',
+                  targetId: editingPiece.articleId,
+              }
+            : null
+    );
+    const isRewritingPrompt =
+        isRewritingPromptRequest || promptJob.isActive;
+    // O aviso de "a escrever o prompt" é da peça aberta — trocando de peça
+    // tinha de desaparecer, senão a mensagem da peça anterior ficava à vista.
+    useEffect(() => {
+        setRewriteMsg(null);
+    }, [editingPiece?.id]);
 
     const { articles } = useArticles({
         filters: {
@@ -81,8 +117,18 @@ export function ContentPiecesPage() {
 
     const filteredPieces = pieces.filter((piece) => {
         if (channelFilter && piece.channelId !== channelFilter) return false;
+        if (statusFilter !== 'PROMPT_READY' && !showPromptOnly) {
+            if (piece.status === 'PROMPT_READY') return false;
+        }
         return true;
     });
+
+    // O filtro de estado e o checkbox dizem a mesma coisa. Sem isto, marcar
+    // "PROMPT_READY" no filtro e depois trocar de filtro deixava o checkbox
+    // ligado — e as peças só com prompt continuavam visíveis sem ser pedido.
+    useEffect(() => {
+        setShowPromptOnly(statusFilter === 'PROMPT_READY');
+    }, [statusFilter]);
 
     const handleApprove = async (id: string) => {
         setApprovingIds((prev) => new Set(prev).add(id));
@@ -110,6 +156,57 @@ export function ContentPiecesPage() {
     const handleDelete = async (id: string) => {
         if (confirm('Tens a certeza que queres eliminar esta peça?')) {
             await deletePiece(id);
+        }
+    };
+
+    // Reescreve o prompt da peça em edição (job CONTENT_PROMPT). O modal do
+    // artigo faz o mesmo; aqui só falta o botão para não obrigar a voltar ao
+    // artigo sempre que se quer mudar o prompt.
+    const handleRewritePrompt = async () => {
+        if (!editingPiece || !currentWorkspace) return;
+        if (isRewritingPrompt) return;
+
+        setRewriteMsg(null);
+        setIsRewritingPromptRequest(true);
+        try {
+            const result = await generationJobService.enqueue({
+                workspaceId: currentWorkspace.id,
+                jobType: 'CONTENT_PROMPT',
+                params: {
+                    articleId: editingPiece.articleId,
+                    formats: [editingPiece.format],
+                    // Sem isto o prompt saía sem produto e sem o canal da
+                    // peça — diferente do que o painel do artigo produz.
+                    productId: editingPiece.productId ?? null,
+                    channelIds: editingPiece.channelId
+                        ? { [editingPiece.format]: editingPiece.channelId }
+                        : undefined,
+                },
+                targets: [
+                    {
+                        format: editingPiece.format,
+                        targetId: editingPiece.id,
+                    },
+                ],
+            });
+            rememberJob({
+                jobType: 'CONTENT_PROMPT',
+                targetId: editingPiece.articleId,
+                jobId: result.jobId,
+            });
+            setRewriteMsg({
+                ok: true,
+                text: 'A escrever o prompt em segundo plano. A caixa actualiza-se sozinha quando terminar.',
+            });
+        } catch (err) {
+            setRewriteMsg({
+                ok: false,
+                text: err instanceof Error
+                    ? err.message
+                    : 'Erro ao reescrever o prompt.',
+            });
+        } finally {
+            setIsRewritingPromptRequest(false);
         }
     };
 
@@ -141,6 +238,27 @@ export function ContentPiecesPage() {
         return { id, channel: piece?.channel };
     });
 
+    /**
+     * Numa peça só com prompt, o prompt é o trabalho a fazer — no modal do
+     * artigo o bloco de prompt sobe para o topo. Aqui os campos vazios ficavam
+     * na primeira dobra, por isso o editor só aparece abaixo do prompt nesse
+     * caso.
+     */
+    const isPromptOnlyPiece = Boolean(editingPiece && !editingPiece.body.trim());
+    const pieceEditor = editingPiece ? (
+        <div
+            className={`max-h-[calc(100vh-200px)] overflow-y-auto px-6 py-4 ${
+                isPromptOnlyPiece ? 'border-t border-gray-200' : ''
+            }`}
+        >
+            <ContentPieceEditor
+                piece={editingPiece}
+                onSave={handleSave}
+                isSaving={isSaving}
+            />
+        </div>
+    ) : null;
+
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
@@ -153,7 +271,10 @@ export function ContentPiecesPage() {
                             {approvedCount}
                         </span>{' '}
                         peças aprovadas /{' '}
-                        <span className="font-medium">{totalCount}</span> total
+                        <span className="font-medium">
+                            {filteredPieces.length}
+                        </span>{' '}
+                        total
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -230,6 +351,17 @@ export function ContentPiecesPage() {
                         </option>
                     ))}
                 </select>
+
+                <label className="flex items-center gap-2 text-xs text-gray-600">
+                    <input
+                        type="checkbox"
+                        checked={showPromptOnly}
+                        onChange={(e) => setShowPromptOnly(e.target.checked)}
+                        disabled={statusFilter === 'PROMPT_READY'}
+                        className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    Incluir peças só com prompt
+                </label>
 
                 <div className="relative min-w-[200px]">
                     <input
@@ -388,13 +520,47 @@ export function ContentPiecesPage() {
                                     </svg>
                                 </button>
                             </div>
-                            <div className="max-h-[calc(100vh-200px)] overflow-y-auto px-6 py-4">
-                                <ContentPieceEditor
-                                    piece={editingPiece}
-                                    onSave={handleSave}
-                                    isSaving={isSaving}
+                            {/* Editor: abaixo do prompt quando a peça só tem prompt, acima
+                                quando já tem conteúdo (ver `isPromptOnlyPiece`). */}
+                            {isPromptOnlyPiece ? null : pieceEditor}
+
+                            {/* Prompt da peça: editar, copiar e gerar a partir dele */}
+                            <div
+                                className={`max-h-[calc(100vh-200px)] overflow-y-auto px-6 py-4 ${
+                                    isPromptOnlyPiece ? '' : 'border-t border-gray-200'
+                                }`}
+                            >
+                                <ContentMetaManager
+                                    targetType="PIECE"
+                                    targetId={editingPiece.id}
+                                    assetUrl={editingPiece.assetUrl}
+                                    assetName={editingPiece.assetName}
+                                    onAssetChange={async (data) => {
+                                        await updatePiece(editingPiece.id, data);
+                                    }}
+                                    piece={{
+                                        id: editingPiece.id,
+                                        format: editingPiece.format,
+                                        body: editingPiece.body,
+                                        slideCount: editingPiece.slideCount,
+                                    }}
+                                    onRewritePrompt={handleRewritePrompt}
+                                    isRewritingPrompt={isRewritingPrompt}
                                 />
+                                {rewriteMsg && (
+                                    <p
+                                        className={`mt-3 text-sm ${
+                                            rewriteMsg.ok
+                                                ? 'text-green-700'
+                                                : 'text-red-700'
+                                        }`}
+                                    >
+                                        {rewriteMsg.text}
+                                    </p>
+                                )}
                             </div>
+
+                            {isPromptOnlyPiece ? pieceEditor : null}
                         </div>
                     </div>
                 </div>

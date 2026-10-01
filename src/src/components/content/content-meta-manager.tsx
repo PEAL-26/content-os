@@ -1,8 +1,10 @@
-import { getGenerationPrompts } from '@/services/ai-prompt.service';
+import { promptItemLabel, usePiecePrompts } from '@/hooks/use-piece-prompts';
+import { parseItemKeyOrder } from '@/lib/ai/generation-job-types';
 import {
     publicationService,
     uploadAsset,
 } from '@/services/publication.service';
+import { PromptEditor } from '@/components/content/prompt-editor';
 import type { ContentPublication } from '@/types/database';
 import { useEffect, useState } from 'react';
 
@@ -16,6 +18,16 @@ interface ContentMetaManagerProps {
         assetUrl: string | null;
         assetName: string | null;
     }) => Promise<void>;
+    /** Peça em foco — habilita "Gerar peça" / "Gerar este slide". */
+    piece?: {
+        id: string;
+        format: string;
+        body: string;
+        slideCount?: number | null;
+    };
+    /** Reescreve o prompt da peça (meta-prompting). */
+    onRewritePrompt?: () => void;
+    isRewritingPrompt?: boolean;
 }
 
 const PLATFORM_OPTIONS = [
@@ -28,15 +40,10 @@ const PLATFORM_OPTIONS = [
     { value: 'outros', label: 'Outros' },
 ];
 
-interface PortablePromptRow {
-    itemKey: string;
-    prompt: string;
-}
-
 /**
- * Gestão de metadados de conteúdo publicável: prompt(s) guardado(s) da geração
- * (ver/copiar), artefacto (upload para Storage ou link externo) e publicações
- * multi-plataforma (content_publications).
+ * Gestão de metadados de conteúdo publicável: prompt(s) da peça (editar,
+ * copiar e gerar a peça ou um item a partir deles), artefacto (upload para
+ * Storage ou link externo) e publicações multi-plataforma.
  */
 export function ContentMetaManager({
     targetType,
@@ -44,8 +51,10 @@ export function ContentMetaManager({
     assetUrl,
     assetName,
     onAssetChange,
+    piece,
+    onRewritePrompt,
+    isRewritingPrompt = false,
 }: ContentMetaManagerProps) {
-    const [prompts, setPrompts] = useState<PortablePromptRow[]>([]);
     const [publications, setPublications] = useState<ContentPublication[]>([]);
     const [assetBusy, setAssetBusy] = useState(false);
     const [externalAssetUrl, setExternalAssetUrl] = useState('');
@@ -55,28 +64,33 @@ export function ContentMetaManager({
     const [pubUrl, setPubUrl] = useState('');
     const [pubBusy, setPubBusy] = useState(false);
     const [pubMsg, setPubMsg] = useState<{ ok: boolean; text: string } | null>(null);
-    const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
     const isPromptTarget = targetType === 'PIECE' || targetType === 'VIDEO_SCRIPT';
+
+    const {
+        prompts,
+        isLoading: isLoadingPrompts,
+        savePrompt,
+        generatePiece,
+        generateItem,
+        isBusy: isPromptBusy,
+        isItemEdited,
+        error: promptError,
+        notice: promptNotice,
+    } = usePiecePrompts(
+        isPromptTarget ? targetType : 'PIECE',
+        isPromptTarget ? targetId : ''
+    );
 
     useEffect(() => {
         let cancelled = false;
 
         async function load() {
-            const [promptRows, pubs] = await Promise.all([
-                isPromptTarget
-                    ? getGenerationPrompts(targetType, targetId)
-                    : Promise.resolve([]),
-                publicationService.getPublications(targetType, targetId),
-            ]);
-
-            if (cancelled) return;
-            setPrompts(
-                promptRows.map((r) => ({
-                    itemKey: r.itemKey ?? 'main',
-                    prompt: r.prompt,
-                }))
+            const pubs = await publicationService.getPublications(
+                targetType,
+                targetId
             );
+            if (cancelled) return;
             setPublications(pubs);
         }
 
@@ -86,7 +100,7 @@ export function ContentMetaManager({
         return () => {
             cancelled = true;
         };
-    }, [targetType, targetId, isPromptTarget]);
+    }, [targetType, targetId]);
 
     const handleAssetFile = async (file: File) => {
         if (!onAssetChange) return;
@@ -185,14 +199,138 @@ export function ContentMetaManager({
         }
     };
 
-    const handleCopyPrompt = async (itemKey: string, text: string) => {
-        await navigator.clipboard.writeText(text);
-        setCopiedKey(itemKey);
-        setTimeout(() => setCopiedKey(null), 2000);
-    };
+    /**
+     * Acção de geração associada a um prompt: o 'main' gera a peça, um
+     * 'slide-N'/'tweet-N' regenera só esse item (carrossel e thread).
+     *
+     * Ao regenerar um item, o job reconstrói o prompt desse item a partir do
+     * novo conteúdo. Se o utilizador o tinha escrito à mão, confirmamos antes
+     * de lhe deitar fora o texto.
+     */
+    function generateActionFor(itemKey: string): {
+        onGenerate?: () => void;
+        generateLabel?: string;
+    } {
+        if (!piece) return {};
+
+        if (itemKey === 'main') {
+            return {
+                onGenerate: () => {
+                    void generatePiece(piece);
+                },
+                generateLabel: piece.body.trim()
+                    ? 'Gerar nova versão com este prompt'
+                    : 'Gerar peça com este prompt',
+            };
+        }
+
+        const order = parseItemKeyOrder(itemKey);
+        if (
+            order === null ||
+            (piece.format !== 'CAROUSEL' && piece.format !== 'THREAD')
+        ) {
+            return {};
+        }
+
+        return {
+            onGenerate: () => {
+                if (isItemEdited(itemKey) && !confirmEditedItem(itemKey)) {
+                    return;
+                }
+                void generateItem(piece.id, itemKey);
+            },
+            generateLabel:
+                piece.format === 'CAROUSEL'
+                    ? 'Gerar este slide'
+                    : 'Gerar este tweet',
+        };
+    }
+
+    function confirmEditedItem(itemKey: string): boolean {
+        if (itemKey === 'main') {
+            return window.confirm(
+                'O prompt desta peça foi editado por ti. Ao reescrevê-lo, esse texto é substituído pelo prompt que a IA vai escrever.\n\nContinuar?'
+            );
+        }
+        return window.confirm(
+            `O prompt de "${promptItemLabel(itemKey, piece?.slideCount)}" foi editado por ti. Ao regenerar o item, esse texto é substituído pelo prompt reconstruído a partir do novo conteúdo.\n\nContinuar?`
+        );
+    }
+
+    /**
+     * "Reescrever prompt" substitui o prompt 'main' e limpa a marca de edição
+     * manual — um prompt escrito à mão desapareceria sem aviso.
+     */
+    function handleRewrite(): void {
+        if (isItemEdited('main') && !confirmEditedItem('main')) return;
+        onRewritePrompt?.();
+    }
+
+    /** Bloco do editor de prompts (prompt da peça + prompts por item). */
+    const promptBlock = isPromptTarget && (
+        <div>
+            <div className="mb-2 flex items-center justify-between gap-2">
+                <h4 className="text-sm font-semibold text-gray-900">
+                    Prompt
+                </h4>
+                {onRewritePrompt && (
+                    <button
+                        type="button"
+                        onClick={handleRewrite}
+                        disabled={isRewritingPrompt}
+                        className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                        {isRewritingPrompt
+                            ? 'A escrever…'
+                            : 'Reescrever prompt'}
+                    </button>
+                )}
+            </div>
+
+            {promptError && (
+                <p className="mb-2 text-xs text-red-600">{promptError}</p>
+            )}
+            {promptNotice && (
+                <p className="mb-2 text-xs text-blue-600">{promptNotice}</p>
+            )}
+
+            {isLoadingPrompts ? (
+                <p className="text-xs text-gray-500">A carregar prompts…</p>
+            ) : prompts.length === 0 ? (
+                <p className="text-xs text-gray-500">
+                    {onRewritePrompt
+                        ? 'Ainda não há prompt guardado. Podes escrever um com "Reescrever prompt" — a peça fica à espera do prompt, sem conteúdo.'
+                        : 'Ainda não há prompt guardado. A peça é criada com o prompt que a IA escreve a partir do artigo.'}
+                </p>
+            ) : (
+                <div className="space-y-3">
+                    {prompts.map((p) => (
+                        <PromptEditor
+                            key={p.itemKey}
+                            itemKey={p.itemKey}
+                            label={promptItemLabel(p.itemKey, piece?.slideCount)}
+                            prompt={p.prompt}
+                            editedAt={p.editedAt ?? null}
+                            onSave={savePrompt}
+                            isGenerating={isPromptBusy || isRewritingPrompt}
+                            {...generateActionFor(p.itemKey)}
+                        />
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+
+    /**
+     * Peça só com prompt (ainda sem conteúdo): o prompt é o trabalho a fazer,
+     * por isso abre no topo, antes dos campos de conteúdo vazios.
+     */
+    const isPromptOnly = Boolean(piece && !piece.body.trim());
 
     return (
         <div className="space-y-5">
+            {isPromptOnly && promptBlock}
+
             {/* Artefacto */}
             <div>
                 <h4 className="mb-2 text-sm font-semibold text-gray-900">
@@ -371,53 +509,9 @@ export function ContentMetaManager({
                 )}
             </div>
 
-            {/* Prompt(s) guardado(s) da geração */}
-            {isPromptTarget && (
-                <div>
-                    <h4 className="mb-2 text-sm font-semibold text-gray-900">
-                        Prompt guardado
-                    </h4>
-                    {prompts.length === 0 ? (
-                        <p className="text-xs text-gray-500">
-                            Esta peça não tem prompt de geração guardado.
-                        </p>
-                    ) : (
-                        <div className="space-y-2">
-                            {prompts.map((p) => (
-                                <div
-                                    key={p.itemKey}
-                                    className="rounded-md border border-gray-200 bg-gray-50 p-3"
-                                >
-                                    <div className="mb-1 flex items-center justify-between gap-2">
-                                        <span className="text-xs font-medium text-gray-500">
-                                            {p.itemKey === 'main'
-                                                ? 'Prompt principal'
-                                                : p.itemKey}
-                                        </span>
-                                        <button
-                                            type="button"
-                                            onClick={() =>
-                                                void handleCopyPrompt(
-                                                    p.itemKey,
-                                                    p.prompt
-                                                )
-                                            }
-                                            className="text-xs font-medium text-blue-600 hover:text-blue-700"
-                                        >
-                                            {copiedKey === p.itemKey
-                                                ? 'Copiado ✓'
-                                                : 'Copiar'}
-                                        </button>
-                                    </div>
-                                    <p className="max-h-40 overflow-y-auto whitespace-pre-wrap break-words text-xs text-gray-600">
-                                        {p.prompt}
-                                    </p>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            )}
+            {/* Prompt(s) da peça — editor + acções de geração. Vai no topo
+                quando a peça ainda não tem conteúdo (ver `isPromptOnly`). */}
+            {!isPromptOnly && promptBlock}
         </div>
     );
 }

@@ -60,6 +60,7 @@ enum ArticleStatus {
 }
 
 enum ContentPieceStatus {
+  PROMPT_READY // Peça criada só com o prompt gravado (ainda sem conteúdo)
   DRAFT
   APPROVED
   SCHEDULED
@@ -93,6 +94,8 @@ enum GenerationJobType {
   NEW_ARTICLE
   CONTENT_PIECES
   VIDEO_SCRIPT
+  CONTENT_PROMPT // Escreve o prompt da peça (sem gerar o conteúdo)
+  CONTENT_ITEM // Regenera um item (slide-N / tweet-N) a partir do seu prompt
 }
 
 enum GenerationJobStatus {
@@ -578,7 +581,11 @@ model ContentGenerationPrompt {
   providerId String?          // Row id do ai_providers usado na geração
   modelCode  String?          // Código do modelo usado na geração
   createdAt  DateTime         @default(now())
+  editedAt   DateTime?        // Preenchido quando o utilizador edita o prompt à mão
 
+  // Um prompt por item. O app escreve sempre `itemKey` ('main' quando não há
+  // item explícito) — a migração normaliza os NULL herdados antes de criar isto.
+  @@unique([targetType, targetId, itemKey])
   @@index([targetType, targetId])
   @@map("content_generation_prompts")
 }

@@ -8,16 +8,27 @@ import {
     parseArticleResponse,
 } from '../../src/lib/ai/prompts';
 import {
+    applySingleItemToPiece,
     buildContext,
+    buildItemPortablePrompt,
     buildPortablePromptsForPiece,
     buildSingleItemPortablePrompt,
     buildSystemPromptForFormat,
     buildVideoScriptSystemPrompt,
     convertParsedToScript,
     parseGeneratedContent,
+    parseSingleItemResponse,
     parseVideoScriptResponse,
     type ParsedGeneratedPiece,
 } from '../../src/lib/ai/content-prompts';
+import { MAIN_ITEM_KEY } from '../../src/lib/ai/generation-job-types';
+import {
+    buildPromptWriterSystemPrompt,
+    buildPromptWriterUserPrompt,
+    parseWrittenPrompt,
+    promptWriterContentType,
+    PROMPT_WRITER_FORMAT_LABELS,
+} from '../../src/lib/ai/prompt-writer';
 import {
     generateWithFallback,
     getAvailableProvidersFromStore,
@@ -28,12 +39,14 @@ import type { PillarConfig } from '../../src/types/pillar';
 import {
     loadGenerationContext,
     resolveSystemPrompt,
+    slidesToClient,
     toArticleClient,
     toPillarClient,
     toProductClient,
     withAdditionalInstructions,
 } from './context';
 import {
+    getGenerationPrompt,
     getJob,
     markJobCompleted,
     markJobFailed,
@@ -43,6 +56,7 @@ import {
 } from './job-store';
 import { createServerTransport } from './transport';
 import type {
+    ContentItemJobParams,
     ContentPiecesJobParams,
     GenerationJobItem,
     GenerationJobParams,
@@ -97,6 +111,16 @@ export async function runGenerationJob(
                     params as VideoScriptJobParams,
                     items
                 );
+                break;
+            case 'CONTENT_PROMPT':
+                await runContentPrompts(
+                    job,
+                    params as ContentPiecesJobParams,
+                    items
+                );
+                break;
+            case 'CONTENT_ITEM':
+                await runContentItem(job, params as ContentItemJobParams);
                 break;
             default:
                 throw new Error(`Tipo de job desconhecido: ${String(job.jobType)}`);
@@ -269,7 +293,11 @@ async function runContentPieces(
                         item.targetId,
                         preferred,
                         params.additionalInstructions,
-                        runningItems
+                        runningItems,
+                        // Só o botão "Gerar peça" (a partir do prompt guardado)
+                        // pede explicitamente o prompt. Sem este sinal, a geração
+                        // parte do contexto do artigo — é o que o "Repetir" faz.
+                        Boolean(params.useStoredPrompt)
                     );
                 } catch (error) {
                     const message =
@@ -315,7 +343,9 @@ async function generatePieceInto(
     pieceId: string,
     preferred: { providerId?: string | null; modelCode?: string | null },
     additionalInstructions: string | undefined,
-    runningItems: GenerationJobItem[]
+    runningItems: GenerationJobItem[],
+    /** Usa o prompt gravado da peça em vez do contexto automático. */
+    useStoredPrompt: boolean
 ): Promise<void> {
     const systemPrompt = await resolveSystemPrompt(
         job.workspaceId,
@@ -328,12 +358,18 @@ async function generatePieceInto(
         additionalInstructions
     );
 
+    // O prompt da peça (itemKey 'main') é a mensagem de geração quando existe
+    // e o pedido é explícito. Sem ele, cai no contexto automático.
+    const storedPrompt = useStoredPrompt
+        ? await getGenerationPrompt('PIECE', pieceId, MAIN_ITEM_KEY)
+        : null;
+
     const result = await generateWithFallback<ParsedGeneratedPiece>({
         providers: getAvailableProvidersFromStore(ctx.providers, ctx.apiKeys),
         apiKeys: ctx.apiKeys,
         preferred,
         buildSystem: () => fullSystem,
-        buildPrompt: () => buildContext(params),
+        buildPrompt: () => storedPrompt ?? buildContext(params),
         parse: (text) => parseGeneratedContent(format, text),
         maxAttempts: 2,
         defaultMaxTokens: 4000,
@@ -354,37 +390,477 @@ async function generatePieceInto(
 
     const piece = result.data;
 
-    await prisma.contentPiece.update({
-        where: { id: pieceId },
-        data: {
-            title: piece.title,
-            body: piece.body,
-            hookText: piece.hookText,
-            ctaText: piece.ctaText,
-            hashtags: piece.hashtags,
-            slides:
-                piece.slides && piece.slides.length > 0
-                    ? (piece.slides as unknown as Prisma.InputJsonArray)
-                    : Prisma.DbNull,
-            slideCount: piece.slideCount,
-            aiGenerated: true,
-            updatedAt: new Date(),
-        },
-    });
+    // Só o placeholder sai de PROMPT_READY: a peça passa a ter conteúdo. Os
+    // restantes estados são preservados — o plano só previa esta transição, e
+    // despromover para DRAFT uma peça já APPROVED/PUBLISHED que o utilizador
+    // mandou regenerar ("Repetir") seria perder a aprovação sem ele ter pedido.
+//
+// Numa transacção, para não existir janela com `DRAFT` e `body: ''`: uma
+// queda do processo entre as duas escritas deixaria um rascunho fantasma
+// (visível em /content e fora das contagens) que não é peça "só com prompt"
+// nem peça com conteúdo.
+await prisma.$transaction([
+        prisma.contentPiece.updateMany({
+            where: { id: pieceId, status: 'PROMPT_READY' },
+            data: { status: 'DRAFT' },
+        }),
+        prisma.contentPiece.update({
+            where: { id: pieceId },
+            data: {
+                title: piece.title,
+                body: piece.body,
+                hookText: piece.hookText,
+                ctaText: piece.ctaText,
+                hashtags: piece.hashtags,
+                slides:
+                    piece.slides && piece.slides.length > 0
+                        ? (piece.slides as unknown as Prisma.InputJsonArray)
+                        : Prisma.DbNull,
+                slideCount: piece.slideCount,
+                aiGenerated: true,
+                updatedAt: new Date(),
+            },
+        }),
+    ]);
 
+    // A peça gerada passa a ter sempre um prompt 'main' editável: ou o prompt
+    // do utilizador que a gerou (preservado abaixo), ou a mensagem automática
+    // que foi de facto enviada (para haver sempre "Gerar peça com este prompt").
+    //
+    // O 'main' que a peça já traz é descartado antes de voltar a guardar: sem
+    // isto os formatos de item único (LINKEDIN_POST, IMAGE, …) gravavam duas
+    // linhas 'main' e `getGenerationPrompt` devolvia uma delas ao acaso.
     const portablePrompts = buildPortablePromptsForPiece(
         format,
         params,
         piece,
         fullSystem
+    ).filter((p) => p.itemKey !== MAIN_ITEM_KEY);
+    if (!storedPrompt) {
+        portablePrompts.push({
+            itemKey: MAIN_ITEM_KEY,
+            prompt: buildSingleItemPortablePrompt(
+                format,
+                params,
+                piece.title,
+                piece.body,
+                fullSystem
+            ),
+        });
+    }
+    // `storedPrompt` é o 'main' do utilizador — preserva-o no delete+insert.
+    await saveGenerationPrompts(
+        'PIECE',
+        pieceId,
+        portablePrompts,
+        storedPrompt ? [MAIN_ITEM_KEY] : []
     );
-    await saveGenerationPrompts('PIECE', pieceId, portablePrompts);
 
     setItemStatus(runningItems, pieceId, {
         status: 'COMPLETED',
         error: null,
     });
     await updateJobItems(job.id, runningItems);
+}
+
+// -----------------------------------------------------------------------------
+// CONTENT_PROMPT — escreve o prompt da peça (não gera o conteúdo)
+// -----------------------------------------------------------------------------
+
+async function runContentPrompts(
+    job: JobRow,
+    params: ContentPiecesJobParams,
+    items: GenerationJobItem[]
+): Promise<void> {
+    const ctx = await loadGenerationContext(job.workspaceId, job.userId);
+    const preferred = params.preferred ?? ctx.defaultPreferred;
+
+    const articleRow = await prisma.article.findUnique({
+        where: { id: params.articleId },
+    });
+    if (!articleRow) {
+        throw new Error('Artigo associado não encontrado.');
+    }
+
+    const workspace = ctx.workspace;
+    const article = toArticleClient(articleRow);
+    const pillar = await loadPillar(
+        job.workspaceId,
+        params.pillarId ?? articleRow.pillarId
+    );
+    const product = params.productId
+        ? await prisma.product.findUnique({ where: { id: params.productId } })
+        : null;
+
+    const runningItems: GenerationJobItem[] = items.map((item) => ({
+        ...item,
+        status: 'RUNNING',
+        error: null,
+    }));
+
+    const limit = pLimit(CONCURRENCY_LIMIT);
+    await Promise.all(
+        runningItems.map((item) =>
+            limit(async () => {
+                const format = item.format as ContentFormat;
+                try {
+                    const written = await writePromptForPiece({
+                        workspaceId: job.workspaceId,
+                        userId: job.userId,
+                        ctx,
+                        article,
+                        workspace,
+                        product: product ? toProductClient(product) : undefined,
+                        pillar,
+                        format,
+                        channelId: params.channelIds?.[format] ?? null,
+                        additionalInstructions: params.additionalInstructions,
+                        preferred,
+                    });
+
+                    if (!written) {
+                        throw new Error(
+                            'A IA não devolveu um prompt válido. Tenta novamente.'
+                        );
+                    }
+
+                    // Só o prompt: a peça continua em PROMPT_READY, sem conteúdo.
+                    // Os prompts por item (slide-N/tweet-N) continuam válidos —
+                    // reescrever o 'main' não muda o conteúdo que descrevem —
+                    // por isso são preservados (decisão 4 do plano). O que se
+                    // substitui é só o 'main', daí preservar *todas as outras*
+                    // chaves em vez de preservar o 'main'.
+                    const keep = await preservedItemKeys(
+                        'PIECE',
+                        item.targetId,
+                        MAIN_ITEM_KEY
+                    );
+                    await saveGenerationPrompts(
+                        'PIECE',
+                        item.targetId,
+                        [{ itemKey: MAIN_ITEM_KEY, prompt: written.prompt }],
+                        keep
+                    );
+
+                    await prisma.contentGenerationPrompt.updateMany({
+                        where: {
+                            targetType: 'PIECE',
+                            targetId: item.targetId,
+                            itemKey: MAIN_ITEM_KEY,
+                        },
+                        data: {
+                            providerId: written.providerId,
+                            modelCode: written.modelCode,
+                        },
+                    });
+
+                    // O título "A escrever prompt…" já não é verdade: a peça
+                    // continua sem conteúdo, mas o prompt está escrito.
+                    await prisma.contentPiece.updateMany({
+                        where: {
+                            id: item.targetId,
+                            // Só peças que ainda não têm conteúdo — numa
+                            // reescrita o título do utilizador é sacred.
+                            body: '',
+                            status: 'PROMPT_READY',
+                        },
+                        data: {
+                            title: `Prompt de ${PROMPT_WRITER_FORMAT_LABELS[format]}`,
+                            updatedAt: new Date(),
+                        },
+                    });
+
+                    setItemStatus(runningItems, item.targetId, {
+                        status: 'COMPLETED',
+                        error: null,
+                    });
+                } catch (error) {
+                    const message =
+                        error instanceof Error
+                            ? error.message
+                            : 'Erro desconhecido';
+                    setItemStatus(runningItems, item.targetId, {
+                        status: 'FAILED',
+                        error: message,
+                    });
+                }
+                await updateJobItems(job.id, runningItems);
+            })
+        )
+    );
+
+    const failed = runningItems.filter((i) => i.status === 'FAILED');
+    if (failed.length === runningItems.length && runningItems.length > 0) {
+        await markJobFailed(
+            job.id,
+            failed[0]?.error ?? 'Todos os prompts falharam.',
+            runningItems
+        );
+    } else {
+        await markJobCompleted(job.id, runningItems);
+    }
+}
+
+async function writePromptForPiece(args: {
+    workspaceId: string;
+    userId?: string | null;
+    ctx: Awaited<ReturnType<typeof loadGenerationContext>>;
+    article: ReturnType<typeof toArticleClient>;
+    workspace: Awaited<ReturnType<typeof loadGenerationContext>>['workspace'];
+    product?: ReturnType<typeof toProductClient>;
+    pillar?: PillarConfig;
+    format: ContentFormat;
+    channelId: string | null;
+    additionalInstructions?: string;
+    preferred: { providerId?: string | null; modelCode?: string | null };
+}): Promise<{
+    prompt: string;
+    providerId: string | null;
+    modelCode: string | null;
+} | null> {
+    const {
+        workspaceId,
+        userId,
+        ctx,
+        article,
+        workspace,
+        product,
+        pillar,
+        format,
+        channelId,
+        additionalInstructions,
+        preferred,
+    } = args;
+
+    // Label do canal destino (o prompt deve dizer para onde é a peça).
+    let channelLabel: string | null = null;
+    if (channelId) {
+        const channel = await prisma.channelConfig.findUnique({
+            where: { id: channelId },
+        });
+        if (channel) channelLabel = channel.channel;
+    }
+
+    // System do escritor: override workspace > user > default em código.
+    const systemPrompt = await resolveSystemPrompt(
+        workspaceId,
+        userId,
+        promptWriterContentType(format),
+        () => buildPromptWriterSystemPrompt(format, { workspace, product })
+    );
+    const fullSystem = withAdditionalInstructions(
+        systemPrompt,
+        additionalInstructions
+    );
+
+    const userPrompt = buildPromptWriterUserPrompt({
+        article,
+        workspace,
+        format,
+        product,
+        pillar,
+        channelLabel,
+        additionalInstructions,
+    });
+
+    const result = await generateWithFallback<string>({
+        providers: getAvailableProvidersFromStore(ctx.providers, ctx.apiKeys),
+        apiKeys: ctx.apiKeys,
+        preferred,
+        buildSystem: () => fullSystem,
+        buildPrompt: () => userPrompt,
+        parse: (text) => parseWrittenPrompt(text),
+        maxAttempts: 2,
+        defaultMaxTokens: 4000,
+        transport: createServerTransport(PIECE_TIMEOUT_MS),
+    });
+
+    if (!result.ok || !result.data) return null;
+
+    return {
+        prompt: result.data,
+        // Auditoria: provider/modelo que escreveram o prompt (gravados pelo
+        // caller, depois de a linha do prompt existir).
+        providerId: result.providerId ?? null,
+        modelCode: result.modelCode ?? null,
+    };
+}
+
+// -----------------------------------------------------------------------------
+// CONTENT_ITEM — regenera UM item (slide-N / tweet-N) a partir do seu prompt
+// -----------------------------------------------------------------------------
+
+async function runContentItem(
+    job: JobRow,
+    params: ContentItemJobParams
+): Promise<void> {
+    const ctx = await loadGenerationContext(job.workspaceId, job.userId);
+    const preferred = params.preferred ?? ctx.defaultPreferred;
+
+    const pieceRow = await prisma.contentPiece.findFirst({
+        where: { id: params.pieceId, workspaceId: job.workspaceId },
+    });
+    if (!pieceRow) {
+        throw new Error('Peça não encontrada.');
+    }
+
+    const format = pieceRow.format as ContentFormat;
+    const workspace = ctx.workspace;
+
+    const articleRow = await prisma.article.findUnique({
+        where: { id: pieceRow.articleId },
+    });
+    if (!articleRow) {
+        throw new Error('Artigo associado não encontrado.');
+    }
+    const article = toArticleClient(articleRow);
+    const pillar = await loadPillar(job.workspaceId, articleRow.pillarId);
+    const product = pieceRow.productId
+        ? await prisma.product.findUnique({ where: { id: pieceRow.productId } })
+        : null;
+
+    const itemPrompt = await getGenerationPrompt(
+        'PIECE',
+        pieceRow.id,
+        params.itemKey
+    );
+    if (!itemPrompt) {
+        await markJobFailed(
+            job.id,
+            `Esta peça não tem prompt para "${params.itemKey}".`,
+            updateItemsForTarget(job.items as unknown as GenerationJobItem[], format, {
+                status: 'FAILED',
+                error: `Sem prompt para "${params.itemKey}".`,
+            })
+        );
+        return;
+    }
+
+    const params2 = {
+        article,
+        workspace,
+        product: product ? toProductClient(product) : undefined,
+        pillar,
+    };
+
+    const systemPrompt = await resolveSystemPrompt(
+        job.workspaceId,
+        job.userId,
+        format,
+        () => buildSystemPromptForFormat(format, params2)
+    );
+
+    const result = await generateWithFallback<{ title: string | null; body: string }>({
+        providers: getAvailableProvidersFromStore(ctx.providers, ctx.apiKeys),
+        apiKeys: ctx.apiKeys,
+        preferred,
+        buildSystem: () => systemPrompt,
+        // O prompt do item é a mensagem — é o que o utilizador editou.
+        buildPrompt: () => itemPrompt,
+        parse: (text) => parseSingleItemResponse(text),
+        maxAttempts: 2,
+        defaultMaxTokens: 1500,
+        transport: createServerTransport(PIECE_TIMEOUT_MS),
+    });
+
+    if (!result.ok || !result.data) {
+        const error = result.error ?? 'Não foi possível gerar o item.';
+        await markJobFailed(
+            job.id,
+            error,
+            updateItemsForTarget(job.items as unknown as GenerationJobItem[], format, {
+                status: 'FAILED',
+                error,
+            })
+        );
+        return;
+    }
+
+    const item = result.data;
+    const slides = pieceRow.slides
+        ? (slidesToClient(pieceRow.slides) ?? null)
+        : null;
+
+    const applied = applySingleItemToPiece(
+        format,
+        { body: pieceRow.body, slides },
+        params.itemKey,
+        item
+    );
+
+    // Guarda optimista sobre `updatedAt`: se o utilizador editou a peça no modal
+    // enquanto este job corria, escrever `body`/`slides` por cima apagaria essa
+    // edição em silêncio. O job falha com uma mensagem explícita em vez disso.
+    const { count: updatedRows } = await prisma.contentPiece.updateMany({
+        where: { id: pieceRow.id, updatedAt: pieceRow.updatedAt },
+        data: {
+            body: applied.body,
+            slides:
+                applied.slides && applied.slides.length > 0
+                    ? (applied.slides as unknown as Prisma.InputJsonArray)
+                    : Prisma.DbNull,
+            slideCount: applied.slideCount,
+            updatedAt: new Date(),
+        },
+    });
+
+    if (updatedRows === 0) {
+        const staleError =
+            'A peça foi alterada enquanto este item gerava. Volta a abrir a peça e repete.';
+        await markJobFailed(
+            job.id,
+            staleError,
+            updateItemsForTarget(job.items as unknown as GenerationJobItem[], format, {
+                status: 'FAILED',
+                error: staleError,
+            })
+        );
+        return;
+    }
+
+    // O prompt do item é reconstruído a partir do novo conteúdo (invariante:
+    // o prompt guardado reproduz o conteúdo actual). Só este item é tocado.
+    await saveGenerationPrompts(
+        'PIECE',
+        pieceRow.id,
+        [
+            {
+                itemKey: params.itemKey,
+                prompt: buildItemPortablePrompt(
+                    format,
+                    params2,
+                    params.itemKey,
+                    item.body,
+                    systemPrompt
+                ),
+            },
+        ],
+        // Preserva o 'main' e os restantes itens da peça.
+        await preservedItemKeys('PIECE', pieceRow.id, params.itemKey)
+    );
+
+    await markJobCompleted(
+        job.id,
+        updateItemsForTarget(job.items as unknown as GenerationJobItem[], format, {
+            status: 'COMPLETED',
+            error: null,
+        })
+    );
+}
+
+/** Todas as chaves de prompt do target excepto a que vai ser substituída. */
+async function preservedItemKeys(
+    targetType: 'PIECE' | 'VIDEO_SCRIPT',
+    targetId: string,
+    replaceItemKey: string
+): Promise<string[]> {
+    const rows = await prisma.contentGenerationPrompt.findMany({
+        where: { targetType, targetId, itemKey: { not: replaceItemKey } },
+        select: { itemKey: true },
+    });
+    return rows
+        .map((r) => r.itemKey)
+        .filter((k): k is string => !!k);
 }
 
 // -----------------------------------------------------------------------------

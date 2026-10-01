@@ -281,8 +281,22 @@ export function ContentPieceCard({
 }: ContentPieceCardProps) {
     const statusColors = CONTENT_PIECE_STATUS_COLORS[piece.status];
     const isDraft = piece.status === 'DRAFT';
+    const hasContent = Boolean(piece.body && piece.body.trim());
+    // Peça só com prompt: ainda não há conteúdo para previsualizar.
+    const isPromptOnly = piece.status === 'PROMPT_READY' && !hasContent;
 
     const renderPreview = () => {
+        if (isPromptOnly) {
+            return (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                    <p className="text-sm text-amber-800">
+                        Peça criada apenas com o prompt. Abre a peça para editar
+                        o prompt ou gerar o conteúdo a partir dele.
+                    </p>
+                </div>
+            );
+        }
+
         switch (piece.format) {
             case 'CAROUSEL':
                 return (
@@ -363,7 +377,7 @@ export function ContentPieceCard({
 
             <div className="flex items-center justify-between border-t border-gray-100 bg-gray-50 px-4 py-2">
                 <div className="flex items-center gap-2">
-                    {isDraft && onApprove && (
+                    {isDraft && hasContent && onApprove && (
                         <button
                             onClick={onApprove}
                             disabled={isApproving}

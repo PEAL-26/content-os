@@ -6,6 +6,7 @@ import type {
     Workspace,
 } from '@/types/database';
 import type { PillarConfig } from '@/types/pillar';
+import { parseItemKeyOrder } from './generation-job-types';
 import type { GeneratedVideoScript, PortablePromptItem } from './types';
 
 // =============================================================================
@@ -481,6 +482,177 @@ export function buildSingleItemPortablePrompt(
         'main',
         title,
         body
+    );
+}
+
+// -----------------------------------------------------------------------------
+// Parse de um ÚNICO item (regeneração parcial: "Gerar este slide")
+//
+// O system prompt do formato pede sempre o JSON da peça completa, por isso a
+// resposta a "gera só o slide 3" pode vir em três formatos diferentes. Aceitamos
+// os três e devolvemos sempre o mesmo shape ({ title, body }).
+// -----------------------------------------------------------------------------
+
+export interface ParsedSingleItem {
+    title: string | null;
+    body: string;
+}
+
+export function parseSingleItemResponse(text: string): ParsedSingleItem | null {
+    if (!text) return null;
+
+    // 1) JSON (com a peça completa ou só o item).
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+        try {
+            const parsed = JSON.parse(jsonMatch[0]);
+
+            // a) JSON de carrossel: { title, slides: [...] } → primeiro slide.
+            if (Array.isArray(parsed.slides) && parsed.slides.length > 0) {
+                const slide = parsed.slides[0];
+                const body = String(slide?.body ?? '').trim();
+                if (body) {
+                    return {
+                        title: slide?.title
+                            ? String(slide.title).trim()
+                            : (parsed.title ? String(parsed.title).trim() : null),
+                        body,
+                    };
+                }
+            }
+
+            // b) JSON de thread: { tweets: [...] } → primeiro tweet.
+            if (Array.isArray(parsed.tweets) && parsed.tweets.length > 0) {
+                const body = String(parsed.tweets[0]?.text ?? '').trim();
+                if (body) return { title: null, body };
+            }
+
+            // c) JSON simples: { title, body }.
+            const body = String(parsed.body ?? parsed.text ?? '').trim();
+            if (body) {
+                return {
+                    title: parsed.title ? String(parsed.title).trim() : null,
+                    body,
+                };
+            }
+        } catch {
+            // JSON inválido — cai para texto simples.
+        }
+    }
+
+    // 2) Texto simples: o slide/tweet em si, sem JSON.
+    const plain = stripMarkdownTitle(text.trim());
+    if (plain.length > 0) {
+        return { title: null, body: plain };
+    }
+
+    return null;
+}
+
+/** Separa "## Título\n\nCorpo" num par { title, body }. */
+function stripMarkdownTitle(text: string): string {
+    const match = text.match(/^#{1,3}\s+(.+?)\n+([\s\S]+)$/);
+    if (!match) return text;
+    return `${match[1].trim()}\n\n${match[2].trim()}`;
+}
+
+/**
+ * Aplica o item regenerado à peça: actualiza só o slide (ou tweet) indicado,
+ * mantendo os restantes intactos. Devolve os campos a persistir.
+ */
+export function applySingleItemToPiece(
+    format: ContentFormat,
+    piece: { body: string; slides: ContentSlide[] | null },
+    itemKey: string,
+    item: ParsedSingleItem
+): { body: string; slides: ContentSlide[] | null; slideCount: number | null } {
+    const orderMatch = /^(?:slide|tweet)-(\d+)$/.exec(itemKey);
+    const order = orderMatch ? Number(orderMatch[1]) : null;
+
+    if (format === 'CAROUSEL' && order !== null) {
+        const slides = piece.slides ?? [];
+        if (slides.length === 0) return { ...piece, slideCount: null };
+
+        const index = slides.findIndex(
+            (s, i) => (s.order ?? 0) === order || i === order - 1
+        );
+        if (index === -1) return { ...piece, slideCount: slides.length };
+
+        const next = slides.map((slide, i) =>
+            i === index
+                ? {
+                      order: slide.order,
+                      title: item.title ?? slide.title,
+                      body: item.body,
+                  }
+                : slide
+        );
+
+        return {
+            slides: next,
+            body: next.map((s) => `## ${s.title}\n${s.body}`).join('\n\n'),
+            slideCount: next.length,
+        };
+    }
+
+    if (format === 'THREAD' && order !== null) {
+        const tweets = extractThreadTweets(piece.body);
+        if (tweets.length === 0) {
+            return { ...piece, slideCount: piece.slides?.length ?? null };
+        }
+
+        const index = tweets.findIndex((t) => t.order === order);
+        if (index === -1) {
+            return { ...piece, slideCount: piece.slides?.length ?? null };
+        }
+
+        const next = tweets.map((tweet, i) =>
+            i === index ? { order: tweet.order, text: item.body } : tweet
+        );
+
+        return {
+            slides: piece.slides,
+            body: next.map((t) => t.text).join('\n\n'),
+            slideCount: piece.slides?.length ?? null,
+        };
+    }
+
+    return { ...piece, slideCount: piece.slides?.length ?? null };
+}
+
+/** Prompt portátil do item regenerado (reconstruído a partir do novo texto). */
+export function buildItemPortablePrompt(
+    format: ContentFormat,
+    params: ContentPromptParams,
+    itemKey: string,
+    itemText: string,
+    systemOverride?: string
+): string {
+    const order = parseItemKeyOrder(itemKey) ?? 1;
+
+    if (format === 'CAROUSEL') {
+        return buildCarouselItemPortablePrompt(
+            params,
+            { order, title: '', body: itemText },
+            order - 1,
+            systemOverride
+        );
+    }
+
+    if (format === 'THREAD') {
+        return buildThreadItemPortablePrompt(
+            params,
+            { order, text: itemText },
+            systemOverride
+        );
+    }
+
+    return buildSingleItemPortablePrompt(
+        format,
+        params,
+        null,
+        itemText,
+        systemOverride
     );
 }
 

@@ -4,6 +4,7 @@ import type {
     GenerationJobParams,
     GenerationJobStatusValue,
     GenerationJobTypeValue,
+    TargetMode,
 } from '@/lib/ai/generation-job-types';
 
 // =============================================================================
@@ -19,6 +20,7 @@ export type {
     GenerationJobParams,
     GenerationJobStatusValue,
     GenerationJobTypeValue,
+    TargetMode,
 } from '@/lib/ai/generation-job-types';
 
 export interface EnqueueGenerationInput {
@@ -26,7 +28,7 @@ export interface EnqueueGenerationInput {
     jobType: GenerationJobTypeValue;
     params: GenerationJobParams;
     /** Retry: reutilizar estes targets em vez de criar novos placeholders. */
-    targets?: Array<{ format: string; targetId: string }>;
+    targets?: Array<{ format: string; targetId: string; mode?: TargetMode }>;
 }
 
 export interface EnqueueGenerationResult {
@@ -216,9 +218,12 @@ export function defaultJobParams(
         case 'NEW_ARTICLE':
             return { topic: '' };
         case 'CONTENT_PIECES':
+        case 'CONTENT_PROMPT':
             return { articleId: '', formats: [] };
         case 'VIDEO_SCRIPT':
             return { articleId: '', targetChannel: 'TIKTOK', durationSec: 60 };
+        case 'CONTENT_ITEM':
+            return { pieceId: '', itemKey: 'main' };
     }
 }
 

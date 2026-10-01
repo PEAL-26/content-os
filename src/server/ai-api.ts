@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { APICallError, generateText } from 'ai';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { z } from 'zod';
+import { describePool } from '../src/lib/prisma';
 import { enqueueGeneration, EnqueueError } from './generation/enqueue';
 import { sendGenerationRequested } from './generation/inngest';
 import { markJobFailed } from './generation/job-store';
@@ -307,6 +308,8 @@ const contentPiecesEnqueueParamsSchema = z.object({
     productId: z.string().min(1).max(100).nullable().optional(),
     pillarId: z.string().min(1).max(100).nullable().optional(),
     additionalInstructions: z.string().max(60000).optional(),
+    /** Usa o prompt gravado da peça em vez do contexto automático. */
+    useStoredPrompt: z.boolean().optional(),
     preferred: enqueuePreferredSchema,
 });
 
@@ -318,8 +321,38 @@ const videoScriptEnqueueParamsSchema = z.object({
     preferred: enqueuePreferredSchema,
 });
 
+const contentPromptEnqueueParamsSchema = z.object({
+    articleId: z.string().min(1).max(100),
+    formats: z
+        .array(z.string().min(1).max(50))
+        .min(1, 'Selecciona pelo menos um formato.')
+        .max(10),
+    channelIds: z.record(z.string(), z.string()).optional(),
+    productId: z.string().min(1).max(100).nullable().optional(),
+    pillarId: z.string().min(1).max(100).nullable().optional(),
+    additionalInstructions: z.string().max(60000).optional(),
+    preferred: enqueuePreferredSchema,
+});
+
+const contentItemEnqueueParamsSchema = z.object({
+    pieceId: z.string().min(1).max(100),
+    itemKey: z
+        .string()
+        .trim()
+        .min(2)
+        .max(40)
+        .regex(/^(main|slide-\d+|tweet-\d+)$/, 'itemKey inválido.'),
+    preferred: enqueuePreferredSchema,
+});
+
 const enqueueSchema = z.object({
-    jobType: z.enum(['NEW_ARTICLE', 'CONTENT_PIECES', 'VIDEO_SCRIPT']),
+    jobType: z.enum([
+        'NEW_ARTICLE',
+        'CONTENT_PIECES',
+        'VIDEO_SCRIPT',
+        'CONTENT_PROMPT',
+        'CONTENT_ITEM',
+    ]),
     workspaceId: z.string().min(1).max(100),
     params: z.unknown(),
     targets: z
@@ -327,6 +360,8 @@ const enqueueSchema = z.object({
             z.object({
                 format: z.string().min(1).max(50),
                 targetId: z.string().min(1).max(100),
+                /** NEW_VERSION clona a peça em vez de regenerar por cima. */
+                mode: z.enum(['FILL', 'NEW_VERSION']).optional(),
             })
         )
         .max(10)
@@ -337,7 +372,34 @@ const enqueueParamsSchemas = {
     NEW_ARTICLE: newArticleEnqueueParamsSchema,
     CONTENT_PIECES: contentPiecesEnqueueParamsSchema,
     VIDEO_SCRIPT: videoScriptEnqueueParamsSchema,
+    CONTENT_PROMPT: contentPromptEnqueueParamsSchema,
+    CONTENT_ITEM: contentItemEnqueueParamsSchema,
 } as const;
+
+/**
+ * Saturação de ligações / timeouts de rede. O `enqueue` já tentou 3 vezes com
+ * backoff, portanto se chega aqui com um destes é persistente e vale a pena
+ * traduzir para o utilizador em vez de mostrar a mensagem crua do driver.
+ */
+function isDatabaseBusyError(err: unknown): boolean {
+    const code = (err as { code?: unknown } | null)?.code;
+    // P2028 = "Unable to start a transaction in the given time" (o erro reportado)
+    if (code === 'P2024' || code === 'P1008' || code === 'P2028' || code === 'P2010') {
+        return true;
+    }
+
+    const message = err instanceof Error ? err.message : String(err);
+    return (
+        /Transaction API error/i.test(message) ||
+        /Unable to start a transaction/i.test(message) ||
+        /timed out fetching a new connection/i.test(message) ||
+        /EMAXCONNSESSION/i.test(message) ||
+        /too many clients/i.test(message) ||
+        /timeout expired/i.test(message) ||
+        /ConnectionClosed|Server has closed the connection/i.test(message) ||
+        /Connection terminated/i.test(message)
+    );
+}
 
 export async function handleAiEnqueue(
     req: IncomingMessage,
@@ -433,8 +495,28 @@ export async function handleAiEnqueue(
             });
             return;
         }
+
         const message =
             err instanceof Error ? err.message : 'Erro desconhecido ao criar a geração.';
+
+        // Base de dados ocupada/sem resposta: o `enqueue` já tentou 3 vezes com
+        // backoff, logo a partir daqui é saturação persistente. Devolvemos 503
+        // com texto accionável em vez de despejar "Transaction API error…" no UI.
+        if (isDatabaseBusyError(err)) {
+            console.error(
+                '[api/ai/enqueue] base de dados ocupada:',
+                message,
+                '| pool:',
+                JSON.stringify(describePool())
+            );
+            sendJson(res, 503, {
+                ok: false,
+                error: 'A base de dados está ocupada. Tenta novamente dentro de segundos.',
+                code: 'DB_BUSY',
+            });
+            return;
+        }
+
         console.error('[api/ai/enqueue] falhou:', message);
         sendJson(res, 500, {
             ok: false,

@@ -293,6 +293,8 @@ function parseEnqueueError(error: GenerationEnqueueError): string {
     switch (error.code) {
         case 'NO_PROVIDER':
             return 'Ainda não tens nenhum provider de IA configurado com chave. Adiciona um nas Definições de IA antes de gerar.';
+        case 'DB_BUSY':
+            return 'A base de dados está ocupada. Espera uns segundos e tenta gerar de novo.';
         case 'QUEUE_ERROR':
             return error.message;
         default:

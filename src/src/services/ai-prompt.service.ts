@@ -256,6 +256,8 @@ async function deleteOverride(id: string): Promise<void> {
 export interface PortablePromptItem {
     itemKey: string; // 'main' | 'slide-1' | 'tweet-3' | ...
     prompt: string;
+    /** Preenchido quando o utilizador editou o prompt à mão. */
+    editedAt?: string | null;
 }
 
 export interface SaveGenerationPromptsInput {
@@ -310,7 +312,7 @@ export async function getGenerationPrompts(
 ): Promise<PortablePromptItem[]> {
     const { data, error } = await supabase
         .from('content_generation_prompts')
-        .select('itemKey, prompt')
+        .select('itemKey, prompt, editedAt')
         .eq('targetType', targetType)
         .eq('targetId', targetId)
         .order('createdAt');
@@ -320,6 +322,52 @@ export async function getGenerationPrompts(
     }
 
     return (data ?? []) as PortablePromptItem[];
+}
+
+/**
+ * Lê o prompt 'main' de várias peças numa só consulta — usado pelos cards do
+ * painel, que precisam de mostrar/copiar o prompt sem abrir o modal.
+ */
+/** Prompt 'main' de uma peça, como os cards do painel precisam. */
+export interface MainPiecePrompt {
+    prompt: string;
+    /** Preenchido quando o utilizador editou o prompt à mão. */
+    editedAt: string | null;
+}
+
+export async function getMainPromptsForPieces(
+    targetType: GenerationPromptTargetType,
+    targetIds: string[]
+): Promise<Record<string, MainPiecePrompt>> {
+    if (targetIds.length === 0) return {};
+
+    // `editedAt` vem no select para o card poder avisar/confirmar antes de um
+    // "Reescrever prompt" substituir um prompt escrito à mão.
+    const { data, error } = await supabase
+        .from('content_generation_prompts')
+        .select('targetId, prompt, editedAt')
+        .eq('targetType', targetType)
+        .eq('itemKey', 'main')
+        .in('targetId', targetIds);
+
+    if (error) {
+        throw new Error(`Erro ao buscar prompts de geração: ${error.message}`);
+    }
+
+    const map: Record<string, MainPiecePrompt> = {};
+    for (const row of (data ?? []) as Array<{
+        targetId: string;
+        prompt: string;
+        editedAt: string | null;
+    }>) {
+        // A BD garante um prompt por (target, itemKey); o ?? protege a UI de
+        // linhas duplicadas que existissem antes da migração.
+        map[row.targetId] ??= {
+            prompt: row.prompt,
+            editedAt: row.editedAt ?? null,
+        };
+    }
+    return map;
 }
 
 /** Remove os prompts portáteis de uma peça/roteiro. */
@@ -336,4 +384,36 @@ export async function deleteGenerationPrompts(
     if (error) {
         throw new Error(`Erro ao remover prompts de geração: ${error.message}`);
     }
+}
+
+/**
+ * Actualiza o prompt de UM item sem tocar nos restantes, marcando-o como
+ * editado à mão (`editedAt`) para a UI poder avisar antes de um job o
+ * reconstruir. Devolve false se o prompt não existir (ex.: a peça foi gerada
+ * antes de haver prompts por item).
+ */
+export async function updateGenerationPrompt(
+    targetType: GenerationPromptTargetType,
+    targetId: string,
+    itemKey: string,
+    prompt: string
+): Promise<boolean> {
+    const trimmed = prompt.trim();
+    if (!trimmed) {
+        throw new Error('O prompt não pode ficar vazio.');
+    }
+
+    const { data, error } = await supabase
+        .from('content_generation_prompts')
+        .update({ prompt: trimmed, editedAt: new Date().toISOString() })
+        .eq('targetType', targetType)
+        .eq('targetId', targetId)
+        .eq('itemKey', itemKey)
+        .select('id');
+
+    if (error) {
+        throw new Error(`Erro ao guardar o prompt: ${error.message}`);
+    }
+
+    return (data ?? []).length > 0;
 }

@@ -87,10 +87,13 @@ export const articleService = {
         workspaceId: string,
         articleIds: string[]
     ): Promise<Record<string, number>> {
+        // PROMPT_READY = peça ainda só com o prompt (sem conteúdo) — não conta
+        // como peça de conteúdo do artigo.
         const { data, error } = await supabase
             .from('content_pieces')
             .select('articleId')
             .eq('workspaceId', workspaceId)
+            .neq('status', 'PROMPT_READY')
             .in('articleId', articleIds);
 
         if (error) {
