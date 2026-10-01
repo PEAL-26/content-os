@@ -2,9 +2,9 @@ import type {
     AIProviderConfigOptions,
     AIProviderLike,
     AIProviderModelLike,
-} from './types';
-import { resolveProviderConfig } from './resolver';
-import type { GenerateOptionsResult } from './resolver';
+} from './types.js';
+import { resolveProviderConfig } from './resolver.js';
+import type { GenerateOptionsResult } from './resolver.js';
 
 // =============================================================================
 // Transporte — no browser, todas as chamadas LLM passam pelo servidor próprio

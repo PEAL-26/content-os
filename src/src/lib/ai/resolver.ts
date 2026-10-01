@@ -3,7 +3,7 @@ import type {
     AIProviderConfigOptions,
     AIProviderLike,
     AIProviderModelLike,
-} from './types';
+} from './types.js';
 
 export type ReasoningEffort =
     | 'none'

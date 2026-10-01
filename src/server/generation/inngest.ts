@@ -2,7 +2,7 @@ import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
 import { Inngest } from 'inngest';
 import { serve } from 'inngest/node';
-import { runGenerationJob } from './orchestration';
+import { runGenerationJob } from './orchestration.js';
 
 // =============================================================================
 // Inngest — cliente + função de geração + handler HTTP (`/api/inngest`).

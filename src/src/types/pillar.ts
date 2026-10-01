@@ -1,4 +1,4 @@
-import { ContentPillar, FunnelStage } from '@/generated/prisma/enums';
+import { ContentPillar, FunnelStage } from '../generated/prisma/enums.js';
 
 export type { ContentPillar, FunnelStage };
 

@@ -1,9 +1,9 @@
 import 'dotenv/config';
 import type { Connect, Plugin } from 'vite';
 import { loadEnv } from 'vite';
-import type { AiApiEnv } from './ai-api';
-import { handleAiEnqueue, handleAiGenerate, handleAiTest } from './ai-api';
-import { handleInngestWithPathCheck } from './generation/inngest';
+import type { AiApiEnv } from './ai-api.js';
+import { handleAiEnqueue, handleAiGenerate, handleAiTest } from './ai-api.js';
+import { handleInngestWithPathCheck } from './generation/inngest.js';
 
 /**
  * Plugin de dev do Vite: regista os handlers /api/ai/* como middleware do dev

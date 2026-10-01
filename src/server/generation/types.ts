@@ -16,8 +16,8 @@ export type {
     NewArticleJobParams,
     TargetMode,
     VideoScriptJobParams,
-} from '../../src/lib/ai/generation-job-types';
-import type { GenerationPreferred } from '../../src/lib/ai/generation-job-types';
+} from '../../src/lib/ai/generation-job-types.js';
+import type { GenerationPreferred } from '../../src/lib/ai/generation-job-types.js';
 
 /** Params já normalizados para a execução (cargas resolvidas da BD). */
 export interface LoadedGenerationContext {

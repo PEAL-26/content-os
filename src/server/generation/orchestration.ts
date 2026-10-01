@@ -1,12 +1,12 @@
 import pLimit from 'p-limit';
-import { prisma } from '../../src/lib/prisma';
-import { Prisma } from '../../src/generated/prisma/client';
-import { generateSlug } from '../../src/helpers/slug';
+import { prisma } from '../../src/lib/prisma.js';
+import { Prisma } from '../../src/generated/prisma/client.js';
+import { generateSlug } from '../../src/helpers/slug.js';
 import {
     buildArticleSystemPrompt,
     buildArticleUserPrompt,
     parseArticleResponse,
-} from '../../src/lib/ai/prompts';
+} from '../../src/lib/ai/prompts.js';
 import {
     applySingleItemToPiece,
     buildContext,
@@ -20,22 +20,22 @@ import {
     parseSingleItemResponse,
     parseVideoScriptResponse,
     type ParsedGeneratedPiece,
-} from '../../src/lib/ai/content-prompts';
-import { MAIN_ITEM_KEY } from '../../src/lib/ai/generation-job-types';
+} from '../../src/lib/ai/content-prompts.js';
+import { MAIN_ITEM_KEY } from '../../src/lib/ai/generation-job-types.js';
 import {
     buildPromptWriterSystemPrompt,
     buildPromptWriterUserPrompt,
     parseWrittenPrompt,
     promptWriterContentType,
     PROMPT_WRITER_FORMAT_LABELS,
-} from '../../src/lib/ai/prompt-writer';
+} from '../../src/lib/ai/prompt-writer.js';
 import {
     generateWithFallback,
     getAvailableProvidersFromStore,
-} from '../../src/lib/ai/provider';
-import type { GeneratedVideoScript } from '../../src/lib/ai/types';
-import type { ContentFormat } from '../../src/types/database';
-import type { PillarConfig } from '../../src/types/pillar';
+} from '../../src/lib/ai/provider.js';
+import type { GeneratedVideoScript } from '../../src/lib/ai/types.js';
+import type { ContentFormat } from '../../src/types/database.js';
+import type { PillarConfig } from '../../src/types/pillar.js';
 import {
     loadGenerationContext,
     resolveSystemPrompt,
@@ -44,7 +44,7 @@ import {
     toPillarClient,
     toProductClient,
     withAdditionalInstructions,
-} from './context';
+} from './context.js';
 import {
     getGenerationPrompt,
     getJob,
@@ -53,8 +53,8 @@ import {
     markJobRunning,
     saveGenerationPrompts,
     updateJobItems,
-} from './job-store';
-import { createServerTransport } from './transport';
+} from './job-store.js';
+import { createServerTransport } from './transport.js';
 import type {
     ContentItemJobParams,
     ContentPiecesJobParams,
@@ -62,7 +62,7 @@ import type {
     GenerationJobParams,
     NewArticleJobParams,
     VideoScriptJobParams,
-} from './types';
+} from './types.js';
 
 // =============================================================================
 // Orquestração dos jobs — executa a geração reutilizando o núcleo puro do

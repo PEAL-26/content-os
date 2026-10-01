@@ -1,5 +1,5 @@
-import { prisma } from '../../src/lib/prisma';
-import type { GenerationJobItem } from './types';
+import { prisma } from '../../src/lib/prisma.js';
+import type { GenerationJobItem } from './types.js';
 
 // =============================================================================
 // Job store — acesso Prisma a generation_jobs (CRUD usado pelo job Inngest).

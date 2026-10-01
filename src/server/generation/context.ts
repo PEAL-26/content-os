@@ -1,15 +1,15 @@
-import { prisma } from '../../src/lib/prisma';
-import { normalizeConfig } from '../../src/lib/ai/resolver';
-import type { AIProviderLike } from '../../src/lib/ai/types';
+import { prisma } from '../../src/lib/prisma.js';
+import { normalizeConfig } from '../../src/lib/ai/resolver.js';
+import type { AIProviderLike } from '../../src/lib/ai/types.js';
 import type {
     Article,
     ContentPillar,
     ContentSlide,
     Product,
     Workspace,
-} from '../../src/types/database';
-import type { PillarConfig } from '../../src/types/pillar';
-import type { GenerationPreferred } from './types';
+} from '../../src/types/database.js';
+import type { PillarConfig } from '../../src/types/pillar.js';
+import type { GenerationPreferred } from './types.js';
 
 // =============================================================================
 // Contexto dos jobs de geração: carrega e mapeia as linhas Prisma para os

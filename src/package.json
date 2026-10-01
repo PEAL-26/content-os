@@ -6,7 +6,8 @@
     "scripts": {
         "dev": "vite",
         "dev:inngest": "inngest-cli dev -u http://localhost:5173/api/inngest",
-        "build": "tsc -b && vite build",
+        "check:esm": "node scripts/check-esm-imports.mjs",
+        "build": "npm run check:esm && prisma generate && tsc -b && vite build",
         "lint": "eslint .",
         "lint:fix": "eslint . --fix",
         "preview": "vite preview",

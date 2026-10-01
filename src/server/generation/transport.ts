@@ -1,6 +1,6 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { APICallError, generateText } from 'ai';
-import type { GenerationTransport } from '../../src/lib/ai/provider';
+import type { GenerationTransport } from '../../src/lib/ai/provider.js';
 
 // =============================================================================
 // Transport direto (server→provider) para os jobs de geração.

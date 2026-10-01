@@ -6,8 +6,8 @@ import type {
     Workspace,
 } from '@/types/database';
 import type { PillarConfig } from '@/types/pillar';
-import { parseItemKeyOrder } from './generation-job-types';
-import type { GeneratedVideoScript, PortablePromptItem } from './types';
+import { parseItemKeyOrder } from './generation-job-types.js';
+import type { GeneratedVideoScript, PortablePromptItem } from './types.js';
 
 // =============================================================================
 // Prompts de conteúdo — divididos em system (função + regras + formato) e user

@@ -3,10 +3,10 @@ import { createClient } from '@supabase/supabase-js';
 import { APICallError, generateText } from 'ai';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { z } from 'zod';
-import { describePool } from '../src/lib/prisma';
-import { enqueueGeneration, EnqueueError } from './generation/enqueue';
-import { sendGenerationRequested } from './generation/inngest';
-import { markJobFailed } from './generation/job-store';
+import { describePool } from '../src/lib/prisma.js';
+import { enqueueGeneration, EnqueueError } from './generation/enqueue.js';
+import { sendGenerationRequested } from './generation/inngest.js';
+import { markJobFailed } from './generation/job-store.js';
 
 // =============================================================================
 // Handler partilhado das rotas /api/ai/* — corre dentro da Vercel Function em

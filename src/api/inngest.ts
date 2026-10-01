@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { inngestHandler } from '../server/generation/inngest';
+import { inngestHandler } from '../server/generation/inngest.js';
 
 export const config = {
     runtime: 'nodejs',

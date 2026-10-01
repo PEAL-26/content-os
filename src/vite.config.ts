@@ -3,7 +3,7 @@ import tailwindcss from '@tailwindcss/vite';
 import react, { reactCompilerPreset } from '@vitejs/plugin-react';
 import * as path from 'path';
 import { defineConfig } from 'vite';
-import { apiAiDevPlugin } from './server/vite-api-plugin';
+import { apiAiDevPlugin } from './server/vite-api-plugin.js';
 
 // https://vite.dev/config/
 export default defineConfig({

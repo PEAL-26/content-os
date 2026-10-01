@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { prisma } from '../../src/lib/prisma';
-import { Prisma } from '../../src/generated/prisma/client';
+import { prisma } from '../../src/lib/prisma.js';
+import { Prisma } from '../../src/generated/prisma/client.js';
 import type {
     ContentFormat,
     ContentPillar,
     SocialChannel,
-} from '../../src/types/database';
+} from '../../src/types/database.js';
 import type {
     ContentItemJobParams,
     ContentPiecesJobParams,
@@ -15,7 +15,7 @@ import type {
     NewArticleJobParams,
     TargetMode,
     VideoScriptJobParams,
-} from './types';
+} from './types.js';
 
 // =============================================================================
 // Enqueue — cria os placeholders + o job (transação) e devolve { jobId, targetId }.

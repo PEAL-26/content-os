@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { handleAiTest } from '../../server/ai-api';
+import { handleAiTest } from '../../server/ai-api.js';
 
 export const config = {
     runtime: 'nodejs',
