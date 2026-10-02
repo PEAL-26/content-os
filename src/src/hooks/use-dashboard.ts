@@ -4,6 +4,7 @@ import { contentPieceService } from '@/services/content-piece.service';
 import { pillarService } from '@/services/pillar.service';
 import { weeklyPlanService } from '@/services/weekly-plan.service';
 import { useWorkspaceStore } from '@/stores/workspace-store';
+import { usePlanningConfig } from '@/hooks/use-planning-config';
 import type {
     ArticleWithRelations,
     ContentPieceWithRelations,
@@ -14,6 +15,8 @@ import type { ContentPillar } from '@/types/database';
 import {
     getWeekStart,
     getWeekEnd,
+    getDayName,
+    getShortDayName,
 } from '@/lib/date-utils';
 
 export interface PillarDistribution {
@@ -33,8 +36,15 @@ export interface DayChecklist {
     totalCount: number;
 }
 
+/** Dia do checklist pronto a renderizar, com o nome já resolvido. */
+export type ChecklistDay = DayChecklist;
+
 export function useDashboard() {
     const { currentWorkspace } = useWorkspaceStore();
+    const {
+        activeDays,
+        getSuggestedPillarForDay,
+    } = usePlanningConfig();
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -148,25 +158,14 @@ export function useDashboard() {
             };
         });
 
-    const dayChecklists: DayChecklist[] = [1, 3, 5].map((dayOfWeek) => {
+    const dayChecklists: DayChecklist[] = activeDays().map((dayOfWeek) => {
         const dayItems = weekItems.filter((i) => i.dayOfWeek === dayOfWeek);
-        const dayNames: Record<number, { full: string; short: string }> = {
-            1: { full: 'Segunda-feira', short: 'Seg' },
-            3: { full: 'Quarta-feira', short: 'Qua' },
-            5: { full: 'Sexta-feira', short: 'Sex' },
-        };
-
-        const pillarMap: Record<number, ContentPillar> = {
-            1: 'P1_EDUCATION',
-            3: 'P2_USE_CASES',
-            5: 'P3_CONVERSION',
-        };
 
         return {
             dayOfWeek,
-            dayName: dayNames[dayOfWeek].full,
-            shortName: dayNames[dayOfWeek].short,
-            pillar: pillarMap[dayOfWeek] || null,
+            dayName: getDayName(dayOfWeek),
+            shortName: getShortDayName(dayOfWeek),
+            pillar: getSuggestedPillarForDay(dayOfWeek),
             items: dayItems,
             publishedCount: dayItems.filter((i) => i.status === 'PUBLISHED').length,
             totalCount: dayItems.length,

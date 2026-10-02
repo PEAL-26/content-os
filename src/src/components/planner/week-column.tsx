@@ -4,18 +4,15 @@ import { PillarBadge } from '@/components/content/pillar-badge';
 import { PlanItemCard } from '@/components/planner/plan-item-card';
 import type { PlanItemWithRelations } from '@/services/weekly-plan.service';
 import type { ContentPillar } from '@/types/database';
-import {
-    formatDayOfWeek,
-    formatDayNumber,
-    getSuggestedPillarForDay,
-    isActiveDay,
-} from '@/lib/date-utils';
+import { formatDayOfWeek, formatDayNumber } from '@/lib/date-utils';
 import { Plus } from 'lucide-react';
 
 interface WeekColumnProps {
     date: Date;
     dayOfWeek: number;
     items: PlanItemWithRelations[];
+    /** Destaca o dia na grelha. Não bloqueia — todos os dias aceitam items. */
+    isActiveDay?: boolean;
     suggestedPillar?: ContentPillar | null;
     onAddItem: () => void;
     onRemoveItem: (itemId: string) => void;
@@ -32,6 +29,7 @@ export function WeekColumn({
     date,
     dayOfWeek,
     items,
+    isActiveDay = false,
     suggestedPillar,
     onAddItem,
     onRemoveItem,
@@ -40,8 +38,10 @@ export function WeekColumn({
     isLoading = false,
 }: WeekColumnProps) {
     const [showQuickAdd, setShowQuickAdd] = useState(false);
-    const activeDay = isActiveDay(dayOfWeek);
-    const pillarSuggestion = suggestedPillar || getSuggestedPillarForDay(dayOfWeek);
+    const activeDay = isActiveDay;
+    const pillarSuggestion = suggestedPillar ?? null;
+    // Identifica a coluna para debugging e para a aria-label do botão.
+    const dayKey = `dia-${dayOfWeek}`;
 
     const dayName = formatDayOfWeek(date);
     const dayNumber = formatDayNumber(date);
@@ -151,10 +151,12 @@ export function WeekColumn({
                 ) : (
                     <button
                         onClick={() => setShowQuickAdd(true)}
+                        data-day={dayKey}
+                        aria-label={`Adicionar item a ${formatDayOfWeek(date)}`}
                         className={`flex w-full items-center justify-center gap-1 rounded-md py-2 text-sm transition-colors ${
                             activeDay
                                 ? 'text-blue-600 hover:bg-blue-50'
-                                : 'text-gray-400 hover:bg-gray-100'
+                                : 'text-gray-500 hover:bg-gray-100'
                         }`}
                     >
                         <Plus className="h-4 w-4" />

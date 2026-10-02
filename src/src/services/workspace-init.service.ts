@@ -2,11 +2,13 @@ import { supabase } from '@/lib/supabase';
 import { v4 as uuidv4 } from 'uuid';
 import { channelService } from './channel.service';
 import { pillarService } from './pillar.service';
+import { planningConfigService } from './planning-config.service';
 
 export interface WorkspaceInitResult {
     pillarsCreated: boolean;
     channelsCreated: boolean;
     tagsCreated: boolean;
+    planningConfigsCreated: boolean;
 }
 
 export const workspaceInitService = {
@@ -17,6 +19,7 @@ export const workspaceInitService = {
             pillarsCreated: false,
             channelsCreated: false,
             tagsCreated: false,
+            planningConfigsCreated: false,
         };
 
         try {
@@ -37,6 +40,17 @@ export const workspaceInitService = {
             results.tagsCreated = await this.ensureDefaultTags(workspaceId);
         } catch (error) {
             console.error('Erro ao inicializar tags:', error);
+        }
+
+        // Depois dos pilares: createDefaultPlanningConfigs liga os pilares
+        // sugeridos por JOIN, e precisa deles já semeados.
+        try {
+            results.planningConfigsCreated =
+                await planningConfigService.checkAndCreatePlanningConfigs(
+                    workspaceId
+                );
+        } catch (error) {
+            console.error('Erro ao inicializar planeamento:', error);
         }
 
         return results;

@@ -32,6 +32,10 @@ export function SettingsLayout({ children }: SettingsLayoutProps) {
                   href: workspacePath(workspaceId, 'settings/products'),
               },
               {
+                  name: 'Dias',
+                  href: workspacePath(workspaceId, 'settings/planning'),
+              },
+              {
                   name: 'Membros',
                   href: workspacePath(workspaceId, 'settings/members'),
               },

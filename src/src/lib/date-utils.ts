@@ -77,19 +77,6 @@ export function getDayOfWeekNumber(date: Date): number {
     return day === 0 ? 7 : day;
 }
 
-export function getSuggestedPillarForDay(dayOfWeek: number): string | null {
-    const pillarMap: Record<number, string | null> = {
-        1: 'P1_EDUCATION',
-        3: 'P2_USE_CASES',
-        5: 'P3_CONVERSION',
-    };
-    return pillarMap[dayOfWeek] || null;
-}
-
-export function isActiveDay(dayOfWeek: number): boolean {
-    return [1, 3, 5].includes(dayOfWeek);
-}
-
 export function getPillarLabel(pillar: string | null): string {
     if (!pillar) return '';
     const labels: Record<string, string> = {

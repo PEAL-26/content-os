@@ -146,6 +146,10 @@ export function DashboardPage() {
 
                         <WeekChecklist
                             items={dayChecklists.flatMap((d) => d.items)}
+                            days={dayChecklists.map((d) => ({
+                                dayOfWeek: d.dayOfWeek,
+                                pillar: d.pillar,
+                            }))}
                             onMarkPublished={markItemPublished}
                             onRemove={removeItem}
                             isLoading={isLoading}

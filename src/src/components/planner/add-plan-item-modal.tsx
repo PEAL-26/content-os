@@ -12,7 +12,7 @@ import type { ArticleWithRelations } from '@/types/database';
 import type { PillarConfig } from '@/types/pillar';
 import type { ChannelConfig } from '@/types/database';
 import { Search, FileText, Image, Check, Clock, Filter, X } from 'lucide-react';
-import { formatFullDate, getPillarLabel } from '@/lib/date-utils';
+import { formatFullDate, getDayName, getPillarLabel } from '@/lib/date-utils';
 import { CONTENT_FORMAT_EMOJIS } from '@/helpers/content-format';
 
 interface AddPlanItemModalProps {
@@ -180,15 +180,7 @@ export function AddPlanItemModal({
         onClose();
     };
 
-    const dayNames: Record<number, string> = {
-        1: 'Segunda',
-        2: 'Terça',
-        3: 'Quarta',
-        4: 'Quinta',
-        5: 'Sexta',
-        6: 'Sábado',
-        7: 'Domingo',
-    };
+    const dayLabel = getDayName(dayOfWeek);
 
     return (
         <Modal
@@ -202,7 +194,7 @@ export function AddPlanItemModal({
                     <div className="flex items-center justify-between">
                         <p className="text-sm text-blue-700">
                             <strong>Data:</strong> {formatFullDate(selectedDate)} (
-                            {dayNames[dayOfWeek] || `Dia ${dayOfWeek}`})
+                            {dayLabel || `Dia ${dayOfWeek}`})
                         </p>
                         {pillarSuggestion && (
                             <PillarBadge pillar={pillarSuggestion} size="sm" />

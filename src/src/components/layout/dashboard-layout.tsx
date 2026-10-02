@@ -9,6 +9,7 @@ import { Link } from 'react-router-dom';
 import {
     LayoutDashboard,
     CalendarCheck,
+    CalendarDays,
     Layers,
     FileText,
     Clapperboard,
@@ -121,6 +122,11 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                         name: 'Canais',
                         href: workspacePath(workspaceId, 'settings/channels'),
                         icon: Radio,
+                    },
+                    {
+                        name: 'Dias',
+                        href: workspacePath(workspaceId, 'settings/planning'),
+                        icon: CalendarDays,
                     },
                     {
                         name: 'Membros',

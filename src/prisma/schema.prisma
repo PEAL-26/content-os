@@ -143,6 +143,7 @@ model Workspace {
   channelConfig ChannelConfig[]
   articles      Article[]
   weeklyPlans   WeeklyPlan[]
+  planningConfigs PlanningConfig[]
   tags          Tag[]
   aiSystemPrompts AISystemPrompt[]
 
@@ -213,6 +214,7 @@ model PillarConfig {
   workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   articles  Article[]
   planItems PlanItem[]
+  suggestedForDays PlanningConfig[]
 
   @@unique([workspaceId, pillar])
   @@map("pillar_configs")
@@ -475,6 +477,35 @@ model PlanItem {
   channel      ChannelConfig? @relation(fields: [channelId], references: [id])
 
   @@map("plan_items")
+}
+
+// =============================================================================
+// PLANNING CONFIG (Configuração dos dias de planeamento)
+// Uma linha por dia da semana (1=Segunda ... 7=Domingo).
+//
+// `isActive` NÃO é um bloqueio: a grelha mostra sempre os 7 dias e todos
+// aceitam items. Activar um dia é destacá-lo e atribuir-lhe um pilar
+// sugerido. Desactivar um dia não apaga nem esconde items já agendados.
+//
+// `suggestedPillarId` aponta para pillar_configs.id (UUID) e NÃO para o enum
+// ContentPillar — o enum vive na linha do pilar. Ver planning-config.service,
+// que faz o join e devolve os dois.
+// =============================================================================
+
+model PlanningConfig {
+  id          String @id @default(uuid())
+  workspaceId String
+  dayOfWeek   Int // 1=Segunda ... 7=Domingo
+  isActive    Boolean @default(true)
+  suggestedPillarId String? // Pilar sugerido para este dia (opcional)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace       Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  suggestedPillar PillarConfig?  @relation(fields: [suggestedPillarId], references: [id])
+
+  @@unique([workspaceId, dayOfWeek])
+  @@map("planning_configs")
 }
 
 // =============================================================================

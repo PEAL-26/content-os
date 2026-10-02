@@ -4,22 +4,27 @@ import { ChannelBadge } from '@/components/channels/channel-badge';
 import type { PlanItemWithRelations } from '@/services/weekly-plan.service';
 import type { ContentPillar } from '@/types/database';
 import { CONTENT_FORMAT_EMOJIS } from '@/helpers/content-format';
+import { getDayName } from '@/lib/date-utils';
+
+/** Um dia a listar no checklist. Só o número e o pilar — os nomes resolvem-se
+ *  via date-utils, que é a única fonte de nomes de dia em PT. */
+export interface ChecklistDay {
+    dayOfWeek: number;
+    pillar: ContentPillar | null;
+}
 
 interface WeekChecklistProps {
     items: PlanItemWithRelations[];
+    /** Dias a listar — configuráveis, não uma constante de módulo. */
+    days: ChecklistDay[];
     onMarkPublished: (itemId: string) => void;
     onRemove: (itemId: string) => void;
     isLoading?: boolean;
 }
 
-const ACTIVE_DAYS = [
-    { dayOfWeek: 1, shortName: 'Seg', fullName: 'Segunda-feira', pillar: 'P1_EDUCATION' as ContentPillar },
-    { dayOfWeek: 3, shortName: 'Qua', fullName: 'Quarta-feira', pillar: 'P2_USE_CASES' as ContentPillar },
-    { dayOfWeek: 5, shortName: 'Sex', fullName: 'Sexta-feira', pillar: 'P3_CONVERSION' as ContentPillar },
-];
-
 export function WeekChecklist({
     items,
+    days,
     onMarkPublished,
     onRemove,
     isLoading = false,
@@ -51,7 +56,7 @@ export function WeekChecklist({
     if (isLoading) {
         return (
             <div className="space-y-4">
-                {ACTIVE_DAYS.map((day) => (
+                {days.map((day) => (
                     <div
                         key={day.dayOfWeek}
                         className="rounded-lg border border-gray-200 bg-white p-4"
@@ -82,7 +87,7 @@ export function WeekChecklist({
 
     return (
         <div className="space-y-4">
-            {ACTIVE_DAYS.map((day) => {
+            {days.map((day) => {
                 const dayItems = getItemsForDay(day.dayOfWeek);
                 const publishedCount = dayItems.filter(
                     (i) => i.status === 'PUBLISHED'
@@ -106,9 +111,11 @@ export function WeekChecklist({
                                         isComplete ? 'text-green-700' : 'text-gray-900'
                                     }`}
                                 >
-                                    {day.fullName}
+                                    {getDayName(day.dayOfWeek)}
                                 </span>
-                                <PillarBadge pillar={day.pillar} size="sm" />
+                                {day.pillar && (
+                                    <PillarBadge pillar={day.pillar} size="sm" />
+                                )}
                             </div>
                             <div className="flex items-center gap-2">
                                 {totalCount > 0 ? (

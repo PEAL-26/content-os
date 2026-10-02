@@ -50,6 +50,9 @@ const WorkspaceSettingsPage = lazy(() =>
 const AISettingsPage = lazy(() =>
     import('@/pages/settings/ai-settings').then((m) => ({ default: m.AISettingsPage }))
 );
+const PlanningSettingsPage = lazy(() =>
+    import('@/pages/settings/planning-settings').then((m) => ({ default: m.PlanningSettingsPage }))
+);
 
 function PlaceholderPage({ title }: { title: string }) {
     return (
@@ -235,6 +238,20 @@ export function App() {
                                     <DashboardLayout>
                                         <SettingsLayout>
                                             <ProductsPage />
+                                        </SettingsLayout>
+                                    </DashboardLayout>
+                                </ProtectedWorkspaceRoute>
+                            }
+                        />
+
+                        {/* Antes de /settings/:section, ou o catch-all apanha-o */}
+                        <Route
+                            path="/:workspaceId/settings/planning"
+                            element={
+                                <ProtectedWorkspaceRoute>
+                                    <DashboardLayout>
+                                        <SettingsLayout>
+                                            <PlanningSettingsPage />
                                         </SettingsLayout>
                                     </DashboardLayout>
                                 </ProtectedWorkspaceRoute>

@@ -21,7 +21,6 @@ export interface AddPlanItemParams {
     pillarId?: string | null;
     channelId?: string | null;
     scheduledFor: Date;
-    dayOfWeek: number;
     notes?: string | null;
 }
 
@@ -104,7 +103,6 @@ export function useWeeklyPlan() {
                     pillarId: params.pillarId,
                     channelId: params.channelId,
                     scheduledFor: params.scheduledFor,
-                    dayOfWeek: params.dayOfWeek,
                     notes: params.notes,
                 });
 

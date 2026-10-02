@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { contentPieceService } from './content-piece.service';
 import { articleService } from './article.service';
 import { uploadAsset } from './publication.service';
+import { getDayOfWeekNumber } from '@/lib/date-utils';
 
 export interface WeeklyPlanData {
     id: string;
@@ -68,7 +69,6 @@ export interface CreatePlanItemInput {
     pillarId?: string | null;
     channelId?: string | null;
     scheduledFor: Date | string;
-    dayOfWeek: number;
     notes?: string | null;
     sortOrder?: number;
 }
@@ -80,7 +80,6 @@ export interface UpdatePlanItemInput {
     pillarId?: string | null;
     channelId?: string | null;
     scheduledFor?: Date | string;
-    dayOfWeek?: number;
     status?: PlanItemStatus;
     publishedAt?: Date | string | null;
     publishedUrl?: string | null;
@@ -296,6 +295,16 @@ export const weeklyPlanService = {
     },
 
     async createPlanItem(data: CreatePlanItemInput): Promise<PlanItemData> {
+        // dayOfWeek é derivado de scheduledFor e não aceitado do chamador.
+        // A coluna continua a existir porque o WeekColumn filtra por ela em
+        // memória, mas se fosse editável podia divergir de scheduledFor e
+        // mostrar o item na coluna errada.
+        const scheduledFor =
+            data.scheduledFor instanceof Date
+                ? data.scheduledFor
+                : new Date(data.scheduledFor);
+        const dayOfWeek = getDayOfWeekNumber(scheduledFor);
+
         const { data: result, error } = await supabase
             .from('plan_items')
             .insert({
@@ -307,14 +316,15 @@ export const weeklyPlanService = {
                 productId: data.productId || null,
                 pillarId: data.pillarId || null,
                 channelId: data.channelId || null,
-                scheduledFor:
-                    data.scheduledFor instanceof Date
-                        ? data.scheduledFor.toISOString()
-                        : data.scheduledFor,
-                dayOfWeek: data.dayOfWeek,
+                scheduledFor: scheduledFor.toISOString(),
+                dayOfWeek,
                 status: 'PLANNED',
                 notes: data.notes || null,
                 sortOrder: data.sortOrder || 0,
+                // Enviado explicitamente: plan_items.updatedAt é NOT NULL e o
+                // @updatedAt do Prisma não protege nada aqui, porque os writes
+                // vão pelo Supabase client e não pelo Prisma client.
+                updatedAt: new Date().toISOString(),
             })
             .select()
             .single();
@@ -341,12 +351,15 @@ export const weeklyPlanService = {
         if (data.pillarId !== undefined) updateData.pillarId = data.pillarId;
         if (data.channelId !== undefined) updateData.channelId = data.channelId;
         if (data.scheduledFor !== undefined) {
-            updateData.scheduledFor =
+            const scheduledFor =
                 data.scheduledFor instanceof Date
-                    ? data.scheduledFor.toISOString()
-                    : data.scheduledFor;
+                    ? data.scheduledFor
+                    : new Date(data.scheduledFor);
+            updateData.scheduledFor = scheduledFor.toISOString();
+            // dayOfWeek não é editável pelo chamador, mas se a data muda tem de
+            // accompanyar — senão o item passa a aparecer na coluna errada.
+            updateData.dayOfWeek = getDayOfWeekNumber(scheduledFor);
         }
-        if (data.dayOfWeek !== undefined) updateData.dayOfWeek = data.dayOfWeek;
         if (data.status !== undefined) updateData.status = data.status;
         if (data.publishedAt !== undefined) {
             updateData.publishedAt =

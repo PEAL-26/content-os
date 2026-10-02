@@ -1,27 +1,31 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { WeekColumn } from '@/components/planner/week-column';
 import { AddPlanItemModal, type AddItemData } from '@/components/planner/add-plan-item-modal';
 import { PublishConfirmModal } from '@/components/planner/publish-confirm-modal';
 import { PlannerSidebar } from '@/components/planner/planner-sidebar';
 import { useWeeklyPlan } from '@/hooks/use-weekly-plan';
+import { usePlanningConfig } from '@/hooks/use-planning-config';
 import { useWorkspaceStore } from '@/stores/workspace-store';
+import { workspacePath } from '@/lib/workspace-paths';
 import {
     formatWeekRange,
     getDayOfWeekNumber,
     createDateAtTime,
     isToday,
-    getSuggestedPillarForDay,
 } from '@/lib/date-utils';
 import type { ContentPillar } from '@/types/database';
 import {
     ChevronLeft,
     ChevronRight,
     Calendar,
+    Settings2,
 } from 'lucide-react';
 
 export function WeeklyPlannerPage() {
     const { currentWorkspace } = useWorkspaceStore();
+    const navigate = useNavigate();
     const {
         currentWeek,
         weekDays,
@@ -36,6 +40,11 @@ export function WeeklyPlannerPage() {
         removePlanItem,
         markAsPublished,
     } = useWeeklyPlan();
+    const {
+        activeDaysLabel,
+        isActiveDay: isConfiguredActiveDay,
+        getSuggestedPillarForDay,
+    } = usePlanningConfig();
 
     const [addModalOpen, setAddModalOpen] = useState(false);
     const [publishModalOpen, setPublishModalOpen] = useState(false);
@@ -60,10 +69,10 @@ export function WeeklyPlannerPage() {
 
         setIsAddingItem(true);
         try {
-            const dayOfWeek = getDayOfWeekNumber(selectedDay);
             const [hours, minutes] = itemData.scheduledTime.split(':').map(Number);
             const scheduledFor = createDateAtTime(selectedDay, hours, minutes);
 
+            // dayOfWeek não é enviado: o serviço deriva-o de scheduledFor.
             const success = await addPlanItem({
                 articleId: itemData.type === 'article' ? itemData.articleId : undefined,
                 contentPieceId:
@@ -73,7 +82,6 @@ export function WeeklyPlannerPage() {
                 pillarId: itemData.pillarId || undefined,
                 channelId: itemData.channelId || undefined,
                 scheduledFor,
-                dayOfWeek,
                 notes: itemData.notes || null,
             });
 
@@ -121,9 +129,31 @@ export function WeeklyPlannerPage() {
 
     const isCurrentWeek = weekDays.some((day) => isToday(day));
 
-    const getPillarSuggestionForDay = (dayOfWeek: number): ContentPillar | null => {
-        const pillar = getSuggestedPillarForDay(dayOfWeek);
-        return pillar as ContentPillar | null;
+    /**
+     * Dia a abrir quando o utilizador entra pela barra lateral em vez de
+     * clicar numa coluna.
+     *
+     * Antes era sempre `new Date()` — o item era agendado para hoje
+     * independentemente da semana visível e, se hoje não pertencesse a essa
+     * semana, nunca aparecia na grelha. Agora: hoje se estiver na semana,
+     * senão o primeiro dia activo dela.
+     */
+    const getDefaultDayForSidebar = (): Date => {
+        const today = new Date();
+        const todayInWeek = weekDays.some(
+            (day) =>
+                day.getFullYear() === today.getFullYear() &&
+                day.getMonth() === today.getMonth() &&
+                day.getDate() === today.getDate()
+        );
+
+        if (todayInWeek) return today;
+
+        const firstActiveDay = weekDays.find((day) =>
+            isConfiguredActiveDay(getDayOfWeekNumber(day))
+        );
+
+        return firstActiveDay ?? weekDays[0] ?? today;
     };
 
     return (
@@ -156,13 +186,29 @@ export function WeeklyPlannerPage() {
                         )}
                     </div>
 
-                    <div className="flex items-center gap-2 text-sm text-gray-500">
+                    <div className="flex items-center gap-3 text-sm text-gray-500">
                         <span className="flex items-center gap-1">
                             <span className="h-3 w-3 rounded bg-blue-100" />
-                            Segunda, Quarta, Sexta
+                            {activeDaysLabel()}
                         </span>
                         <span className="text-gray-300">|</span>
-                        <span>Dias activos por defeito</span>
+                        <span>Dias activos</span>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="gap-1 text-xs"
+                            onClick={() =>
+                                navigate(
+                                    workspacePath(
+                                        currentWorkspace?.id ?? '',
+                                        'settings/planning'
+                                    )
+                                )
+                            }
+                        >
+                            <Settings2 className="h-3 w-3" />
+                            Configurar dias
+                        </Button>
                     </div>
                 </div>
 
@@ -176,7 +222,8 @@ export function WeeklyPlannerPage() {
                     {weekDays.map((day) => {
                         const dayOfWeek = getDayOfWeekNumber(day);
                         const dayItems = getItemsForDay(dayOfWeek);
-                        const pillarSuggestion = getPillarSuggestionForDay(dayOfWeek);
+                        const pillarSuggestion =
+                            getSuggestedPillarForDay(dayOfWeek) as ContentPillar | null;
 
                         return (
                             <WeekColumn
@@ -184,6 +231,7 @@ export function WeeklyPlannerPage() {
                                 date={day}
                                 dayOfWeek={dayOfWeek}
                                 items={dayItems}
+                                isActiveDay={isConfiguredActiveDay(dayOfWeek)}
                                 suggestedPillar={pillarSuggestion}
                                 onAddItem={() => handleOpenAddModal(day)}
                                 onRemoveItem={handleRemoveItem}
@@ -207,7 +255,7 @@ export function WeeklyPlannerPage() {
                         workspaceId={currentWorkspace.id}
                         selectedDate={selectedDay}
                         dayOfWeek={getDayOfWeekNumber(selectedDay)}
-                        pillarSuggestion={getPillarSuggestionForDay(
+                        pillarSuggestion={getSuggestedPillarForDay(
                             getDayOfWeekNumber(selectedDay)
                         )}
                         isLoading={isAddingItem}
@@ -234,7 +282,7 @@ export function WeeklyPlannerPage() {
                 stats={stats}
                 targetPostsPerWeek={targetPostsPerWeek}
                 onAddPiece={() => {
-                    setSelectedDay(new Date());
+                    setSelectedDay(getDefaultDayForSidebar());
                     setAddModalOpen(true);
                 }}
             />
