@@ -305,9 +305,24 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                 </button>
             )}
 
+            {/*
+                 * `flex-1 min-w-0` em vez de `w-full`.
+                 *
+                 * Com `w-full` (100% da largura) MAIS a margem `ml-64`, o <main>
+                 * terminava 256px à direita do viewport e o documento tinha
+                 * scroll horizontal em TODAS as páginas — não só no planeador.
+                 * `ml-64` continua a ser preciso (a sidebar é `fixed` e está
+                 * fora do fluxo), mas com `flex-1` o algoritmo do flex desconta
+                 * a margem: o <main> ocupa exactamente o que resta.
+                 *
+                 * `min-w-0` é o que impede o leakage: sem ele, um descendente
+                 * com `min-w` largo (a grelha de 7 colunas do planeador)
+                 * estica o <main> inteiro e o overflow volta a escapar para a
+                 * página.
+                 */}
             <main
                 className={`
-                    min-h-screen transition-all duration-300 w-full
+                    min-h-screen min-w-0 flex-1 transition-all duration-300
                     ${sidebarOpen ? 'ml-64' : 'ml-0'}
                 `}
             >

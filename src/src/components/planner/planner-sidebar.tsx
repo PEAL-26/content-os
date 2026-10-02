@@ -13,6 +13,7 @@ import {
     AlertCircle,
     ChevronRight,
     Image,
+    PanelLeftClose,
 } from 'lucide-react';
 
 interface PlannerSidebarProps {
@@ -25,6 +26,8 @@ interface PlannerSidebarProps {
     };
     targetPostsPerWeek: number;
     onAddPiece: () => void;
+    /** Recolhe o painel para as 7 colunas da grelha respirarem. */
+    onCollapse: () => void;
 }
 
 export function PlannerSidebar({
@@ -32,6 +35,7 @@ export function PlannerSidebar({
     stats,
     targetPostsPerWeek,
     onAddPiece,
+    onCollapse,
 }: PlannerSidebarProps) {
     const { currentWorkspace } = useWorkspaceStore();
     const [unassignedPieces, setUnassignedPieces] = useState<ContentPieceWithRelations[]>([]);
@@ -71,12 +75,23 @@ export function PlannerSidebar({
     const formatIcons = CONTENT_FORMAT_EMOJIS;
 
     return (
-        <aside className="w-80 space-y-4 rounded-lg bg-white p-4 shadow-sm">
+        <aside className="h-full w-80 shrink-0 space-y-4 overflow-y-auto rounded-lg bg-white p-4 shadow-sm">
             <div className="border-b border-gray-200 pb-4">
-                <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
-                    <Calendar className="h-5 w-5 text-blue-500" />
-                    Semana
-                </h3>
+                <div className="flex items-start justify-between gap-2">
+                    <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
+                        <Calendar className="h-5 w-5 text-blue-500" />
+                        Semana
+                    </h3>
+                    <button
+                        type="button"
+                        onClick={onCollapse}
+                        title="Recolher painel"
+                        aria-label="Recolher painel lateral"
+                        className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+                    >
+                        <PanelLeftClose className="h-4 w-4" />
+                    </button>
+                </div>
                 <p className="mt-1 text-sm text-gray-500">
                     {formatWeekRange(currentWeek)}
                 </p>

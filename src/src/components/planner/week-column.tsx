@@ -1,10 +1,13 @@
-import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { PillarBadge } from '@/components/content/pillar-badge';
 import { PlanItemCard } from '@/components/planner/plan-item-card';
 import type { PlanItemWithRelations } from '@/services/weekly-plan.service';
 import type { ContentPillar } from '@/types/database';
-import { formatDayOfWeek, formatDayNumber } from '@/lib/date-utils';
+import {
+    formatDayOfWeek,
+    formatDayNumber,
+    getDayName,
+} from '@/lib/date-utils';
 import { Plus } from 'lucide-react';
 
 interface WeekColumnProps {
@@ -15,16 +18,26 @@ interface WeekColumnProps {
     isActiveDay?: boolean;
     suggestedPillar?: ContentPillar | null;
     onAddItem: () => void;
-    onRemoveItem: (itemId: string) => void;
-    onMarkPublished: (
-        itemId: string,
-        title: string,
-        scheduledFor: string
-    ) => void;
-    onViewContent?: (itemId: string) => void;
+    onItemClick: (item: PlanItemWithRelations) => void;
     isLoading?: boolean;
 }
 
+/**
+ * Uma coluna = um dia da semana.
+ *
+ * A estrutura é deliberadamente rígida para as linhas de separação alinham
+ * entre colunas:
+ *
+ *   1. cabeçalho — dia + data, com **altura fixa** (min-h), independente de
+ *      ter ou não badge;
+ *   2. barra do badge — só existe se houver pilar sugerido;
+ *   3. área de items — cresce, com scroll interno;
+ *   4. rodapé — botão de adicionar.
+ *
+ * O badge fica **abaixo** do `border-b` de propósito. Se ficasse dentro do
+ * cabeçalho, os dias sem badge (inactivos, ou sem pilar configurado) teriam
+ * um cabeçalho mais baixo e as linhas não alinhavam entre colunas.
+ */
 export function WeekColumn({
     date,
     dayOfWeek,
@@ -32,137 +45,89 @@ export function WeekColumn({
     isActiveDay = false,
     suggestedPillar,
     onAddItem,
-    onRemoveItem,
-    onMarkPublished,
-    onViewContent,
+    onItemClick,
     isLoading = false,
 }: WeekColumnProps) {
-    const [showQuickAdd, setShowQuickAdd] = useState(false);
-    const activeDay = isActiveDay;
-    const pillarSuggestion = suggestedPillar ?? null;
-    // Identifica a coluna para debugging e para a aria-label do botão.
-    const dayKey = `dia-${dayOfWeek}`;
-
     const dayName = formatDayOfWeek(date);
     const dayNumber = formatDayNumber(date);
-
-    const getItemTitle = (item: PlanItemWithRelations): string => {
-        if (item.contentPiece) {
-            return item.contentPiece.title || `Post ${item.contentPiece.format}`;
-        }
-        if (item.article) {
-            return item.article.title;
-        }
-        if (item.product) {
-            return item.product.name;
-        }
-        return 'Item';
-    };
+    const pillarSuggestion = suggestedPillar ?? null;
 
     return (
         <div
-            className={`flex flex-col rounded-lg border ${
-                activeDay
+            aria-label={`${getDayName(dayOfWeek)}, ${dayNumber}`}
+            className={`flex h-full min-w-0 flex-col overflow-hidden rounded-lg border ${
+                isActiveDay
                     ? 'border-blue-200 bg-white'
                     : 'border-gray-200 bg-gray-50/50'
-            } min-h-[400px]`}
+            }`}
         >
+            {/* 1. Cabeçalho — altura fixa, para as linhas alinhar */}
             <div
-                className={`flex flex-col items-center border-b px-2 py-3 ${
-                    activeDay ? 'border-blue-200' : 'border-gray-200'
+                className={`flex min-h-[76px] flex-col items-center justify-center border-b px-2 py-2 ${
+                    isActiveDay ? 'border-blue-200' : 'border-gray-200'
                 }`}
             >
                 <span
                     className={`text-xs font-medium uppercase ${
-                        activeDay ? 'text-blue-600' : 'text-gray-400'
+                        isActiveDay ? 'text-blue-600' : 'text-gray-400'
                     }`}
                 >
                     {dayName}
                 </span>
                 <span
-                    className={`text-2xl font-bold ${
-                        activeDay ? 'text-gray-900' : 'text-gray-400'
+                    className={`text-2xl font-bold leading-8 ${
+                        isActiveDay ? 'text-gray-900' : 'text-gray-400'
                     }`}
                 >
                     {dayNumber}
                 </span>
-                {pillarSuggestion && activeDay && (
-                    <div className="mt-2">
-                        <PillarBadge
-                            pillar={pillarSuggestion as ContentPillar}
-                            size="sm"
-                        />
-                    </div>
-                )}
             </div>
 
-            <div className="flex-1 space-y-2 overflow-y-auto p-2">
+            {/* 2. Badge do pilar sugerido — abaixo da linha de separação */}
+            {pillarSuggestion && isActiveDay && (
+                <div className="flex min-h-[32px] items-center justify-center border-b border-gray-100 px-2 py-1.5">
+                    <PillarBadge pillar={pillarSuggestion} size="sm" />
+                </div>
+            )}
+
+            {/*
+             * 3. Área de items — flex-1 + min-h-0 é o que permite ao scroll
+             * interno funcionar: sem min-h-0 o item não encolhe abaixo do
+             * conteúdo e transborda em vez de rolar.
+             */}
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2">
                 {items.length === 0 ? (
-                    <div className="flex h-24 items-center justify-center">
-                        <p className="text-center text-xs text-gray-400">
-                            Sem items<br />agendados
-                        </p>
-                    </div>
+                    <button
+                        type="button"
+                        onClick={onAddItem}
+                        className="flex h-12 w-full flex-col items-center justify-center gap-0.5 rounded-md text-xs text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+                    >
+                        <Plus className="h-3.5 w-3.5" />
+                        Adicionar
+                    </button>
                 ) : (
                     items.map((item) => (
                         <PlanItemCard
                             key={item.id}
                             item={item}
-                            onRemove={() => onRemoveItem(item.id)}
-                            onMarkPublished={() =>
-                                onMarkPublished(
-                                    item.id,
-                                    getItemTitle(item),
-                                    item.scheduledFor
-                                )
-                            }
-                            onViewContent={
-                                onViewContent
-                                    ? () => onViewContent(item.id)
-                                    : undefined
-                            }
+                            onClick={() => onItemClick(item)}
                         />
                     ))
                 )}
             </div>
 
-            <div className="border-t border-gray-200 p-2">
-                {showQuickAdd ? (
-                    <div className="space-y-2">
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={onAddItem}
-                            className="w-full"
-                            disabled={isLoading}
-                        >
-                            <Plus className="h-4 w-4" />
-                            Selecionar conteúdo
-                        </Button>
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setShowQuickAdd(false)}
-                            className="w-full text-xs"
-                        >
-                            Cancelar
-                        </Button>
-                    </div>
-                ) : (
-                    <button
-                        onClick={() => setShowQuickAdd(true)}
-                        data-day={dayKey}
-                        aria-label={`Adicionar item a ${formatDayOfWeek(date)}`}
-                        className={`flex w-full items-center justify-center gap-1 rounded-md py-2 text-sm transition-colors ${
-                            activeDay
-                                ? 'text-blue-600 hover:bg-blue-50'
-                                : 'text-gray-500 hover:bg-gray-100'
-                        }`}
-                    >
-                        <Plus className="h-4 w-4" />
-                        <span className="text-xs">Adicionar</span>
-                    </button>
-                )}
+            {/* 4. Rodapé — shrink-0 para a área de items não o esmagar */}
+            <div className="shrink-0 border-t border-gray-200 p-2">
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onAddItem}
+                    className="w-full"
+                    disabled={isLoading}
+                >
+                    <Plus className="h-4 w-4" />
+                    Adicionar
+                </Button>
             </div>
         </div>
     );
