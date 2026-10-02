@@ -18,8 +18,54 @@ import { markJobFailed } from './generation/job-store.js';
 export interface AiApiEnv {
     supabaseUrl: string;
     supabaseAnonKey: string;
-    /** Opcional: desativa a validação do token em dev (parity local). */
+    /**
+     * Só para o dev server do Vite (paridade local, RLS desligado). Numa
+     * Vercel Function isto é SEMPRE `false`: um endpoint de criação de jobs
+     * aberto porque falta uma env var seria pior do que estar em baixo.
+     */
     skipAuth?: boolean;
+}
+
+/** Fonte de env das Vercel Functions (`process.env`) e do plugin do Vite. */
+export type AiApiEnvSource = Record<string, string | undefined>;
+
+/**
+ * Resolve o `AiApiEnv` das Vercel Functions a partir do `process.env`.
+ *
+ * Auth: nunca deriva `skipAuth` da ausência de configuração. Env em falta dá
+ * `null` e o caller responde `500 SERVER_MISCONFIGURED` — o `enqueue` usava
+ * fazer o contrário (`skipAuth: !env...`), o que desligava a autenticação
+ * silenciosamente. `skipAuth` é passado à mão e só o dev o usa.
+ *
+ * Os nomes canónicos são sem `VITE_` (são lidos no servidor). O prefixo `VITE_`
+ * existe para injectar valores no bundle do browser; aceitamos ambos, por
+ * causa de deployments e `.env` já configurados só com `VITE_*`. A URL do
+ * projecto e a anon key não são segredos, por isso o fallback é seguro.
+ */
+export function resolveAiApiEnv(source: AiApiEnvSource): AiApiEnv | null {
+    const supabaseUrl = source.SUPABASE_URL ?? source.VITE_SUPABASE_URL ?? '';
+    const supabaseAnonKey =
+        source.SUPABASE_PUBLISHABLE_KEY ??
+        source.SUPABASE_ANON_KEY ??
+        source.VITE_SUPABASE_PUBLISHABLE_KEY ??
+        source.VITE_SUPABASE_ANON_KEY ??
+        '';
+
+    if (!supabaseUrl || !supabaseAnonKey) return null;
+    return { supabaseUrl, supabaseAnonKey };
+}
+
+/**
+ * Resposta para env em falta. Envolvida num try/catch pelo mesmo motivo do
+ * `handleAiEnqueue`: um `throw` de topo de módulo na Vercel devolve um
+ * FUNCTION_INVOCATION_FAILED sem corpo JSON, e a UI perde a mensagem.
+ */
+export function sendServerMisconfigured(res: ServerResponse): void {
+    sendJson(res, 500, {
+        ok: false,
+        error: 'SUPABASE_URL/SUPABASE_ANON_KEY não configurados no servidor.',
+        code: 'SERVER_MISCONFIGURED',
+    });
 }
 
 // ---------------------------------------------------------------

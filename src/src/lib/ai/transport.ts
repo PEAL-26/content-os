@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+import { getAccessToken } from '@/lib/supabase';
 import type { AIProviderConfigOptions } from './types';
 
 // =============================================================================
@@ -24,15 +24,6 @@ interface ApiResponse {
     text?: string;
     error?: string;
     code?: string;
-}
-
-async function getAccessToken(): Promise<string | null> {
-    try {
-        const { data } = await supabase.auth.getSession();
-        return data.session?.access_token ?? null;
-    } catch {
-        return null;
-    }
 }
 
 async function postJson<TBody>(url: string, body: TBody): Promise<ApiResponse> {

@@ -1,5 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { handleAiEnqueue } from '../../server/ai-api.js';
+import {
+    handleAiEnqueue,
+    resolveAiApiEnv,
+    sendServerMisconfigured,
+} from '../../server/ai-api.js';
 
 export const config = {
     runtime: 'nodejs',
@@ -16,13 +20,12 @@ export default async function handler(
     req: IncomingMessage,
     res: ServerResponse
 ): Promise<void> {
-    const env = {
-        supabaseUrl: process.env.VITE_SUPABASE_URL ?? '',
-        supabaseAnonKey: process.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? '',
-        skipAuth:
-            !process.env.VITE_SUPABASE_URL ||
-            !process.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-    };
+    // `skipAuth` fica a false (o default) — a autenticação é validada sempre.
+    const env = resolveAiApiEnv(process.env);
+    if (!env) {
+        sendServerMisconfigured(res);
+        return;
+    }
 
     await handleAiEnqueue(req, res, env);
 }

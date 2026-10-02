@@ -2,7 +2,12 @@ import 'dotenv/config';
 import type { Connect, Plugin } from 'vite';
 import { loadEnv } from 'vite';
 import type { AiApiEnv } from './ai-api.js';
-import { handleAiEnqueue, handleAiGenerate, handleAiTest } from './ai-api.js';
+import {
+    handleAiEnqueue,
+    handleAiGenerate,
+    handleAiTest,
+    resolveAiApiEnv,
+} from './ai-api.js';
 import { handleInngestWithPathCheck } from './generation/inngest.js';
 
 /**
@@ -16,12 +21,14 @@ export function apiAiDevPlugin(): Plugin {
         name: 'contentos-api-ai-dev',
         configureServer(server) {
             const env = loadEnv(server.config.mode, process.cwd(), '');
+            // Mesmo resolver das Vercel Functions, para o dev e a prod lerem as
+            // mesmas variáveis. Sem auth no dev (plano — tudo corre localmente,
+            // RLS off); em produção os MESMOS handlers correm em `api/ai/*` com
+            // `skipAuth: false` e o JWT validado.
+            const resolved = resolveAiApiEnv(env);
             const apiEnv: AiApiEnv = {
-                supabaseUrl: env.VITE_SUPABASE_URL ?? '',
-                supabaseAnonKey: env.VITE_SUPABASE_PUBLISHABLE_KEY ?? '',
-                // Dev local: sem auth (plano — tudo corre localmente, RLS off).
-                // Em produção os MESMOS handlers correm nas Vercel Functions
-                // `api/ai/*`, onde skipAuth=false e o JWT é validado.
+                supabaseUrl: resolved?.supabaseUrl ?? '',
+                supabaseAnonKey: resolved?.supabaseAnonKey ?? '',
                 skipAuth: server.config.mode !== 'production',
             };
 

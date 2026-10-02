@@ -16,3 +16,25 @@ export const supabase = createClient(
         },
     }
 );
+
+/**
+ * Token de acesso da sessão actual, para os `fetch` ao servidor próprio
+ * (`/api/ai/*`), que validam o JWT com o `verifyAuth` do servidor.
+ *
+ * Fica aqui — e não em cada caller — porque a sessão vive neste módulo. Havia
+ * uma cópia em `lib/ai/transport.ts` e o `generation-job.service.ts` (que
+ * chama `/api/ai/enqueue`) enviava o pedido sem header nenhum, o que só dava
+ * 401 em produção. Uma fonte só evita essa divergência.
+ *
+ * Devolve `null` em vez de lançar: quem chama decide se o header é obrigatório
+ * (o `enqueue` deixa o servidor responder 401) ou tolerante
+ * (`generate`/`test`).
+ */
+export async function getAccessToken(): Promise<string | null> {
+    try {
+        const { data } = await supabase.auth.getSession();
+        return data.session?.access_token ?? null;
+    } catch {
+        return null;
+    }
+}

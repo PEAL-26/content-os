@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+import { getAccessToken, supabase } from '@/lib/supabase';
 import type {
     GenerationJob,
     GenerationJobParams,
@@ -73,9 +73,19 @@ export const generationJobService = {
     async enqueue(
         input: EnqueueGenerationInput
     ): Promise<EnqueueGenerationResult> {
+        // O endpoint valida o JWT (verifyAuth) em produção, por isso o token tem
+        // de ir no header — sem ele devolvia 401 "Sem token de autenticação.".
+        // Não tratamos a falta de token como erro aqui: o pedido segue sem
+        // header e o 401 do servidor é a resposta correcta, acabada em
+        // `toJobError` como os restantes.
+        const token = await getAccessToken();
+
         const res = await fetch('/api/ai/enqueue', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
             body: JSON.stringify({
                 jobType: input.jobType,
                 workspaceId: input.workspaceId,

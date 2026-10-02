@@ -7,6 +7,7 @@
         "dev": "vite",
         "dev:inngest": "inngest-cli dev -u http://localhost:5173/api/inngest",
         "check:esm": "node scripts/check-esm-imports.mjs",
+        "probe:auth": "tsx scripts/probe-enqueue-auth.ts",
         "build": "npm run check:esm && prisma generate && tsc -b && vite build",
         "lint": "eslint .",
         "lint:fix": "eslint . --fix",
