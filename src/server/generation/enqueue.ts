@@ -166,6 +166,64 @@ async function withTransactionRetry<T>(
     }
 }
 
+// -----------------------------------------------------------------------------
+// Diagnóstico do NO_PROVIDER
+// -----------------------------------------------------------------------------
+
+/** Scope de providers: os do utilizador (globais) + os do workspace. */
+type ProviderScope = Prisma.AIProviderWhereInput['OR'];
+
+/**
+ * Explica *porque* não há provider utilizável, em vez de repetir "não tens
+ * nenhum provider configurado".
+ *
+ * A mensagem genérica escondeu um bug real durante horas: havia um provider com
+ * chave e modelos, mas com `workspaceId = ''` — logo não pertencia a nenhum
+ * scope e o count dava 0. A BD já rejeita scope vazio
+ * (`20261002101500_reject_empty_scope_on_ai_scoped_tables`), mas alguém pode
+ * reintroduzi-lo por fora de uma migration, e o mesmo se passa com providers sem
+ * chave, sem modelo activo ou inactivos. Quatro contagens no caminho de erro
+ * (que só corre quando a geração já ia falhar) valem a resposta certa.
+ */
+async function explainNoProvider(scope: ProviderScope): Promise<string> {
+    const [totalNoScope, semChave, semModelo, orfaos] = await Promise.all([
+        prisma.aIProvider.count({ where: { OR: scope } }),
+        prisma.aIProvider.count({
+            where: { OR: scope, apiKeyEncrypted: null },
+        }),
+        prisma.aIProvider.count({
+            where: {
+                OR: scope,
+                apiKeyEncrypted: { not: null },
+                models: { none: { isActive: true } },
+            },
+        }),
+        // Scope vazio: `''` não é NULL, por isso escapa a qualquer igualdade
+        // com um id real — o provider existe mas é invisível para toda a gente.
+        prisma.aIProvider.count({
+            where: { OR: [{ userId: '' }, { workspaceId: '' }] },
+        }),
+    ]);
+
+    const emDefinicoes = 'Definições de IA';
+
+    if (totalNoScope === 0) {
+        return orfaos > 0
+            ? `Nenhum provider de IA visível para este utilizador ou workspace. Há ${orfaos} provider(s) guardados sem dono (utilizador e workspace vazios), que não são visíveis para nenhum workspace — atribui-lhes o scope em ${emDefinicoes}.`
+            : `Nenhum provider de IA configurado para este utilizador ou workspace. Adiciona um provider em ${emDefinicoes}.`;
+    }
+
+    if (semChave > 0) {
+        return `Nenhum provider de IA com chave neste utilizador ou workspace: ${semChave} de ${totalNoScope} provider(s) ainda não têm chave de API. Configura-a em ${emDefinicoes}.`;
+    }
+
+    if (semModelo > 0) {
+        return `Nenhum provider de IA com modelo activo: ${semModelo} provider(s) com chave não têm nenhum modelo activo. Activa um modelo em ${emDefinicoes}.`;
+    }
+
+    return `Nenhum provider de IA activo neste utilizador ou workspace (${totalNoScope} configurado(s), todos inactivos). Activa um provider em ${emDefinicoes}.`;
+}
+
 /**
  * Cria o job + placeholders. Não envia o evento Inngest (quem chama envia).
  * Correr dentro de uma transação: se a criação falhar, nada fica a meio.
@@ -182,19 +240,25 @@ export async function enqueueGeneration(input: EnqueueInput): Promise<EnqueueRes
         throw new EnqueueError('Workspace não encontrado.', 'WORKSPACE_NOT_FOUND');
     }
 
-    // 1. Providers disponíveis (activos + chave) — sem isto não há geração.
+    // 1. Providers disponíveis (activos + chave + pelo menos um modelo activo) —
+    //    sem isto não há geração.
+    //
+    //    O scope tem de ser o MESMO do runtime (`loadAvailableProviders`): os
+    //    providers do utilizador E os do workspace. Um provider sem modelo
+    //    activo também conta como indisponível — passava este check e rebentava
+    //    no `pickModel` já depois do placeholder criado.
+    const scope = userId ? [{ userId }, { workspaceId }] : [{ workspaceId }];
+
     const providerCount = await prisma.aIProvider.count({
         where: {
             isActive: true,
             apiKeyEncrypted: { not: null },
-            OR: userId ? [{ userId }, { workspaceId }] : [{ workspaceId }],
+            models: { some: { isActive: true } },
+            OR: scope,
         },
     });
     if (providerCount === 0) {
-        throw new EnqueueError(
-            'Nenhum provider de IA configurado com chave. Adiciona um provider nas Definições de IA.',
-            'NO_PROVIDER'
-        );
+        throw new EnqueueError(await explainNoProvider(scope), 'NO_PROVIDER');
     }
 
     const jobId = randomUUID();

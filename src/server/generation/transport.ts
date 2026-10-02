@@ -44,13 +44,20 @@ export function createServerTransport(timeoutMs: number): GenerationTransport {
 
             return text;
         } catch (err) {
+            // O modelo e o endpoint entram na mensagem: um "Not Found" sem isto
+            // é impossível de diagnosticar (foi um modelCode com um hífen a
+            // menos que custou uma sessão de investigação). Nunca a chave.
+            const onde = `modelo ${model} em ${baseUrl}`;
+
             if (err instanceof APICallError) {
                 const status = err.statusCode ?? '?';
                 throw new Error(
-                    `O provider respondeu com erro ${status}${err.message ? `: ${err.message}` : ''}`
+                    `O provider respondeu ${status} (${onde})${err.message ? `: ${err.message}` : ''}`
                 );
             }
-            throw err;
+            throw new Error(
+                `${err instanceof Error ? err.message : String(err)} (${onde})`
+            );
         }
     };
 }

@@ -116,16 +116,31 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 // Autenticação — valida o JWT do Supabase no servidor
 // ---------------------------------------------------------------
 
-async function verifyAuth(
+/**
+ * Valida o JWT e devolve o `userId` — que não é decoração: o `enqueue` grava-o
+ * no job e é ele que dá ao runtime (`loadGenerationContext(workspaceId,
+ * userId)`) visibilidade sobre os providers **do utilizador**, que é onde vivem
+ * os providers criados em Definições de IA. Sem isto, qualquer provider de
+ * nível de utilizador era invisível e o enqueue respondia NO_PROVIDER.
+ *
+ * `skipAuth` (dev server do Vite) só relaxa a *rejeição*: o token continua a ser
+ * lido quando existe, para o `userId` resolver-se. Curto-circuitar antes de
+ * ler o token fazia o job nascer com `userId = null` e o NO_PROVIDER voltava
+ * (por providers de utilizador) mesmo depois de o bug estar corrigido.
+ */
+export async function verifyAuth(
     req: IncomingMessage,
     env: AiApiEnv
-): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
-    if (env.skipAuth) return { ok: true };
-
+): Promise<
+    | { ok: true; userId: string | null }
+    | { ok: false; status: number; error: string }
+> {
     const header = req.headers.authorization ?? '';
     const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
     if (!token) {
-        return { ok: false, status: 401, error: 'Sem token de autenticação.' };
+        return env.skipAuth
+            ? { ok: true, userId: null }
+            : { ok: false, status: 401, error: 'Sem token de autenticação.' };
     }
 
     const sb = createClient(env.supabaseUrl, env.supabaseAnonKey, {
@@ -134,9 +149,12 @@ async function verifyAuth(
 
     const { data, error } = await sb.auth.getUser(token);
     if (error || !data.user) {
+        // Em dev não rebentamos o pedido (o modo POC aceita tokens velhos),
+        // mas também não inventamos um userId.
+        if (env.skipAuth) return { ok: true, userId: null };
         return { ok: false, status: 401, error: 'Sessão inválida ou expirada.' };
     }
-    return { ok: true };
+    return { ok: true, userId: data.user.id };
 }
 
 // ---------------------------------------------------------------
@@ -503,6 +521,9 @@ export async function handleAiEnqueue(
         const created = await enqueueGeneration({
             jobType: envelope.data.jobType,
             workspaceId: envelope.data.workspaceId,
+            // Sem isto o job nascia com `userId = null` e nem a validação de
+            // providers nem o runtime viam os providers do utilizador.
+            userId: auth.userId,
             params: paramsValidation.data,
             targets: envelope.data.targets,
         });

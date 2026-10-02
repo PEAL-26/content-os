@@ -1,4 +1,6 @@
 import { getAccessToken, supabase } from '@/lib/supabase';
+import { createJobsChannelRegistry } from '@/services/generation-jobs-channel';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import type {
     GenerationJob,
     GenerationJobParams,
@@ -64,6 +66,23 @@ function normalizeJob(row: Record<string, unknown> | null): GenerationJob | null
     if (!row) return null;
     return row as unknown as GenerationJob;
 }
+
+// -----------------------------------------------------------------------------
+// Realtime — UM canal para `generation_jobs`, muitos listeners.
+//
+// O registry (canal partilhado + ref-count) vive em `generation-jobs-channel.ts`
+// e é injectado aqui. Não é abstracção gratuitária: `supabase.channel(topic)`
+// devolve o canal já existente quando o topic repete, e o `.on()` de um canal
+// já *joined* atira — com dois subscritores do mesmo alvo (a página de peças
+// tinha dois) isso crashava a app toda. Diagnóstico completo no registry.
+// -----------------------------------------------------------------------------
+
+const jobsChannel = createJobsChannelRegistry<GenerationJob>({
+    channel: (topic) => supabase.channel(topic),
+    // O canal chega aqui já tipado pelo registry (ver `JobsChannelFactory`).
+    removeChannel: (channel) =>
+        supabase.removeChannel(channel as RealtimeChannel),
+});
 
 export const generationJobService = {
     /**
@@ -159,31 +178,14 @@ export const generationJobService = {
     },
 
     /**
-     * Subscreve a um job específico (postgres_changes `id=eq.<jobId>`).
+     * Subscreve a um job específico (match por `job.id`).
      * Devolve a função para remover a subscrição.
      */
     subscribeToJob(
         jobId: string,
         onChange: (job: GenerationJob) => void
     ): () => void {
-        const channel = supabase
-            .channel(`generation-job-${jobId}`)
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'generation_jobs',
-                    filter: `id=eq.${jobId}`,
-                },
-                (payload) => {
-                    onChange(payload.new as unknown as GenerationJob);
-                }
-            )
-            .subscribe();
-        return () => {
-            void supabase.removeChannel(channel);
-        };
+        return jobsChannel.subscribe((job) => job.id === jobId, onChange);
     },
 
     /**
@@ -195,24 +197,11 @@ export const generationJobService = {
         onChange: (job: GenerationJob) => void
     ): () => void {
         if (targetIds.length === 0) return () => undefined;
-        const channel = supabase
-            .channel(`generation-jobs-${targetIds.join('-').slice(0, 90)}`)
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'generation_jobs',
-                    filter: `targetId=in.(${targetIds.join(',')})`,
-                },
-                (payload) => {
-                    onChange(payload.new as unknown as GenerationJob);
-                }
-            )
-            .subscribe();
-        return () => {
-            void supabase.removeChannel(channel);
-        };
+        const ids = new Set(targetIds);
+        return jobsChannel.subscribe(
+            (job) => !!job.targetId && ids.has(job.targetId),
+            onChange
+        );
     },
 };
 

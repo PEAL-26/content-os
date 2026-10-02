@@ -292,7 +292,10 @@ export function ArticleGeneratorModal({
 function parseEnqueueError(error: GenerationEnqueueError): string {
     switch (error.code) {
         case 'NO_PROVIDER':
-            return 'Ainda não tens nenhum provider de IA configurado com chave. Adiciona um nas Definições de IA antes de gerar.';
+            // O servidor explica *qual* a razão que falta (sem chave, sem modelo
+            // activo, scope vazio…) — uma mensagem fixa aqui escondia um
+            // provider com scope inválido durante horas.
+            return error.message;
         case 'DB_BUSY':
             return 'A base de dados está ocupada. Espera uns segundos e tenta gerar de novo.';
         case 'QUEUE_ERROR':

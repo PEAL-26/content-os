@@ -1,21 +1,32 @@
 // =============================================================================
 // Sonda ao path de autenticação do /api/ai/enqueue, sem browser e sem deploy.
 //
-// Cobre os quatro estados que o bug escondia:
+// Cobre os estados que os bugs escondiam:
 //   1. sem header          -> 401 UNAUTHORIZED ("Sem token de autenticação.")
 //   2. header com token    -> o servidor VALIDA o token (chega ao Supabase)
 //   3. env sem SUPABASE_URL-> 500 SERVER_MISCONFIGURED (nunca aberto)
 //   4. skipAuth (dev)      -> passa sem token
+//   5. userId              -> o `verifyAuth` devolve o id, e o `enqueueGeneration`
+//                              recebe-o. Sem isto os providers de Definições de
+//                              IA (nível de utilizador) eram invisíveis para o
+//                              check e para o runtime -> NO_PROVIDER a todas as
+//                              gerações.
+//   6. guardas de código   -> o `userId` continua a ser passado ao enqueue e o
+//                              pré-check continua a exigir modelo activo
 //
 // Uso: npx tsx scripts/probe-enqueue-auth.ts
+// Para o caso 5 com um token real, exporta PROBE_ACCESS_TOKEN (o access token
+// de uma sessão tua) antes de correr.
 // =============================================================================
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { readFileSync } from 'node:fs';
 import { Readable } from 'node:stream';
 import {
     handleAiEnqueue,
     resolveAiApiEnv,
     sendServerMisconfigured,
+    verifyAuth,
 } from '../server/ai-api.js';
 
 type Result = { status: number; body: Record<string, unknown> };
@@ -164,9 +175,58 @@ check(
 const skip = await run('4. skipAuth=true, sem header (modo dev)', {}, { ...env, skipAuth: true });
 check('não é 401', skip.status !== 401, true);
 
+// 5. `verifyAuth` tem de devolver o userId — é ele que dá ao enqueue/job o
+//    acesso aos providers de nível de utilizador.
+const noTokenDev = await verifyAuth(makeReq({}), { ...env, skipAuth: true });
+check('5a. dev sem token: userId é null (não inventado)', noTokenDev, {
+    ok: true,
+    userId: null,
+});
+
+const noTokenProd = await verifyAuth(makeReq({}), env);
+check('5b. prod sem token: rejeitado', noTokenProd.ok, false);
+
+const probeToken = process.env.PROBE_ACCESS_TOKEN ?? '';
+if (env.supabaseUrl && env.supabaseAnonKey && probeToken) {
+    const withToken = await verifyAuth(
+        makeReq({ authorization: `Bearer ${probeToken}` }),
+        env
+    );
+    check('5c. prod com token válido: userId é uma string', typeof withToken.ok === 'boolean' && withToken.ok && typeof withToken.userId === 'string' && withToken.userId.length > 0, true);
+
+    const withTokenDev = await verifyAuth(
+        makeReq({ authorization: `Bearer ${probeToken}` }),
+        { ...env, skipAuth: true }
+    );
+    check(
+        '5d. dev com token válido: resolve mesmo com skipAuth',
+        withTokenDev.ok === true && typeof withTokenDev.userId === 'string',
+        true
+    );
+} else {
+    console.log('\n5c/5d. sem PROBE_ACCESS_TOKEN — a resolução do userId com token real fica por correr.');
+}
+
+// 6. Guardas de código: o `userId` tem de continuar a ser passado ao enqueue
+//    (a linha que faltava e que fazia o NO_PROVIDER) e o pré-check tem de
+//    continuar a exigir um modelo activo.
+const apiSrc = readFileSync(new URL('../server/ai-api.ts', import.meta.url), 'utf8');
+check('6a. enqueueGeneration recebe userId', /enqueueGeneration\(\{[\s\S]*?userId:\s*auth\.userId/.test(apiSrc), true);
+
+const enqueueSrc = readFileSync(new URL('../server/generation/enqueue.ts', import.meta.url), 'utf8');
+check('6b. pré-check exige modelo activo', /models:\s*\{\s*some:\s*\{\s*isActive:\s*true\s*\}\s*\}/.test(enqueueSrc), true);
+// O scope é construction única partilhada pelo check e pelo diagnóstico, para
+// os dois não divergirem: tem de incluir utilizador E workspace.
+check('6c. scope = utilizador + workspace', /userId\s*\?\s*\[\{ userId \},\s*\{ workspaceId \}\]\s*:\s*\[\{ workspaceId \}\]/.test(enqueueSrc), true);
+check('6d. o check usa esse scope', /OR:\s*scope\b/.test(enqueueSrc), true);
+// O mesmo scope no runtime — se divergirem, o provider "passa" o check e morre
+// na geração (ou o contrário).
+const contextSrc = readFileSync(new URL('../server/generation/context.ts', import.meta.url), 'utf8');
+check('6e. runtime usa o mesmo scope', /OR:\s*userId\s*\?\s*\[\{ userId \},\s*\{ workspaceId \}\]\s*:\s*\[\{ workspaceId \}\]/.test(contextSrc), true);
+
 console.log(
     failures === 0
-        ? '\n[probe] OK — todos os estados de autenticação behaved como esperado.'
+        ? '\n[probe] OK — todos os estados de autenticação e o wiring do userId estão como esperado.'
         : `\n[probe] ${failures} verificação(ões) falharam.`
 );
 process.exit(failures === 0 ? 0 : 1);
