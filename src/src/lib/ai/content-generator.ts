@@ -92,7 +92,6 @@ async function generateSinglePiece(
             }),
         parse: (text) => parseGeneratedContent(format, text),
         maxAttempts: 2,
-        defaultMaxTokens: 4000,
         transport: callLLM,
     });
 

@@ -178,7 +178,6 @@ async function runNewArticle(
         buildSystem: () => fullSystem,
         buildPrompt: () => buildArticleUserPrompt(articleParams),
         parse: (text) => parseArticleResponse(text).article,
-        defaultMaxTokens: 8000,
         transport: createServerTransport(ARTICLE_TIMEOUT_MS),
     });
 
@@ -372,7 +371,6 @@ async function generatePieceInto(
         buildPrompt: () => storedPrompt ?? buildContext(params),
         parse: (text) => parseGeneratedContent(format, text),
         maxAttempts: 2,
-        defaultMaxTokens: 4000,
         transport: createServerTransport(PIECE_TIMEOUT_MS),
     });
 
@@ -671,7 +669,6 @@ async function writePromptForPiece(args: {
         buildPrompt: () => userPrompt,
         parse: (text) => parseWrittenPrompt(text),
         maxAttempts: 2,
-        defaultMaxTokens: 4000,
         transport: createServerTransport(PIECE_TIMEOUT_MS),
     });
 
@@ -759,7 +756,6 @@ async function runContentItem(
         buildPrompt: () => itemPrompt,
         parse: (text) => parseSingleItemResponse(text),
         maxAttempts: 2,
-        defaultMaxTokens: 1500,
         transport: createServerTransport(PIECE_TIMEOUT_MS),
     });
 
@@ -920,7 +916,6 @@ async function runVideoScript(
             if (script.title && script.hook && script.cta) return script;
             return null;
         },
-        defaultMaxTokens: 4000,
         transport: createServerTransport(PIECE_TIMEOUT_MS),
     });
 

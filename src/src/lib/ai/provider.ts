@@ -122,7 +122,11 @@ export interface GenerateWithFallbackOptions<T> {
     /** Atraso entre tentativas. Default 2000 ms. */
     retryDelayMs?: number;
     /**
-     * maxOutputTokens a usar quando o provider/modelo não define nos configs.
+     * `max_tokens` a usar quando o provider/modelo não define nos configs.
+     *
+     * `undefined` (default) NÃO envia o campo: o provider usa o limite do
+     * modelo e a geração não é truncada. Só defina isto se quiser um tecto
+     * deliberado e souber o preço desse corte.
      */
     defaultMaxTokens?: number;
     /**
@@ -165,7 +169,9 @@ export async function generateWithFallback<T>(
         parse,
         maxAttempts = 2,
         retryDelayMs = 2000,
-        defaultMaxTokens = 8000,
+        // Sem tecto por defeito: `max_tokens` fica undefined e o provider usa o
+        // limite do modelo (ver nota em `defaultMaxTokens`).
+        defaultMaxTokens,
         transport,
     } = options;
 
@@ -226,8 +232,12 @@ export async function generateWithFallback<T>(
                     prompt,
                     config: {
                         ...providerConfig.config,
+                        // `undefined` quando nem o model nem o job definem tecto:
+                        // o campo não é enviado e o provider usa o limite do modelo.
                         max_tokens:
-                            generateOptions.maxOutputTokens ?? defaultMaxTokens,
+                            generateOptions.maxOutputTokens ??
+                            defaultMaxTokens ??
+                            null,
                     },
                     headers: providerHeadersToRecord(provider.headers),
                 });

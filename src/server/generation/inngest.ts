@@ -39,12 +39,24 @@ export function isInngestRequest(url: string | undefined): boolean {
 /**
  * Handler do job. Guarda idempotente: jobs já concluídos não re-correm.
  * Falhas inesperadas propagam para o retry do Inngest (retries: 2).
+ *
+ * `timeouts.start` é obrigatório, não cosmético: sem ele um job que fica
+ * pendurado (provider que nunca responde, geração sem fim) fica em RUNNING
+ * para sempre — havia jobs com 7+ horas em RUNNING. O deadline converte o
+ * travado em retry, e o retry acaba em FAILED visível no job.
+ *
+ * `concurrency: 2` limita quantos jobs correm ao mesmo tempo. O plano free da
+ * NVIDIA degrada com concorrência (medido: 3 pedidos em paralelo → 73s/96s/127s
+ * para a mesma peça), por isso 2 em vez de 3. Dentro de um job, o
+ * `pLimit(3)` de `orchestration.ts` continua a paralelizar as peças.
  */
 export const generationFunction = inngest.createFunction(
     {
         id: 'contentos-generation-v1',
         name: 'Geração de conteúdo IA (artigos, peças, roteiros)',
         retries: 2,
+        concurrency: 2,
+        timeouts: { start: '15m' },
         triggers: [{ event: GENERATION_EVENT }],
     },
     async ({ event, runId }) => {

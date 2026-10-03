@@ -163,7 +163,7 @@ export async function verifyAuth(
 
 async function runGeneration(
     body: GenerateBody,
-    defaultMaxTokens: number,
+    defaultMaxTokens: number | undefined,
     timeoutMs: number
 ): Promise<string> {
     const { baseUrl, apiKey, model, system, prompt, config, headers } = body;
@@ -183,15 +183,28 @@ async function runGeneration(
         generateOptions.temperature = config.temperature;
     }
 
+    // Só envia `max_tokens` quando existe um tecto (ver nota em
+    // `server/generation/transport.ts`): é tecto de RESPOSTA, não de contexto,
+    // e omiti-lo devolve a geração completa (`finish_reason: stop`).
+    const maxOutputTokens = config?.max_tokens ?? defaultMaxTokens;
+    if (maxOutputTokens != null) {
+        generateOptions.maxOutputTokens = maxOutputTokens;
+    }
+
     try {
-        const { text } = await generateText({
+        const { text, finishReason } = await generateText({
             model: openai.chat(model),
             ...(system ? { system } : {}),
             prompt,
-            maxOutputTokens: config?.max_tokens ?? defaultMaxTokens,
             ...generateOptions,
             timeout: timeoutMs,
         });
+
+        if (finishReason === 'length') {
+            console.warn(
+                `[api/ai] ${model} truncou a resposta (finish=length, max_tokens=${maxOutputTokens}).`
+            );
+        }
 
         return text;
     } catch (err) {
@@ -253,7 +266,9 @@ export async function handleAiGenerate(
     }
 
     try {
-        const text = await runGeneration(validation.data, 8000, 120_000);
+        // Sem tecto de tokens por defeito: o provider usa o limite do modelo e
+        // o conteúdo não é truncado. O `timeout` é o tecto de segurança.
+        const text = await runGeneration(validation.data, undefined, 180_000);
         sendJson(res, 200, { ok: true, text });
     } catch (err) {
         const message = err instanceof Error ? err.message : 'Erro desconhecido ao gerar.';
@@ -319,11 +334,21 @@ export async function handleAiTest(
     }
 
     try {
+        // Sem `max_tokens`: num modelo de RACIOCÍNIO um tecto pequeno é
+        // totalmente consumido pelo raciocínio e o `content` sai vazio — o
+        // teste de conexão falhava mesmo com o modelo a funcionar (foi
+        // `max_tokens: 16` + `z-ai/glm-5.3-flash` a dar `finish: length`,
+        // `contentLen: 0`). O `timeout` de 30s é o tecto de segurança.
         const text = await runGeneration(
-            { ...validation.data, prompt: 'Responde apenas com: OK', config: { max_tokens: 16 } },
-            16,
+            { ...validation.data, prompt: 'Responde apenas com: OK', config: undefined },
+            undefined,
             30_000
         );
+        if (!text.trim()) {
+            throw new Error(
+                'O provider respondeu sem texto. Pode ser um tecto de tokens baixo ou um modelo que devolveu apenas raciocínio.'
+            );
+        }
         sendJson(res, 200, { ok: true, text });
     } catch (err) {
         const message = err instanceof Error ? err.message : 'Erro desconhecido ao testar.';

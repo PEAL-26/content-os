@@ -9,6 +9,8 @@
         "check:esm": "node scripts/check-esm-imports.mjs",
         "probe:auth": "tsx scripts/probe-enqueue-auth.ts",
         "probe:channels": "tsx scripts/probe-generation-jobs-channel.ts",
+        "probe:prompt-parse": "tsx scripts/probe-prompt-writer-parse.ts",
+        "fix:ai-state": "tsx scripts/fix-ai-generation-state.ts",
         "build": "npm run check:esm && prisma generate && tsc -b && vite build",
         "lint": "eslint .",
         "lint:fix": "eslint . --fix",

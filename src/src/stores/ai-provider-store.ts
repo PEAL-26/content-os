@@ -1,11 +1,12 @@
 import {
     aiProviderService,
     type AIProvider,
+    type AIProviderModel,
     type CreateCustomProviderInput,
     type UpdateProviderInput,
 } from '@/services/ai-provider.service';
 import { aiProviderKeyService } from '@/services/ai-provider-key.service';
-import { pickModel, providerHeadersToRecord } from '@/lib/ai/provider';
+import { providerHeadersToRecord } from '@/lib/ai/provider';
 import { resolveProviderConfig } from '@/lib/ai/resolver';
 import { testLLM } from '@/lib/ai/transport';
 import { create } from 'zustand';
@@ -26,6 +27,8 @@ interface AIProviderState {
     hydratedWorkspaceId: string | null;
 
     fetchProviders: (workspaceId?: string) => Promise<void>;
+    /** Refetch de um provider (com modelos e headers) — usado ao abrir o editor. */
+    fetchProviderById: (providerId: string) => Promise<AIProvider | null>;
     /** Hidrata os provedores uma vez, coalescendo chamadas concorrentes. */
     hydrateProviders: (workspaceId?: string) => Promise<void>;
     /** Mantido por compatibilidade — não requer password. */
@@ -60,7 +63,7 @@ interface AIProviderState {
     /** Testa a conexão por modelo (chave + modelo) via servidor próprio. */
     testConnection: (
         provider: AIProvider,
-        modelCode: string,
+        model: AIProviderModel,
         apiKey: string,
         baseUrl?: string | null,
         headers?: { key: string; value: string }[]
@@ -154,6 +157,28 @@ export const useAIProviderStore = create<AIProviderState>((set, get) => ({
                     : 'Erro ao carregar provedores';
             set({ isLoading: false, error });
         }
+    },
+
+    /**
+     * Refetch de um provider. Lê sempre da BD (não do array em memória) para
+     * que o editor abra com o estado real, mesmo que a lista esteja desactualizada
+     * — é o que garante "ver os modelos que já lá estão" em vez de um snapshot.
+     */
+    fetchProviderById: async (providerId: string) => {
+        const provider = await aiProviderService.getProviderById(providerId);
+        if (!provider) return null;
+
+        // Mantém a lista em sintonia com o que acabámos de ler, para o card não
+        // mostrar dados velhos depois de fechar o editor.
+        set({
+            providers: get().providers.some((p) => p.id === providerId)
+                ? get().providers.map((p) =>
+                      p.id === providerId ? provider : p
+                  )
+                : [...get().providers, provider],
+        });
+
+        return provider;
     },
 
     // Hidratação única por sessão + por workspace: chamadores concorrentes
@@ -321,8 +346,18 @@ export const useAIProviderStore = create<AIProviderState>((set, get) => ({
 
         try {
             await aiProviderKeyService.saveApiKey(providerRowId, key.trim());
+            const stored = key.trim();
             set({
-                apiKeys: { ...get().apiKeys, [providerRowId]: key.trim() },
+                apiKeys: { ...get().apiKeys, [providerRowId]: stored },
+                // O card decide se mostra "Remover chave" a partir de
+                // `provider.apiKeyEncrypted` (`ai-provider-card.tsx:43`). Sem isto
+                // ficava "Configurado" no estado mas sem botão para remover a
+                // chave — incoerente depois de guardar.
+                providers: get().providers.map((p) =>
+                    p.id === providerRowId
+                        ? { ...p, apiKeyEncrypted: stored, apiKeyIv: null }
+                        : p
+                ),
             });
             return { success: true };
         } catch (err) {
@@ -355,7 +390,7 @@ export const useAIProviderStore = create<AIProviderState>((set, get) => ({
 
     testConnection: async (
         provider: AIProvider,
-        modelCode: string,
+        model: AIProviderModel,
         apiKey: string,
         baseUrl?: string | null,
         headers?: { key: string; value: string }[]
@@ -363,18 +398,21 @@ export const useAIProviderStore = create<AIProviderState>((set, get) => ({
         if (!apiKey || apiKey.trim().length === 0) {
             return { success: false, error: 'API Key não pode estar vazia' };
         }
-        if (!modelCode) {
+        if (!model.modelCode) {
             return {
                 success: false,
-                error: 'Seleciona um modelo para testar a conexão',
+                error: 'Preenche o código do modelo para testar a conexão',
             };
         }
 
         try {
-            const modelRow = pickModel(provider, modelCode);
+            // O modelo vem pronto do formulário (pode ser uma linha nova, ainda
+            // não guardada). Antes usávamos `pickModel`, que quando não
+            // encontrava o código caía em `models[0]` — testava o modelo errado
+            // sem dizer nada.
             const resolved = resolveProviderConfig(
                 provider,
-                modelRow,
+                model,
                 apiKey.trim(),
                 baseUrl ? { baseUrl } : undefined
             );

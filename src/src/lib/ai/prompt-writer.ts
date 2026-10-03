@@ -298,6 +298,101 @@ export function buildPromptWriterUserPrompt(
 // -----------------------------------------------------------------------------
 
 /**
+ * Valores-placeholder típicos de um esqueleto de schema (`"string"`, `"texto"`,
+ * `"número"`, …). Um prompt real nunca é um JSON só com isto.
+ */
+const PLACEHOLDER_LEAVES = new Set([
+    'string',
+    'strings',
+    'texto',
+    'text',
+    'exemplo',
+    'ex.',
+    'exemplos',
+    'numero',
+    'número',
+    'number',
+    'integer',
+    'int',
+    'float',
+    'boolean',
+    'bool',
+    'true',
+    'false',
+    'null',
+    'none',
+    'nada',
+    'array',
+    'lista',
+    'list',
+    'objeto',
+    'object',
+    'a definir',
+    'a preencher',
+    'x',
+    'y',
+    'z',
+]);
+
+function isPlaceholderLeaf(v: unknown): boolean {
+    if (typeof v === 'number' || typeof v === 'boolean') return true;
+    if (typeof v !== 'string') return false;
+    return PLACEHOLDER_LEAVES.has(v.trim().toLowerCase());
+}
+
+/**
+ * Detecta a resposta em que o modelo devolve o ESQUELETO do formato em vez do
+ * prompt pedido — por exemplo:
+ *
+ * ```json
+ * { "hook": "string", "body": "string", "cta": "string", "hashtags": ["string"] }
+ * ```
+ *
+ * Ocorre de forma intermitente nos modelos de raciocínio (o `nemotron-3-ultra`
+ * alterna entre escrever o prompt e devolver o schema). Antes disto o parse
+ * aceitava o esqueleto como prompt válido: o `maxAttempts: 2` nunca disparava
+ * porque o parse "passava", e o esqueleto era gravado em
+ * `content_generation_prompts` e aberto ao utilizador como se fosse o prompt.
+ *
+ * Rejeitar aqui devolve `null` — o que reativa o retry e, se também falhar, o
+ * retry de provider. O erro visível passa a ser "a IA não devolveu um prompt
+ * válido" em vez de um prompt inutilizável.
+ *
+ * Só rejeita JSON cujas folhas são TODAS placeholders: um prompt legítimo é
+ * markdown e nem sequer parseia como JSON, logo não há falso positivo.
+ */
+function looksLikeSchemaSkeleton(text: string): boolean {
+    const trimmed = text.trim().replace(/^```[a-zA-Z0-9_-]*[ \t\r]*\n?|```$/g, '').trim();
+    if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return false;
+
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(trimmed);
+    } catch {
+        return false;
+    }
+
+    let leaves = 0;
+    let placeholders = 0;
+    const walk = (node: unknown): void => {
+        if (Array.isArray(node)) {
+            node.forEach(walk);
+            return;
+        }
+        if (node && typeof node === 'object') {
+            Object.values(node as Record<string, unknown>).forEach(walk);
+            return;
+        }
+        leaves += 1;
+        if (isPlaceholderLeaf(node)) placeholders += 1;
+    };
+    walk(parsed);
+
+    // Tem de haver folhas e ser TODO placeholder.
+    return leaves > 0 && placeholders === leaves;
+}
+
+/**
  * Remove cercas de código e meta-comentário envelope, devolve o prompt.
  *
  * Tolerante de propósito: mesmo com o system prompt a proibir cercas e
@@ -332,6 +427,8 @@ export function parseWrittenPrompt(text: string): string | null {
     );
 
     out = out.trim();
+
+    if (looksLikeSchemaSkeleton(out)) return null;
 
     if (out.length < 40) return null;
     return out;

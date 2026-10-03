@@ -7,7 +7,10 @@ import {
 
 export const config = {
     runtime: 'nodejs',
-    maxDuration: 120,
+    // Alinhado com `vercel.json` (300 = máximo do plano Hobby). O handler tem
+    // timeout de 180s, portanto tem de ser >= a isso ou a Vercel mata a função
+    // antes do nosso próprio timeout — o utilizador veria 504 sem mensagem.
+    maxDuration: 300,
 };
 
 /**

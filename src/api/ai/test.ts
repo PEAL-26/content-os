@@ -7,6 +7,7 @@ import {
 
 export const config = {
     runtime: 'nodejs',
+    // O handler tem timeout de 30s; 60 dá margem sem Mundo a correr mais.
     maxDuration: 60,
 };
 

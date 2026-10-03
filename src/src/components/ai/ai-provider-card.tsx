@@ -83,7 +83,25 @@ export function AIProviderCard({
 
                 {provider.models && provider.models.length > 0 && (
                     <p className="truncate text-xs text-gray-400 mt-0.5">
-                        Modelos: {provider.models.map(m => m.displayName).join(', ')}
+                        Modelos:{' '}
+                        {(() => {
+                            const active = provider.models.filter(m => m.isActive);
+                            const inactive = provider.models.length - active.length;
+                            const names = active
+                                .map(m => m.displayName)
+                                .join(', ');
+                            return (
+                                <>
+                                    {names || 'nenhum activo'}
+                                    {inactive > 0 && (
+                                        <span className="text-amber-600">
+                                            {' '}
+                                            (+{inactive} inactivo{inactive > 1 ? 's' : ''})
+                                        </span>
+                                    )}
+                                </>
+                            );
+                        })()}
                     </p>
                 )}
             </div>

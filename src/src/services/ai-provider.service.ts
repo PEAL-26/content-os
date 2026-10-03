@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
 import { v4 as uuidv4 } from 'uuid';
+import { diffHeaders, diffModels } from '@/lib/ai/provider-diff';
 import type { AIProviderConfigOptions } from '@/lib/ai/types';
 
 // =============================================================================
@@ -72,8 +73,22 @@ export interface UpdateProviderInput {
     description?: string;
     config?: AIProviderConfigOptions | null;
     isActive?: boolean;
-    models?: { displayName: string; modelCode: string; config?: AIProviderConfigOptions | null }[];
-    headers?: { key: string; value: string }[];
+    models?: ModelInput[];
+    headers?: HeaderInput[];
+}
+
+/** Modelo como chega do formulário de edição. `isActive` é sempre explícito. */
+export interface ModelInput {
+    displayName: string;
+    modelCode: string;
+    config?: AIProviderConfigOptions | null;
+    isActive: boolean;
+}
+
+/** Header como chega do formulário de edição. */
+export interface HeaderInput {
+    key: string;
+    value: string;
 }
 
 // =============================================================================
@@ -456,11 +471,28 @@ export const aiProviderService = {
         return this.getProviderById(provider.id) as Promise<AIProvider>;
     },
 
+    /**
+     * Actualiza um provider fazendo **diff** de modelos e headers.
+     *
+     * A versão anterior apagava todas as linhas e re-inseria. Com modelos
+     * editáveis pelo utilizador isso deixou de ser aceitável: se o `INSERT`
+     * falhasse depois do `DELETE`, o provider ficava sem nenhum modelo e
+     * `enqueue` passava a falhar toda a geração com `NO_PROVIDER`. O diff
+     * também preserva `id`, `createdAt` e `isActive` do que não mudou.
+     *
+     * A chave do diff é o `modelCode` (resp. `key` nos headers) — é o que o
+     * resto do sistema usa para referenciar um modelo. O formulário garante
+     * que não há duplicados dentro do mesmo provider.
+     */
     async updateProvider(
         providerId: string,
         input: UpdateProviderInput
     ): Promise<AIProvider> {
-        // Update provider fields
+        const current = await this.getProviderById(providerId);
+        if (!current) {
+            throw new Error('Provedor não encontrado.');
+        }
+
         const updateData: Record<string, unknown> = {
             updatedAt: new Date().toISOString(),
         };
@@ -483,69 +515,113 @@ export const aiProviderService = {
             );
         }
 
-        // Replace models if provided
         if (input.models !== undefined) {
-            // Delete existing models
-            await supabase
-                .from('ai_provider_models')
-                .delete()
-                .eq('providerId', providerId);
+            await this.syncModels(providerId, current.models, input.models);
+        }
 
-            // Insert new models
-            if (input.models.length > 0) {
-                const modelsToInsert = input.models.map((m) => ({
+        if (input.headers !== undefined) {
+            await this.syncHeaders(providerId, current.headers, input.headers);
+        }
+
+        return this.getProviderById(providerId) as Promise<AIProvider>;
+    },
+
+    /** Aplica o diff de modelos: insert do novo, update do que mudou, delete do removido. */
+    async syncModels(
+        providerId: string,
+        existing: AIProviderModel[],
+        next: ModelInput[]
+    ): Promise<void> {
+        const diff = diffModels(existing, next);
+
+        // Inserts e updates ANTES dos deletes: se um write falhar, nenhum modelo
+        // existente foi perdido. (Na versão anterior apagava-se tudo primeiro e
+        // um `INSERT` falhado deixava o provider sem modelos — o que fazia o
+        // `enqueue` falhar toda a geração com `NO_PROVIDER`.)
+        if (diff.insert.length > 0) {
+            const { error } = await supabase.from('ai_provider_models').insert(
+                diff.insert.map((m) => ({
                     id: uuidv4(),
                     providerId,
                     displayName: m.displayName,
                     modelCode: m.modelCode,
                     config: m.config ?? null,
-                    isActive: true,
+                    isActive: m.isActive,
                     createdAt: new Date().toISOString(),
-                }));
-
-                const { error: modelsError } = await supabase
-                    .from('ai_provider_models')
-                    .insert(modelsToInsert);
-
-                if (modelsError) {
-                    throw new Error(
-                        `Erro ao atualizar modelos: ${modelsError.message}`
-                    );
-                }
+                }))
+            );
+            if (error) {
+                throw new Error(`Erro ao adicionar modelos: ${error.message}`);
             }
         }
 
-        // Replace headers if provided
-        if (input.headers !== undefined) {
-            // Delete existing headers
-            await supabase
-                .from('ai_provider_headers')
-                .delete()
-                .eq('providerId', providerId);
+        for (const model of diff.update) {
+            const { error } = await supabase
+                .from('ai_provider_models')
+                .update({
+                    displayName: model.displayName,
+                    config: model.config,
+                    isActive: model.isActive,
+                })
+                .eq('id', model.id);
+            if (error) {
+                throw new Error(`Erro ao atualizar modelos: ${error.message}`);
+            }
+        }
 
-            // Insert new headers
-            if (input.headers.length > 0) {
-                const headersToInsert = input.headers.map((h) => ({
+        for (const id of diff.remove) {
+            const { error } = await supabase
+                .from('ai_provider_models')
+                .delete()
+                .eq('id', id);
+            if (error) {
+                throw new Error(`Erro ao remover modelos: ${error.message}`);
+            }
+        }
+    },
+
+    /** Aplica o diff de headers, com a mesma estratégia dos modelos. */
+    async syncHeaders(
+        providerId: string,
+        existing: AIProviderHeader[],
+        next: HeaderInput[]
+    ): Promise<void> {
+        const diff = diffHeaders(existing, next);
+
+        if (diff.insert.length > 0) {
+            const { error } = await supabase.from('ai_provider_headers').insert(
+                diff.insert.map((h) => ({
                     id: uuidv4(),
                     providerId,
                     key: h.key,
                     value: h.value,
                     createdAt: new Date().toISOString(),
-                }));
-
-                const { error: headersError } = await supabase
-                    .from('ai_provider_headers')
-                    .insert(headersToInsert);
-
-                if (headersError) {
-                    throw new Error(
-                        `Erro ao atualizar headers: ${headersError.message}`
-                    );
-                }
+                }))
+            );
+            if (error) {
+                throw new Error(`Erro ao adicionar headers: ${error.message}`);
             }
         }
 
-        return this.getProviderById(providerId) as Promise<AIProvider>;
+        for (const header of diff.update) {
+            const { error } = await supabase
+                .from('ai_provider_headers')
+                .update({ value: header.value })
+                .eq('id', header.id);
+            if (error) {
+                throw new Error(`Erro ao atualizar headers: ${error.message}`);
+            }
+        }
+
+        for (const id of diff.remove) {
+            const { error } = await supabase
+                .from('ai_provider_headers')
+                .delete()
+                .eq('id', id);
+            if (error) {
+                throw new Error(`Erro ao remover headers: ${error.message}`);
+            }
+        }
     },
 
     async deleteProvider(id: string): Promise<void> {

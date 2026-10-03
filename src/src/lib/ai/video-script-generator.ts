@@ -67,7 +67,6 @@ export async function generateVideoScript(
             if (script.title && script.hook && script.cta) return script;
             return null;
         },
-        defaultMaxTokens: 4000,
         transport: callLLM,
     });
 

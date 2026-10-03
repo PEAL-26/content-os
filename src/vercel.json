@@ -3,7 +3,10 @@
     "framework": "vite",
     "functions": {
         "api/ai/*.ts": {
-            "maxDuration": 120
+            "maxDuration": 300
+        },
+        "api/inngest.ts": {
+            "maxDuration": 300
         }
     },
     "rewrites": [

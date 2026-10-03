@@ -49,7 +49,6 @@ export async function generateArticle(
         buildSystem: () => fullSystem,
         buildPrompt: () => buildArticleUserPrompt(params),
         parse: (text) => parseArticleResponse(text).article,
-        defaultMaxTokens: 8000,
         transport: callLLM,
     });
 

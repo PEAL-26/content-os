@@ -18,6 +18,13 @@ export function DefaultProviderSection({
     const activeProviders = providers.filter(p => p.isActive && apiKeys[p.id]);
     const selectedProvider = activeProviders.find(p => p.id === defaultProviderId);
     const availableModels = selectedProvider?.models?.filter(m => m.isActive) ?? [];
+    // O modelo default pode ter sido desactivado ou removido no editor — nesse
+    // caso `find` dá undefined e a linha seguinte imprimia literalmente
+    // "undefined". O runtime não quebra (`pickModel` cai no primeiro activo),
+    // mas o utilizador vê um estado que não corresponde ao que está guardado.
+    const defaultModelName = defaultModelCode
+        ? (availableModels.find(m => m.modelCode === defaultModelCode)?.displayName ?? null)
+        : null;
 
     const handleProviderChange = (providerRowId: string) => {
         const provider = activeProviders.find(p => p.id === providerRowId);
@@ -93,11 +100,19 @@ export function DefaultProviderSection({
 
             {defaultProviderId && defaultModelCode && (
                 <div className="mt-4 rounded-md bg-green-50 p-3">
-                    <p className="flex items-center gap-2 text-sm text-green-700">
+                    <p className="flex flex-wrap items-center gap-2 text-sm text-green-700">
                         <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
-                        Provedor padrão: <strong>{selectedProvider?.name}</strong> — Modelo: <strong>{availableModels.find(m => m.modelCode === defaultModelCode)?.displayName}</strong>
+                        Provedor padrão: <strong>{selectedProvider?.name}</strong> — Modelo:{' '}
+                        {defaultModelName ? (
+                            <strong>{defaultModelName}</strong>
+                        ) : (
+                            <strong className="font-normal italic">
+                                {defaultModelCode} (inactivo ou removido — a geração usa{' '}
+                                {availableModels[0]?.displayName ?? 'nenhum modelo'})
+                            </strong>
+                        )}
                     </p>
                 </div>
             )}

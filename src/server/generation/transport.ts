@@ -32,15 +32,35 @@ export function createServerTransport(timeoutMs: number): GenerationTransport {
             generateOptions.temperature = config.temperature;
         }
 
+        // `max_tokens` só é enviado quando configurado. OBRIGATÓRIO não o enviar
+        // por defeito: é um tecto na RESPOSTA (completion), não na janela de
+        // contexto, e não tem nada a ver com o tamanho do contexto do modelo.
+        // Verificar que `undefined` não trunca: sem o campo, o provider gera até
+        // `finish_reason: stop` (medido em z-ai/glm-5.3-flash e
+        // nvidia/nemotron-3-ultra-550b-a55b — `finish: stop`, artigo completo).
+        // O tecto de segurança é o `timeout` abaixo, não o orçamento de tokens.
+        if (config?.max_tokens != null) {
+            generateOptions.maxOutputTokens = config.max_tokens;
+        }
+
         try {
-            const { text } = await generateText({
+            const { text, finishReason } = await generateText({
                 model: openai.chat(model),
                 ...(system ? { system } : {}),
                 prompt,
-                maxOutputTokens: config?.max_tokens ?? 8000,
                 ...generateOptions,
                 timeout: timeoutMs,
             });
+
+            // `length` = o provider cortou a resposta porque atingiu o tecto de
+            // `max_tokens`. Só acontece quando há tecto configurado, mas avisa:
+            // conteúdo truncado a meio pode falhar o parse e reportar
+            // "não foi possível interpretar" sem dizer porquê.
+            if (finishReason === 'length') {
+                console.warn(
+                    `[generation] ${model} truncou a resposta (finish=length, max_tokens=${config?.max_tokens}). Aumenca max_tokens ou limpa-o para usar o limite do modelo.`
+                );
+            }
 
             return text;
         } catch (err) {

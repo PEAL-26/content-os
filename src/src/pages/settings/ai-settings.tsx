@@ -1,13 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { AIProviderCard } from '@/components/ai/ai-provider-card';
 import { DefaultProviderSection } from '@/components/ai/default-provider-section';
-import { DefaultProviderModal } from '@/components/ai/default-provider-modal';
-import { CustomProviderModal } from '@/components/ai/custom-provider-modal';
+import {
+    ProviderEditorModal,
+    type ProviderSaveData,
+} from '@/components/ai/provider-editor-modal';
 import { SystemPromptsEditor } from '@/components/ai/system-prompts-editor';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAIProviders } from '@/hooks/use-ai-providers';
-import type { AIProviderConfigOptions } from '@/lib/ai/types';
 import type { AIProvider } from '@/services/ai-provider.service';
 import { useWorkspaceStore } from '@/stores/workspace-store';
 
@@ -19,18 +20,17 @@ export function AISettingsPage() {
         apiKeys,
         isLoading,
         error,
-        modalState,
+        editor,
         loadProviders,
-        openDefaultModal,
-        openCustomModal,
-        closeModal,
+        loadProvider,
+        openEditor,
+        closeEditor,
         handleSetDefault,
-        handleSaveDefaultApiKey,
-        handleCreateCustom,
-        handleUpdateCustom,
+        handleSave,
+        handleTestModel,
+        handleRemoveEditorApiKey,
         handleDelete,
         handleRemoveApiKey,
-        handleTestConnection,
         canDelete,
         isConfigured,
     } = useAIProviders();
@@ -50,15 +50,14 @@ export function AISettingsPage() {
         loadProviders();
     }, [loadProviders]);
 
-    const showFeedback = (message: string, tone: 'success' | 'error' = 'success') => {
-        setFeedbackMessage(message);
-        setFeedbackTone(tone);
-        setTimeout(() => setFeedbackMessage(null), 3000);
-    };
-
-    const handleDeleteClick = (provider: AIProvider) => {
-        setProviderToDelete(provider);
-    };
+    const showFeedback = useCallback(
+        (message: string, tone: 'success' | 'error' = 'success') => {
+            setFeedbackMessage(message);
+            setFeedbackTone(tone);
+            setTimeout(() => setFeedbackMessage(null), 3000);
+        },
+        []
+    );
 
     const handleConfirmDelete = async () => {
         if (!providerToDelete) return;
@@ -66,68 +65,49 @@ export function AISettingsPage() {
         const result = await handleDelete(providerToDelete);
         setIsDeleting(false);
 
-        if (result.success) {
-            showFeedback('Provedor eliminado com sucesso');
-        } else {
-            showFeedback(result.error || 'Erro ao eliminar provedor');
-        }
-
+        showFeedback(
+            result.success
+                ? 'Provedor eliminado com sucesso'
+                : result.error || 'Erro ao eliminar provedor',
+            result.success ? 'success' : 'error'
+        );
         setProviderToDelete(null);
     };
 
-    const handleRemoveKey = async (provider: AIProvider) => {
+    const handleKeyClick = async (provider: AIProvider) => {
         const result = await handleRemoveApiKey(provider);
-        if (result.success) {
-            showFeedback('Chave removida com sucesso');
-        } else {
-            showFeedback(result.error || 'Erro ao remover a chave', 'error');
-        }
+        showFeedback(
+            result.success
+                ? 'Chave removida com sucesso'
+                : result.error || 'Erro ao remover a chave',
+            result.success ? 'success' : 'error'
+        );
     };
 
-    const handleSaveDefaultModal = async (data: {
-        apiKey: string;
-        config: AIProviderConfigOptions;
-    }) => {
-        const result = await handleSaveDefaultApiKey(data);
-        if (result && result.success === false) {
-            showFeedback(result.error || 'Erro ao guardar a API Key');
-        } else {
-            showFeedback('API Key guardada com sucesso');
-        }
-    };
-
-    const handleSaveCustomModal = async (data: {
-        name: string;
-        baseUrl: string;
-        description?: string;
-        apiKey: string;
-        config: AIProviderConfigOptions;
-        models: {
-            displayName: string;
-            modelCode: string;
-            config: AIProviderConfigOptions;
-        }[];
-        headers: { key: string; value: string }[];
-    }): Promise<{ success: boolean; error?: string }> => {
+    const handleEditorSave = async (data: ProviderSaveData) => {
+        const isCreate = editor?.providerId === null;
         try {
-            let result;
-            if (modalState.provider) {
-                result = await handleUpdateCustom(data);
-            } else {
-                result = await handleCreateCustom(data, modalState.scope);
-            }
-
+            const result = await handleSave(data);
             if (result.success) {
-                showFeedback(modalState.provider ? 'Provedor atualizado com sucesso' : 'Provedor criado com sucesso');
+                showFeedback(
+                    isCreate
+                        ? 'Provedor criado com sucesso'
+                        : 'Provedor actualizado com sucesso'
+                );
             } else {
-                console.error('Erro ao guardar provedor customizado:', result.error);
-                showFeedback(result.error || 'Erro ao guardar provedor', 'error');
+                console.error('Erro ao guardar provedor:', result.error);
+                showFeedback(
+                    result.error || 'Erro ao guardar provedor',
+                    'error'
+                );
             }
             return result;
         } catch (err) {
-            console.error('Erro inesperado ao guardar provedor customizado', err);
+            console.error('Erro inesperado ao guardar provedor', err);
             const message =
-                err instanceof Error ? err.message : 'Erro inesperado ao guardar provedor';
+                err instanceof Error
+                    ? err.message
+                    : 'Erro inesperado ao guardar provedor';
             showFeedback(message, 'error');
             return { success: false, error: message };
         }
@@ -158,12 +138,13 @@ export function AISettingsPage() {
                 !isWorkspaceOwner
             }
             onConfigure={() =>
-                provider.isCustom
-                    ? openCustomModal(provider, provider.workspaceId ? 'workspace' : 'user')
-                    : openDefaultModal(provider)
+                openEditor(
+                    provider,
+                    provider.workspaceId ? 'workspace' : 'user'
+                )
             }
-            onDelete={() => handleDeleteClick(provider)}
-            onRemoveApiKey={() => handleRemoveKey(provider)}
+            onDelete={() => setProviderToDelete(provider)}
+            onRemoveApiKey={() => void handleKeyClick(provider)}
             canDelete={canDelete(provider)}
         />
     );
@@ -238,7 +219,7 @@ export function AISettingsPage() {
                     </div>
                     <button
                         type="button"
-                        onClick={() => openCustomModal(undefined, 'user')}
+                        onClick={() => openEditor(undefined, 'user')}
                         className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
                     >
                         <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -283,7 +264,7 @@ export function AISettingsPage() {
                     {isWorkspaceOwner && (
                         <button
                             type="button"
-                            onClick={() => openCustomModal(undefined, 'workspace')}
+                            onClick={() => openEditor(undefined, 'workspace')}
                             className="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700"
                         >
                             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -388,28 +369,26 @@ export function AISettingsPage() {
                 </Tabs>
             </div>
 
-            {/* Default Provider Modal */}
-            {modalState.type === 'default' && modalState.provider && (
-                <DefaultProviderModal
-                    isOpen={true}
-                    onClose={closeModal}
-                    provider={modalState.provider}
-                    currentApiKey={apiKeys[modalState.provider.id] ?? null}
-                    onSave={handleSaveDefaultModal}
-                    onTest={handleTestConnection}
-                />
-            )}
-
-            {/* Custom Provider Modal */}
-            {modalState.type === 'custom' && (
-                <CustomProviderModal
-                    isOpen={true}
-                    onClose={closeModal}
-                    provider={modalState.provider}
-                    scope={modalState.scope}
-                    onSave={handleSaveCustomModal}
-                    onTest={handleTestConnection}
-                    existingApiKey={modalState.provider ? (apiKeys[modalState.provider.id] ?? null) : null}
+            {/* Editor de provider — o mesmo para criar e para editar, seeded
+                e custom. Só o owner de um provider de workspace o consegue
+                guardar; os restantes membros entram em modo leitura. */}
+            {editor && (
+                <ProviderEditorModal
+                    isOpen
+                    onClose={closeEditor}
+                    providerId={editor.providerId}
+                    scope={editor.scope}
+                    readOnly={
+                        editor.scope === 'workspace' && !isWorkspaceOwner
+                    }
+                    workspaceDefault={{
+                        providerId: defaultProviderId,
+                        modelCode: defaultModelCode,
+                    }}
+                    onLoad={loadProvider}
+                    onSave={handleEditorSave}
+                    onTest={handleTestModel}
+                    onRemoveApiKey={handleRemoveEditorApiKey}
                 />
             )}
 

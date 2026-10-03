@@ -1,8 +1,46 @@
+import { useCallback, useMemo, useState } from 'react';
 import { useAIProviderStore } from '@/stores/ai-provider-store';
 import { useWorkspaceStore } from '@/stores/workspace-store';
-import type { AIProvider, CreateCustomProviderInput } from '@/services/ai-provider.service';
-import type { AIProviderConfigOptions } from '@/lib/ai/types';
-import { useState, useCallback, useMemo } from 'react';
+import type {
+    AIProvider,
+    AIProviderModel,
+    CreateCustomProviderInput,
+} from '@/services/ai-provider.service';
+import type {
+    HeaderDraft,
+    ModelDraft,
+    ProviderSaveData,
+} from '@/components/ai/provider-editor-modal';
+
+export interface EditorState {
+    /** `null` = a criar um provider customizado novo. */
+    providerId: string | null;
+    scope: 'user' | 'workspace';
+}
+
+/** Provider sintético para testar um provider que ainda não foi criado. */
+function draftProvider(name: string): AIProvider {
+    return {
+        id: '',
+        providerId: 'custom_draft',
+        name: name.trim() || 'Provedor (rascunho)',
+        description: null,
+        baseUrl: null,
+        userId: null,
+        workspaceId: null,
+        apiKeyEncrypted: null,
+        apiKeyIv: null,
+        config: null,
+        isDefault: false,
+        isCustom: true,
+        isActive: true,
+        priority: 0,
+        createdAt: '',
+        updatedAt: '',
+        models: [],
+        headers: [],
+    };
+}
 
 export function useAIProviders() {
     const workspace = useWorkspaceStore((s) => s.currentWorkspace);
@@ -14,6 +52,7 @@ export function useAIProviders() {
         isLoading,
         error,
         fetchProviders,
+        fetchProviderById,
         setDefaultProvider,
         createCustomProvider,
         updateProvider,
@@ -25,189 +64,170 @@ export function useAIProviders() {
 
     const workspaceId = workspace?.id;
 
-    const [modalState, setModalState] = useState<{
-        type: 'default' | 'custom' | null;
-        provider: AIProvider | null;
-        scope: 'user' | 'workspace';
-    }>({ type: null, provider: null, scope: 'user' });
+    const [editor, setEditor] = useState<EditorState | null>(null);
 
     const loadProviders = useCallback(async () => {
         await fetchProviders(workspaceId);
     }, [workspaceId, fetchProviders]);
 
-    const openDefaultModal = useCallback((provider: AIProvider) => {
-        setModalState({ type: 'default', provider, scope: 'user' });
-    }, []);
-
-    const openCustomModal = useCallback(
+    const openEditor = useCallback(
         (provider?: AIProvider, scope: 'user' | 'workspace' = 'user') => {
-            setModalState({ type: 'custom', provider: provider ?? null, scope });
+            setEditor({ providerId: provider?.id ?? null, scope });
         },
         []
     );
 
-    const closeModal = useCallback(() => {
-        setModalState({ type: null, provider: null, scope: 'user' });
+    const closeEditor = useCallback(() => {
+        setEditor(null);
     }, []);
 
-    const handleSetDefault = useCallback(async (providerId: string, modelCode: string) => {
-        if (!workspaceId) return;
-        await setDefaultProvider(workspaceId, providerId, modelCode);
-    }, [workspaceId, setDefaultProvider]);
+    const handleSetDefault = useCallback(
+        async (providerId: string, modelCode: string) => {
+            if (!workspaceId) return;
+            await setDefaultProvider(workspaceId, providerId, modelCode);
+        },
+        [workspaceId, setDefaultProvider]
+    );
 
-    const handleSaveDefaultApiKey = useCallback(async (data: {
-        apiKey: string;
-        config: AIProviderConfigOptions;
-    }) => {
-        if (!modalState.provider) {
-            return { success: false, error: 'Sem provider selecionado' };
-        }
+    /**
+     * Grava. `apiKey` a `undefined` significa "não tocar na chave" — o editor
+     * só o preenche quando o utilizador escreve algo no campo. Antes, o save
+     * reescrevia a chave incondicionalmente e não dava para editar um provider
+     * sem a reintroduzir.
+     */
+    const handleSave = useCallback(
+        async (data: ProviderSaveData) => {
+            if (!editor) return { success: false, error: 'Nenhum provedor seleccionado' };
 
-        // Guarda a chave na BD (em claro — sem password)
-        const saveResult = await saveApiKey(
-            modalState.provider.id,
-            data.apiKey
-        );
-        if (!saveResult.success) return saveResult;
+            // Criar
+            if (editor.providerId === null) {
+                if (editor.scope === 'workspace' && !workspaceId) {
+                    return {
+                        success: false,
+                        error: 'Seleciona um workspace antes de criar o provedor de workspace.',
+                    };
+                }
 
-        // Guarda a configuração padrão do provider
-        const configResult = await updateProvider(modalState.provider.id, {
-            config: data.config,
-        });
-        if (!configResult.success) return configResult;
+                const input: CreateCustomProviderInput = {
+                    name: data.name,
+                    baseUrl: data.baseUrl,
+                    description: data.description,
+                    config: data.config,
+                    models: data.models.map((m: ModelDraft) => ({
+                        displayName: m.displayName,
+                        modelCode: m.modelCode,
+                        config: m.config,
+                    })),
+                    headers: data.headers,
+                };
 
-        return { success: true };
-    }, [modalState.provider, saveApiKey, updateProvider]);
+                const result = await createCustomProvider(
+                    input,
+                    editor.scope,
+                    workspaceId ?? null
+                );
+                if (!result.success || !result.provider) return result;
 
-    const handleCreateCustom = useCallback(async (data: {
-        name: string;
-        baseUrl: string;
-        description?: string;
-        apiKey: string;
-        config: AIProviderConfigOptions;
-        models: {
-            displayName: string;
-            modelCode: string;
-            config: AIProviderConfigOptions;
-        }[];
-        headers: { key: string; value: string }[];
-    }, scope: 'user' | 'workspace' = 'user') => {
-        const input: CreateCustomProviderInput = {
-            name: data.name,
-            baseUrl: data.baseUrl,
-            description: data.description,
-            config: data.config,
-            models: data.models,
-            headers: data.headers,
-        };
-
-        // Scope workspace exige um workspace ativo — falha claro em vez de
-        // criar silenciosamente como provider pessoal.
-        if (scope === 'workspace' && !workspaceId) {
-            return {
-                success: false,
-                error: 'Seleciona um workspace antes de criar o provedor de workspace.',
-            };
-        }
-
-        const result = await createCustomProvider(
-            input,
-            scope,
-            workspaceId ?? null
-        );
-
-        if (result.success && result.provider) {
-            // Guarda a API key na BD, associada ao novo provedor.
-            // Se a gravação falhar devolve o erro em vez de reportar sucesso
-            // com a chave descartada.
-            const saveResult = await saveApiKey(
-                result.provider.id,
-                data.apiKey
-            );
-            if (!saveResult.success) {
-                return saveResult;
+                // Só grava a chave se o user escreveu uma. Um provider sem
+                // chave é guardado (e avisado no editor) em vez de falhar.
+                if (data.apiKey) {
+                    const keyResult = await saveApiKey(
+                        result.provider.id,
+                        data.apiKey
+                    );
+                    if (!keyResult.success) return keyResult;
+                }
+                return result;
             }
-        }
 
-        return result;
-    }, [createCustomProvider, saveApiKey, workspaceId]);
+            // Actualizar
+            const result = await updateProvider(editor.providerId, {
+                name: data.name,
+                baseUrl: data.baseUrl,
+                description: data.description,
+                config: data.config,
+                models: data.models,
+                headers: data.headers,
+            });
+            if (!result.success) return result;
 
-    const handleUpdateCustom = useCallback(async (data: {
-        name: string;
-        baseUrl: string;
-        description?: string;
-        apiKey: string;
-        config: AIProviderConfigOptions;
-        models: {
-            displayName: string;
-            modelCode: string;
-            config: AIProviderConfigOptions;
-        }[];
-        headers: { key: string; value: string }[];
-    }) => {
-        if (!modalState.provider) return { success: false, error: 'No provider' };
-
-        const result = await updateProvider(modalState.provider.id, {
-            name: data.name,
-            baseUrl: data.baseUrl,
-            description: data.description,
-            config: data.config,
-            models: data.models,
-            headers: data.headers,
-        });
-
-        if (result.success) {
-            const saveResult = await saveApiKey(
-                modalState.provider.id,
-                data.apiKey
-            );
-            if (!saveResult.success) {
-                return saveResult;
+            if (data.apiKey) {
+                const keyResult = await saveApiKey(
+                    editor.providerId,
+                    data.apiKey
+                );
+                if (!keyResult.success) return keyResult;
             }
+            return { success: true };
+        },
+        [editor, workspaceId, createCustomProvider, updateProvider, saveApiKey]
+    );
+
+    /**
+     * Testa um modelo do rascunho. O modelo vem pronto do formulário (pode ser
+     * uma linha nova ainda não guardada) — é por isso que já não usamos
+     * `pickModel`, que caía silenciosamente em `models[0]` e testava o modelo
+     * errado.
+     */
+    const handleTestModel = useCallback(
+        async (
+            model: AIProviderModel,
+            apiKey: string,
+            baseUrl: string,
+            headers: HeaderDraft[],
+            draftName?: string
+        ) => {
+            const providerId = editor?.providerId ?? null;
+            const provider = providerId
+                ? (providers.find((p) => p.id === providerId) ?? null)
+                : draftProvider(draftName ?? '');
+
+            if (!provider) {
+                return {
+                    success: false,
+                    error: 'Provedor não encontrado. Abre o editor de novo.',
+                };
+            }
+            return testConnection(provider, model, apiKey, baseUrl, headers);
+        },
+        [editor, providers, testConnection]
+    );
+
+    const handleRemoveEditorApiKey = useCallback(async () => {
+        if (!editor?.providerId) {
+            return { success: false, error: 'Nenhum provedor seleccionado' };
         }
+        return removeApiKey(editor.providerId);
+    }, [editor, removeApiKey]);
 
-        return result;
-    }, [modalState.provider, updateProvider, saveApiKey]);
+    const handleDelete = useCallback(
+        async (provider: AIProvider) => deleteProvider(provider.id),
+        [deleteProvider]
+    );
 
-    const handleDelete = useCallback(async (provider: AIProvider) => {
-        return deleteProvider(provider.id);
-    }, [deleteProvider]);
+    const canDelete = useCallback(
+        (provider: AIProvider) => {
+            if (provider.isDefault) return false;
+            if (provider.id === defaultProviderId) return false;
+            return true;
+        },
+        [defaultProviderId]
+    );
 
-    const handleTestConnection = useCallback(async (
-        modelCode: string,
-        apiKey: string,
-        baseUrl?: string,
-        headers?: { key: string; value: string }[]
-    ) => {
-        if (!modalState.provider) return { success: false, error: 'No provider' };
-        return testConnection(
-            modalState.provider,
-            modelCode,
-            apiKey,
-            baseUrl ?? modalState.provider.baseUrl,
-            headers
-        );
-    }, [modalState.provider, testConnection]);
+    const isConfigured = useCallback(
+        (providerId: string) => !!apiKeys[providerId],
+        [apiKeys]
+    );
 
-    const canDelete = useCallback((provider: AIProvider) => {
-        if (provider.isDefault) return false;
-        if (provider.id === defaultProviderId) return false;
-        return true;
-    }, [defaultProviderId]);
+    const defaultProvider = useMemo(
+        () => providers.find((p) => p.id === defaultProviderId) ?? null,
+        [providers, defaultProviderId]
+    );
 
-    const isConfigured = useCallback((providerId: string) => {
-        // `providerId` aqui é o row id da BD (provider.id)
-        return !!apiKeys[providerId];
-    }, [apiKeys]);
-
-    const defaultProvider = useMemo(() => {
-        // defaultProviderId é agora o row id de ai_providers
-        return providers.find((p) => p.id === defaultProviderId) ?? null;
-    }, [providers, defaultProviderId]);
-
-    const handleRemoveApiKey = useCallback(async (provider: AIProvider) => {
-        return removeApiKey(provider.id);
-    }, [removeApiKey]);
+    const handleRemoveApiKey = useCallback(
+        async (provider: AIProvider) => removeApiKey(provider.id),
+        [removeApiKey]
+    );
 
     return {
         providers,
@@ -217,17 +237,16 @@ export function useAIProviders() {
         apiKeys,
         isLoading,
         error,
-        modalState,
+        editor,
         loadProviders,
-        openDefaultModal,
-        openCustomModal,
-        closeModal,
+        loadProvider: fetchProviderById,
+        openEditor,
+        closeEditor,
         handleSetDefault,
-        handleSaveDefaultApiKey,
-        handleCreateCustom,
-        handleUpdateCustom,
+        handleSave,
+        handleTestModel,
+        handleRemoveEditorApiKey,
         handleDelete,
-        handleTestConnection,
         handleRemoveApiKey,
         canDelete,
         isConfigured,
