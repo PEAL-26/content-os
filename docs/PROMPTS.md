@@ -388,11 +388,11 @@ Implementa a visualização e edição das peças de conteúdo geradas. Cria:
   simula visualmente o formato: post LinkedIn com caixa de texto longa,
   post Instagram com hashtags em baixo, carrossel com navegação entre
   slides (anterior/próximo), CTA com botão destacado
-- `src/src/components/content/content-piece-editor.tsx` — editor inline para
-  editar qualquer campo da peça (body, hookText, ctaText, hashtags,
-  slides individuais). Edição de slides do carrossel: lista reordenável
-  com drag-and-drop simples (não precisa de biblioteca externa — reorder
-  com botões cima/baixo é suficiente)
+- `src/src/components/content/content-piece-modal.tsx` — editor da peça
+  (body, hookText, ctaText, hashtags, slides individuais). Edição de slides do
+  carrossel: lista reordenável com reorder com botões cima/baixo (não precisa
+  de biblioteca externa). Substituiu o antigo
+  `content-piece-editor.tsx`, que foi removido.
 - Botão "Aprovar" em cada peça que muda o status para `APPROVED` e a
   torna disponível para o planeador. Botão "Regenerar" que gera nova
   versão sem apagar a actual

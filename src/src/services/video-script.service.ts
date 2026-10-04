@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import type { ArticleStatus, SocialChannel } from '@/types/database';
 import { v4 as uuidv4 } from 'uuid';
+import { deleteAssetsForTarget } from '@/services/content-asset.service';
 import { saveGenerationPrompts, type PortablePromptItem } from '@/services/ai-prompt.service';
 
 export interface VideoScript {
@@ -18,10 +19,6 @@ export interface VideoScript {
     onScreenText: string[];
     bRoll: string[];
     status: ArticleStatus;
-    /** Artefacto publicado: URL (Storage assets ou link externo). */
-    assetUrl: string | null;
-    /** Nome do ficheiro do artefacto. */
-    assetName: string | null;
     aiGenerated: boolean;
     createdAt: string;
     updatedAt: string;
@@ -45,10 +42,6 @@ export interface CreateVideoScriptInput {
     onScreenText?: string[];
     bRoll?: string[];
     aiGenerated?: boolean;
-    /** Artefacto publicado: URL (Storage assets ou link externo). */
-    assetUrl?: string | null;
-    /** Nome do ficheiro do artefacto. */
-    assetName?: string | null;
     /** Prompt final portátil por item (gravado em content_generation_prompts). */
     portablePrompts?: PortablePromptItem[];
 }
@@ -65,10 +58,6 @@ export interface UpdateVideoScriptInput {
     onScreenText?: string[];
     bRoll?: string[];
     status?: ArticleStatus;
-    /** Artefacto publicado: URL (Storage assets ou link externo). */
-    assetUrl?: string | null;
-    /** Nome do ficheiro do artefacto. */
-    assetName?: string | null;
 }
 
 export interface VideoScriptsFilters {
@@ -116,7 +105,12 @@ export const videoScriptService = {
         return (data || []) as VideoScriptWithRelations[];
     },
 
+    /**
+     * Um roteiro pelo id. O workspaceId é obrigatório: o RLS está globalmente
+     * desligado, logo o filtro tem de vir da query.
+     */
     async getVideoScript(
+        workspaceId: string,
         id: string
     ): Promise<VideoScriptWithRelations | null> {
         const { data, error } = await supabase
@@ -127,6 +121,7 @@ export const videoScriptService = {
                 article:articles(id, title)
             `
             )
+            .eq('workspaceId', workspaceId)
             .eq('id', id)
             .single();
 
@@ -165,8 +160,6 @@ export const videoScriptService = {
                 onScreenText: input.onScreenText || [],
                 bRoll: input.bRoll || [],
                 status: 'DRAFT',
-                assetUrl: input.assetUrl ?? null,
-                assetName: input.assetName ?? null,
                 aiGenerated: input.aiGenerated || false,
                 createdAt: now,
                 updatedAt: now,
@@ -211,8 +204,6 @@ export const videoScriptService = {
         if (input.onScreenText !== undefined) updateData.onScreenText = input.onScreenText;
         if (input.bRoll !== undefined) updateData.bRoll = input.bRoll;
         if (input.status !== undefined) updateData.status = input.status;
-        if (input.assetUrl !== undefined) updateData.assetUrl = input.assetUrl;
-        if (input.assetName !== undefined) updateData.assetName = input.assetName;
 
         const { data, error } = await supabase
             .from('video_scripts')
@@ -251,16 +242,30 @@ export const videoScriptService = {
         return data as VideoScript;
     },
 
+    /**
+     * Apaga o roteiro e os seus artefactos.
+     *
+     * O DELETE devolve a linha removida para termos o workspaceId: sem ele não
+     * dá para apagar os artefactos, porque content_assets não tem FK.
+     * A limpeza só corre depois do roteiro cair — se o DELETE falhar os
+     * artefactos têm de continuar a existir.
+     */
     async deleteVideoScript(id: string): Promise<void> {
-        const { error } = await supabase
+        const { data, error } = await supabase
             .from('video_scripts')
             .delete()
-            .eq('id', id);
+            .eq('id', id)
+            .select('workspaceId');
 
         if (error) {
             throw new Error(
                 `Erro ao eliminar roteiro de vídeo: ${error.message}`
             );
+        }
+
+        const workspaceId = data?.[0]?.workspaceId;
+        if (workspaceId) {
+            await deleteAssetsForTarget(workspaceId, 'VIDEO_SCRIPT', id);
         }
     },
 };

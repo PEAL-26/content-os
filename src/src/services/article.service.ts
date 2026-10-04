@@ -10,6 +10,7 @@ import type {
 } from '@/types/database';
 import { generateSlug } from '@/helpers/slug';
 import { v4 as uuidv4 } from 'uuid';
+import { deleteAssetsForTarget } from '@/services/content-asset.service';
 
 export interface GetArticlesFilters {
     status?: ArticleStatus | 'ALL';
@@ -235,8 +236,6 @@ export const articleService = {
         }
         if (input.publishedUrl !== undefined)
             updateData.publishedUrl = input.publishedUrl;
-        if (input.assetUrl !== undefined) updateData.assetUrl = input.assetUrl;
-        if (input.assetName !== undefined) updateData.assetName = input.assetName;
         if (input.aiPromptUsed !== undefined)
             updateData.aiPromptUsed = input.aiPromptUsed;
         if (input.readingTimeMin !== undefined)
@@ -261,11 +260,32 @@ export const articleService = {
         return data as Article;
     },
 
+    /**
+ * Apaga o artigo e os seus artefactos.
+ *
+ * O DELETE devolve a linha removida para termos o workspaceId: sem ele não dá
+ * para apagar os artefactos, porque content_assets não tem FK.
+ * A limpeza só corre depois do artigo cair — se o DELETE falhar os artefactos
+ * têm de continuar a existir.
+ *
+ * TODO: content_publications tem o mesmo problema de órfãos (é polimórfica e
+ * também sem FK) e a mesma dívida; ficou deliberadamente fora do âmbito desta
+ * alteração, que só trata de content_assets.
+ */
     async deleteArticle(id: string): Promise<void> {
-        const { error } = await supabase.from('articles').delete().eq('id', id);
+        const { data, error } = await supabase
+            .from('articles')
+            .delete()
+            .eq('id', id)
+            .select('workspaceId');
 
         if (error) {
             throw new Error(`Erro ao eliminar artigo: ${error.message}`);
+        }
+
+        const workspaceId = data?.[0]?.workspaceId;
+        if (workspaceId) {
+            await deleteAssetsForTarget(workspaceId, 'ARTICLE', id);
         }
     },
 
@@ -314,18 +334,6 @@ export const articleService = {
             ...(status === 'PUBLISHED'
                 ? { publishedAt: new Date().toISOString() }
                 : {}),
-        });
-    },
-
-    /** Atualiza o artefacto publicado (URL + nome do ficheiro). */
-    async updateAsset(
-        id: string,
-        assetUrl: string | null,
-        assetName: string | null
-    ): Promise<Article> {
-        return this.updateArticle(id, {
-            assetUrl,
-            assetName,
         });
     },
 };

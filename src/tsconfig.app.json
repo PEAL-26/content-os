@@ -29,5 +29,12 @@
             "@/*": ["./src/*"]
         }
     },
-    "include": ["src"]
+    /* `src` + o probe dos artefactos, que antes não era type-checked por
+     * nenhum `tsc -b` (só o eslint o via). Fica nomeado e não a pasta toda:
+     * `probe-enqueue-auth.ts`, `probe-generation-jobs-channel.ts` e
+     * `probe-provider-diff.ts` já têm erros de tipos e de `erasableSyntaxOnly`
+     * pendentes, e incluí-los aqui partiria o build. Este é o projecto certo
+     * para o probe porque tem DOM (o shim de localStorage) e os paths `@/*`
+     * de que o probe precisa. */
+    "include": ["src", "scripts/probe-assets.ts"]
 }

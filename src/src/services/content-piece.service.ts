@@ -8,6 +8,7 @@ import type {
     ContentSlide,
 } from '@/types/database';
 import { v4 as uuidv4 } from 'uuid';
+import { deleteAssetsForTarget } from '@/services/content-asset.service';
 import { saveGenerationPrompts, type PortablePromptItem } from '@/services/ai-prompt.service';
 
 export interface CreateContentPieceInput {
@@ -25,10 +26,6 @@ export interface CreateContentPieceInput {
     slides?: ContentSlide[] | null;
     slideCount?: number | null;
     aiGenerated?: boolean;
-    /** Artefacto publicado: URL (Storage assets ou link externo). */
-    assetUrl?: string | null;
-    /** Nome do ficheiro do artefacto. */
-    assetName?: string | null;
     /** Prompts finais portáteis por item (gravados em content_generation_prompts). */
     portablePrompts?: PortablePromptItem[];
 }
@@ -44,10 +41,6 @@ export interface UpdateContentPieceInput {
     channelId?: string | null;
     pillar?: ContentPillar | null;
     publishedAt?: string;
-    /** Artefacto publicado: URL (Storage assets ou link externo). */
-    assetUrl?: string | null;
-    /** Nome do ficheiro do artefacto. */
-    assetName?: string | null;
 }
 
 export const contentPieceService = {
@@ -126,7 +119,12 @@ export const contentPieceService = {
         return (data || []) as ContentPieceWithRelations[];
     },
 
+    /**
+     * Uma peça pelo id. O workspaceId é obrigatório: o RLS está globalmente
+     * desligado, logo o filtro tem de vir da query.
+     */
     async getContentPiece(
+        workspaceId: string,
         id: string
     ): Promise<ContentPieceWithRelations | null> {
         const { data, error } = await supabase
@@ -139,6 +137,7 @@ export const contentPieceService = {
                 channel:channel_configs(id, channel, handle)
             `
             )
+            .eq('workspaceId', workspaceId)
             .eq('id', id)
             .single();
 
@@ -178,8 +177,6 @@ export const contentPieceService = {
                 slideCount: input.slideCount || null,
                 status: 'DRAFT',
                 aiGenerated: input.aiGenerated || false,
-                assetUrl: input.assetUrl ?? null,
-                assetName: input.assetName ?? null,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
             })
@@ -222,8 +219,6 @@ export const contentPieceService = {
             updateData.channelId = input.channelId;
         if (input.pillar !== undefined) updateData.pillar = input.pillar;
         if (input.publishedAt !== undefined) updateData.publishedAt = input.publishedAt;
-        if (input.assetUrl !== undefined) updateData.assetUrl = input.assetUrl;
-        if (input.assetName !== undefined) updateData.assetName = input.assetName;
 
         const { data, error } = await supabase
             .from('content_pieces')
@@ -268,16 +263,30 @@ export const contentPieceService = {
         return data as ContentPiece;
     },
 
+    /**
+     * Apaga a peça e os seus artefactos.
+     *
+     * O DELETE devolve a linha removida para termos o workspaceId: sem ele não
+     * dá para apagar os artefactos, porque content_assets não tem FK.
+     * A limpeza só corre depois da peça cair — se a peça não puder ser apagada
+     * os artefactos têm de continuar a existir.
+     */
     async deleteContentPiece(id: string): Promise<void> {
-        const { error } = await supabase
+        const { data, error } = await supabase
             .from('content_pieces')
             .delete()
-            .eq('id', id);
+            .eq('id', id)
+            .select('workspaceId');
 
         if (error) {
             throw new Error(
                 `Erro ao eliminar peça de conteúdo: ${error.message}`
             );
+        }
+
+        const workspaceId = data?.[0]?.workspaceId;
+        if (workspaceId) {
+            await deleteAssetsForTarget(workspaceId, 'PIECE', id);
         }
     },
 
@@ -303,8 +312,6 @@ export const contentPieceService = {
             slideCount: input.slideCount || null,
             status: 'DRAFT' as const,
             aiGenerated: input.aiGenerated || false,
-            assetUrl: input.assetUrl ?? null,
-            assetName: input.assetName ?? null,
             createdAt: now,
             updatedAt: now,
         }));

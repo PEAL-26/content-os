@@ -16,7 +16,7 @@ import type { ArticleStatus, ArticleWithRelations } from '@/types/database';
 import type { ContentPillar } from '@/types/pillar';
 import { useQueryState } from 'nuqs';
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 const STATUS_OPTIONS: Array<{ value: ArticleStatus | 'ALL'; label: string }> = [
     { value: 'ALL', label: 'Todos' },
@@ -51,6 +51,7 @@ function ArticleCard({
     const [isDeleting, setIsDeleting] = useState(false);
     const { currentWorkspace } = useWorkspace();
     const workspaceId = currentWorkspace?.id ?? '';
+    const navigate = useNavigate();
 
     const handleDelete = async () => {
         setIsDeleting(true);
@@ -59,9 +60,29 @@ function ArticleCard({
         setIsDeleting(false);
     };
 
+    const openEditor = () => {
+        navigate(workspacePath(workspaceId, `articles/${article.id}/edit`));
+    };
+
     return (
         <>
-            <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm transition-all hover:border-gray-300 hover:shadow-md">
+            {/* O card inteiro abre o editor; o ícone de lápis deixou de existir
+                por ser redundante. Os botões de acção usam stopPropagation. */}
+            <div
+                onClick={openEditor}
+                onKeyDown={(e) => {
+                    // "Duplicar" e "Eliminar" são descendentes do card: sem
+                    // este guard o Enter no botão também abria o editor.
+                    if (e.target !== e.currentTarget) return;
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        openEditor();
+                    }
+                }}
+                role="button"
+                tabIndex={0}
+                className="cursor-pointer rounded-lg border border-gray-200 bg-white p-4 shadow-sm transition-all hover:border-gray-300 hover:shadow-md"
+            >
                 <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
@@ -163,30 +184,11 @@ function ArticleCard({
                     </div>
 
                     <div className="flex shrink-0 items-center gap-1">
-                        <Link
-                            to={workspacePath(
-                                workspaceId,
-                                `articles/${article.id}/edit`
-                            )}
-                            className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                            title="Editar"
-                        >
-                            <svg
-                                className="h-4 w-4"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                            >
-                                <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                                />
-                            </svg>
-                        </Link>
                         <button
-                            onClick={onDuplicate}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onDuplicate();
+                            }}
                             className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
                             title="Duplicar"
                         >
@@ -205,7 +207,10 @@ function ArticleCard({
                             </svg>
                         </button>
                         <button
-                            onClick={() => setShowDeleteConfirm(true)}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setShowDeleteConfirm(true);
+                            }}
                             className="rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"
                             title="Eliminar"
                         >

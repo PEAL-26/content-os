@@ -159,10 +159,6 @@ export interface Article {
     status: ArticleStatus;
     publishedAt: string | null;
     publishedUrl: string | null;
-    /** Artefacto publicado: URL (Storage assets ou link externo). */
-    assetUrl: string | null;
-    /** Nome do ficheiro do artefacto. */
-    assetName: string | null;
     aiGenerated: boolean;
     aiPromptUsed: string | null;
     readingTimeMin: number | null;
@@ -275,10 +271,6 @@ export interface ContentPiece {
     slideCount: number | null;
     status: ContentPieceStatus;
     publishedAt: string | null;
-    /** Artefacto publicado: URL (Storage assets ou link externo). */
-    assetUrl: string | null;
-    /** Nome do ficheiro do artefacto. */
-    assetName: string | null;
     aiGenerated: boolean;
     createdAt: string;
     updatedAt: string;
@@ -350,3 +342,55 @@ export interface ContentPublication {
     publishedAt: string;
     createdAt: string;
 }
+
+// =============================================================================
+// CONTENT ASSETS (artefactos, vários por entidade, polimórfico)
+// Substitui as antigas colunas assetUrl/assetName, que só permitiam um
+// artefacto por artigo/peça/roteiro.
+// =============================================================================
+
+export type AssetTargetType = 'ARTICLE' | 'PIECE' | 'VIDEO_SCRIPT';
+
+export interface ContentAsset {
+    id: string;
+    workspaceId: string;
+    targetType: AssetTargetType;
+    targetId: string;
+    /** URL do Storage ou link externo. */
+    url: string;
+    name: string | null;
+    /** MIME do upload; para links externos, inferido da extensão. */
+    mimeType: string | null;
+    createdAt: string;
+}
+
+/** Como o painel desenha cada artefacto, a partir do mimeType. */
+export type AssetKind = 'image' | 'video' | 'file';
+
+/**
+ * Mapa extensão -> MIME usado na inferência do `mimeType`.
+ *
+ * Construído SEM_protótipo (`Object.create(null)`): indexado diretamente, um
+ * URL como `https://x/a.constructor` ia devolver o construtor de `Object`
+ * herdado da cadeia de protótipos, e `https://x/a.__proto__` devolvia o
+ * prototype inteiro. `sniffMimeType` também filtra com `Object.hasOwn`.
+ */
+export const ASSET_MIME_BY_EXTENSION: Record<string, string> = Object.assign(
+    Object.create(null) as Record<string, string>,
+    {
+        jpg: 'image/jpeg',
+        jpeg: 'image/jpeg',
+        png: 'image/png',
+        gif: 'image/gif',
+        webp: 'image/webp',
+        svg: 'image/svg+xml',
+        avif: 'image/avif',
+        heic: 'image/heic',
+        mp4: 'video/mp4',
+        m4v: 'video/x-m4v',
+        webm: 'video/webm',
+        mov: 'video/quicktime',
+        pdf: 'application/pdf',
+        zip: 'application/zip',
+    }
+);

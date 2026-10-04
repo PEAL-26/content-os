@@ -31,6 +31,7 @@ import {
     CONTENT_PIECE_STATUS_LABELS,
 } from '@/types/database';
 import type { PillarConfig } from '@/types/pillar';
+import { workspacePath } from '@/lib/workspace-paths';
 import {
     useCallback,
     useEffect,
@@ -38,6 +39,7 @@ import {
     useRef,
     useState,
 } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ContentPieceModal } from './content-piece-modal';
 
 interface ContentGeneratorPanelProps {
@@ -85,6 +87,7 @@ export function ContentGeneratorPanel({
     const pieceIds = useMemo(() => pieces.map((p) => p.id), [pieces]);
 
     const { currentWorkspace } = useWorkspaceStore();
+    const navigate = useNavigate();
     const rememberJob = useGenerationJobStore((s) => s.rememberJob);
 
     // Estado da geração assíncrona (CONTENT_PIECES) deste artigo — segue o
@@ -552,8 +555,8 @@ export function ContentGeneratorPanel({
     /**
      * Reescreve o prompt de uma peça (CONTENT_PROMPT com targets = a peça).
      * Só enfileira — a confirmação de prompt editado é feita por quem chama
-     * (o `ContentMetaManager` já a faz para o modal; o card confirma aqui, em
-     * `handleRewritePromptFromCard`).
+     * (o `ContentPromptsPanel` dentro do modal confirma; o card confirma aqui,
+     * em `handleRewritePromptFromCard`).
      */
     const handleRewritePrompt = async (piece: ContentPieceWithRelations) => {
         // `promptJob.isActive` é o guard de artigo: sem ele, "Reescrever prompt"
@@ -944,7 +947,7 @@ export function ContentGeneratorPanel({
                                     </h4>
                                     <div className="space-y-2">
                                         {formatPieces.map((piece) => (
-                                            <ContentPieceCard
+                                            <ArticlePieceRow
                                                 key={piece.id}
                                                 piece={piece}
                                                 gen={pieceJobs.get(piece.id)}
@@ -971,6 +974,15 @@ export function ContentGeneratorPanel({
                                                 }
                                                 onEdit={() =>
                                                     setEditingPiece(piece)
+                                                }
+                                                onOpenDetail={() =>
+                                                    navigate(
+                                                        workspacePath(
+                                                            currentWorkspace?.id ??
+                                                                '',
+                                                            `content/${piece.id}`
+                                                        )
+                                                    )
                                                 }
                                                 onDelete={() =>
                                                     handleDeletePiece(piece.id)
@@ -1039,13 +1051,6 @@ export function ContentGeneratorPanel({
                 onClose={() => setEditingPiece(null)}
                 piece={editingPiece}
                 onSave={handleSavePiece}
-                onAssetChange={
-                    editingPiece
-                        ? async (data) => {
-                              await updatePiece(editingPiece.id, data);
-                          }
-                        : undefined
-                }
                 onRewritePrompt={
                     editingPiece
                         ? () => handleRewritePrompt(editingPiece)
@@ -1058,7 +1063,15 @@ export function ContentGeneratorPanel({
     );
 }
 
-function ContentPieceCard({
+/**
+ * Linha de peça dentro do painel do artigo.
+ *
+ * Chamava-se `ContentPieceCard`, o mesmo nome do card da listagem de /content
+ * (`content-piece-card.tsx`) — dois componentes diferentes com o mesmo nome.
+ * Este não é um card navegável: é uma linha da carta do artigo, com estado de
+ * geração e acções de prompt.
+ */
+function ArticlePieceRow({
     piece,
     gen,
     promptJobGen,
@@ -1070,6 +1083,7 @@ function ContentPieceCard({
     isRetrying,
     isBusy,
     onEdit,
+    onOpenDetail,
     onDelete,
     onApprove,
     onRetryPiece,
@@ -1098,6 +1112,8 @@ function ContentPieceCard({
     /** Há algum pedido em curso no painel (desliga acções duplicadas). */
     isBusy?: boolean;
     onEdit: () => void;
+    /** Abre a página de detalhe da peça (não o modal). */
+    onOpenDetail: () => void;
     onDelete: () => void;
     onApprove: () => void;
     onRetryPiece: () => void;
@@ -1318,6 +1334,17 @@ function ContentPieceCard({
                     className="rounded-md border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
                 >
                     {isPromptOnly ? 'Ver / editar prompt' : 'Editar'}
+                </button>
+
+                {/* O card inteiro não navega aqui: este é o contexto de geração
+                    (regenerar slide, reescrever prompt, gerar a partir do
+                    prompt). O acesso ao detalhe é um link explícito. */}
+                <button
+                    onClick={onOpenDetail}
+                    className="rounded-md px-2 py-1 text-xs font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+                    title="Abrir a página de detalhe da peça"
+                >
+                    Abrir detalhe
                 </button>
 
                 {/* Peça já com conteúdo: o prompt continua acessível no modal */}

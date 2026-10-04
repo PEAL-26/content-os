@@ -4,7 +4,7 @@ import type { PillarConfig } from '@/types/pillar';
 import { v4 as uuidv4 } from 'uuid';
 import { contentPieceService } from './content-piece.service';
 import { articleService } from './article.service';
-import { uploadAsset } from './publication.service';
+import { assetService, uploadAssetFile } from './content-asset.service';
 import { getDayOfWeekNumber } from '@/lib/date-utils';
 
 export interface WeeklyPlanData {
@@ -497,13 +497,13 @@ export const weeklyPlanService = {
             throw new Error('Item não encontrado');
         }
 
-        // 1. Artefacto: faz upload para Storage se foi fornecido.
+        // 1. Artefacto: faz upload para Storage se foi fornecido. O registo em
+        //    base de dados vive em content_assets (vários por entidade), não em
+        //    colunas da peça/artigo.
         let assetUrl: string | null = null;
-        let assetName: string | null = null;
         if (data.assetFile) {
-            const uploaded = await uploadAsset(data.assetFile, 'published');
+            const uploaded = await uploadAssetFile(data.assetFile, 'published');
             assetUrl = uploaded.url;
-            assetName = uploaded.name;
         }
 
         // 2. Publicação multi-plataforma (content_publications, polimórfico).
@@ -558,7 +558,8 @@ export const weeklyPlanService = {
             );
         }
 
-        // 4. Atualiza a peça/artigo correspondente (status + artefacto).
+        // 4. Atualiza o estado da peça/artigo e regista o artefacto em
+        //    content_assets (o ficheiro já foi carregado no passo 1).
         if (item.contentPieceId) {
             await contentPieceService.updateStatus(
                 item.contentPieceId,
@@ -568,18 +569,31 @@ export const weeklyPlanService = {
                 item.contentPieceId,
                 {
                     publishedAt: data.publishedAt.toISOString(),
-                    assetUrl: assetUrl ?? undefined,
-                    assetName: assetName ?? undefined,
                 }
             );
+
+            if (data.assetFile && assetUrl) {
+                await assetService.createAsset({
+                    workspaceId: item.workspaceId,
+                    targetType: 'PIECE',
+                    targetId: item.contentPieceId,
+                    url: assetUrl,
+                    name: data.assetFile.name,
+                    mimeType: data.assetFile.type || null,
+                });
+            }
         } else if (item.articleId) {
             await articleService.updateStatus(item.articleId, 'PUBLISHED');
-            if (assetUrl || assetName) {
-                await articleService.updateAsset(
-                    item.articleId,
-                    assetUrl,
-                    assetName
-                );
+
+            if (data.assetFile && assetUrl) {
+                await assetService.createAsset({
+                    workspaceId: item.workspaceId,
+                    targetType: 'ARTICLE',
+                    targetId: item.articleId,
+                    url: assetUrl,
+                    name: data.assetFile.name,
+                    mimeType: data.assetFile.type || null,
+                });
             }
         }
 

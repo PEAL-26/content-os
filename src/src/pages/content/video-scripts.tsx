@@ -6,6 +6,7 @@ import {
 } from '@/components/ai/ai-provider-picker';
 import { useVideoScripts } from '@/hooks/use-video-scripts';
 import { useArticles } from '@/hooks/use-articles';
+import { useDebounce } from '@/hooks/use-debounce';
 import { useGenerationJobsForTargets } from '@/hooks/use-generation-jobs';
 import {
     defaultJobParams,
@@ -14,13 +15,16 @@ import {
 } from '@/services/generation-job.service';
 import { useWorkspaceStore } from '@/stores/workspace-store';
 import { useGenerationJobStore } from '@/stores/generation-jobs-store';
+import { workspacePath } from '@/lib/workspace-paths';
 import type { ArticleStatus, SocialChannel } from '@/types/database';
 import type { VideoScriptWithRelations } from '@/services/video-script.service';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const STATUS_OPTIONS: Array<{ value: ArticleStatus | 'ALL'; label: string }> = [
     { value: 'ALL', label: 'Todos' },
     { value: 'DRAFT', label: 'Rascunho' },
+    { value: 'REVIEW', label: 'Em revisão' },
     { value: 'APPROVED', label: 'Aprovado' },
     { value: 'PUBLISHED', label: 'Publicado' },
 ];
@@ -52,6 +56,7 @@ export function VideoScriptsPage() {
     const [additionalInstructions, setAdditionalInstructions] = useState('');
     const [isGenerating, setIsGenerating] = useState(false);
     const [localError, setLocalError] = useState<string | null>(null);
+    const navigate = useNavigate();
 
     const filters = {
         status: statusFilter !== 'ALL' ? statusFilter : undefined,
@@ -64,7 +69,6 @@ export function VideoScriptsPage() {
         error,
         approvedCount,
         totalCount,
-        updateScript,
         approveScript,
         deleteScript,
         refetch: refetchScripts,
@@ -80,21 +84,34 @@ export function VideoScriptsPage() {
         scriptIds
     );
 
-    // Quando um job conclui, refresca a lista (placeholder → conteúdo).
+    // Quando um job conclui, refresca a lista (placeholder → conteúdo). Cada job
+    // conta uma vez: o poll de 10s volta a entregar os mesmos jobs COMPLETED e
+    // sem este registo a lista era re-buscada a cada tick.
+    const handledCompletedJobs = useRef<Set<string>>(new Set());
     useEffect(() => {
-        const completed = Object.values(jobsByTarget).some(
-            (job) => job.status === 'COMPLETED'
+        const newlyCompleted = Object.values(jobsByTarget).filter(
+            (job) =>
+                job.status === 'COMPLETED' &&
+                !handledCompletedJobs.current.has(job.id)
         );
-        if (completed) void refetchScripts();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [jobsByTarget]);
+        if (newlyCompleted.length === 0) return;
+        for (const job of newlyCompleted) {
+            handledCompletedJobs.current.add(job.id);
+        }
+        void refetchScripts();
+    }, [jobsByTarget, refetchScripts]);
 
+    // Artigos só para o modal "Gerar Roteiro": busca com debounce (1 pedido por
+    // pausa de escrita, não por tecla) e 50 em vez dos 20 default do hook.
+    const debouncedArticleSearch = useDebounce(articleSearch, 300);
     const { articles } = useArticles({
+        enabled: showGenerateModal,
+        limit: 50,
         filters: {
             status: 'ALL',
             pillarId: null,
             productId: null,
-            search: articleSearch,
+            search: debouncedArticleSearch,
         },
     });
 
@@ -303,8 +320,13 @@ export function VideoScriptsPage() {
                             script={script}
                             onApprove={() => handleApprove(script.id)}
                             onDelete={() => handleDelete(script.id)}
-                            onAssetChange={async (data) => {
-                                await updateScript(script.id, data);
+                            onOpen={() => {
+                                navigate(
+                                    workspacePath(
+                                        currentWorkspace?.id ?? '',
+                                        `video-scripts/${script.id}`
+                                    )
+                                );
                             }}
                             isApproving={approvingIds.has(script.id)}
                             generation={
@@ -355,7 +377,7 @@ export function VideoScriptsPage() {
                             />
                             {articleSearch && articles.length > 0 && (
                                 <div className="absolute left-0 top-full z-10 mt-1 max-h-48 w-full overflow-auto rounded-md border border-gray-200 bg-white shadow-lg">
-                                    {articles.slice(0, 10).map((article) => (
+                                    {articles.map((article) => (
                                         <button
                                             key={article.id}
                                             onClick={() => {

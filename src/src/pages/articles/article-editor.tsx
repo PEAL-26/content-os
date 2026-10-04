@@ -1,6 +1,8 @@
 import { ArticleMetadataForm } from '@/components/articles/article-metadata-form';
 import { ArticleStatusBadge } from '@/components/articles/article-status-badge';
+import { ArtefactsPanel } from '@/components/content/artefacts-panel';
 import { ContentGeneratorPanel } from '@/components/content/content-generator-panel';
+import { PublicationsPanel } from '@/components/content/publications-panel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useDebounce } from '@/hooks/use-debounce';
 import { useGenerationJob } from '@/hooks/use-generation-job';
@@ -498,6 +500,9 @@ export function ArticleEditor() {
                                 <TabsTrigger value="content">
                                     Conteúdo
                                 </TabsTrigger>
+                                <TabsTrigger value="assets">
+                                    Artefactos e publicações
+                                </TabsTrigger>
                             </TabsList>
 
                             <TabsContent
@@ -526,6 +531,22 @@ export function ArticleEditor() {
                                     pillar={pillars.find(
                                         (p) => p.id === state.pillarId
                                     )}
+                                />
+                            </TabsContent>
+
+                            {/* Artefactos e publicações do artigo. O painel
+                                carrega os seus próprios dados. */}
+                            <TabsContent
+                                value="assets"
+                                className="flex-1 space-y-5 overflow-y-auto p-4"
+                            >
+                                <ArtefactsPanel
+                                    targetType="ARTICLE"
+                                    targetId={article.id}
+                                />
+                                <PublicationsPanel
+                                    targetType="ARTICLE"
+                                    targetId={article.id}
                                 />
                             </TabsContent>
                         </Tabs>

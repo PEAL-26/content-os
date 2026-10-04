@@ -145,8 +145,6 @@ export function toArticleClient(a: {
     status: string;
     publishedAt: Date | null;
     publishedUrl: string | null;
-    assetUrl: string | null;
-    assetName: string | null;
     aiGenerated: boolean;
     aiPromptUsed: string | null;
     readingTimeMin: number | null;
@@ -169,8 +167,6 @@ export function toArticleClient(a: {
         status: a.status as Article['status'],
         publishedAt: a.publishedAt ? toIso(a.publishedAt) : null,
         publishedUrl: a.publishedUrl,
-        assetUrl: a.assetUrl,
-        assetName: a.assetName,
         aiGenerated: a.aiGenerated,
         aiPromptUsed: a.aiPromptUsed,
         readingTimeMin: a.readingTimeMin,

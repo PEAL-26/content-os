@@ -8,7 +8,7 @@
 // `.on()` corria sobre um canal já *joined* — que o realtime-js recusa com
 // "cannot add `postgres_changes` callbacks … after `subscribe()`". Na página de
 // peças isso acontecia sempre (o job de CONTENT_PROMPT do artigo subscrito pelo
-// `content-pieces.tsx` e outra vez pelo `ContentMetaManager`), o throw subia de
+// `content-pieces.tsx` e outra vez pelo `ContentPromptsPanel`), o throw subia de
 // um `useEffect` e derrubava a app inteira.
 //
 // Aqui o canal é um só, com UM `.on()` sem filtro, e cada subscritor declara o

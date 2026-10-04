@@ -1,9 +1,9 @@
-import { ContentMetaManager } from '@/components/content/content-meta-manager';
 import { ContentPieceCard } from '@/components/content/content-piece-card';
-import { ContentPieceEditor } from '@/components/content/content-piece-editor';
+import { ContentPieceModal } from '@/components/content/content-piece-modal';
 import { useArticles } from '@/hooks/use-articles';
 import { useGenerationJob } from '@/hooks/use-generation-job';
 import { useWorkspaceContentPieces } from '@/hooks/use-workspace-content-pieces';
+import { workspacePath } from '@/lib/workspace-paths';
 import { generationJobService } from '@/services/generation-job.service';
 import { useGenerationJobStore } from '@/stores/generation-jobs-store';
 import { useWorkspaceStore } from '@/stores/workspace-store';
@@ -11,9 +11,14 @@ import type {
     ContentFormat,
     ContentPieceStatus,
     ContentPieceWithRelations,
+    ContentSlide,
 } from '@/types/database';
-import { CONTENT_FORMAT_ICONS, CONTENT_FORMAT_LABELS } from '@/types/database';
+import {
+    CONTENT_FORMAT_ICONS,
+    CONTENT_FORMAT_LABELS,
+} from '@/types/database';
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 type ViewMode = 'list' | 'grid';
 
@@ -68,6 +73,7 @@ export function ContentPiecesPage() {
     } | null>(null);
     const { currentWorkspace } = useWorkspaceStore();
     const rememberJob = useGenerationJobStore((s) => s.rememberJob);
+    const navigate = useNavigate();
 
     const filters = {
         format: formatFilter !== 'ALL' ? formatFilter : undefined,
@@ -211,24 +217,31 @@ export function ContentPiecesPage() {
     };
 
     const handleSave = async (data: {
+        title: string | null;
         body: string;
         hookText: string | null;
         ctaText: string | null;
         hashtags: string[];
-        slides: { order: number; title: string; body: string }[] | null;
+        slides: ContentSlide[] | null;
+        channelId: string | null;
     }) => {
         if (!editingPiece) return;
         setIsSaving(true);
-        await updatePiece(editingPiece.id, {
-            body: data.body,
-            hookText: data.hookText,
-            ctaText: data.ctaText,
-            hashtags: data.hashtags,
-            slides: data.slides,
-            slideCount: data.slides?.length || null,
-        });
-        setIsSaving(false);
-        setEditingPiece(null);
+        try {
+            await updatePiece(editingPiece.id, {
+                title: data.title,
+                body: data.body,
+                hookText: data.hookText,
+                ctaText: data.ctaText,
+                hashtags: data.hashtags,
+                slides: data.slides,
+                slideCount: data.slides?.length || null,
+                channelId: data.channelId,
+            });
+            setEditingPiece(null);
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const uniqueChannels = Array.from(
@@ -237,27 +250,6 @@ export function ContentPiecesPage() {
         const piece = pieces.find((p) => p.channelId === id);
         return { id, channel: piece?.channel };
     });
-
-    /**
-     * Numa peça só com prompt, o prompt é o trabalho a fazer — no modal do
-     * artigo o bloco de prompt sobe para o topo. Aqui os campos vazios ficavam
-     * na primeira dobra, por isso o editor só aparece abaixo do prompt nesse
-     * caso.
-     */
-    const isPromptOnlyPiece = Boolean(editingPiece && !editingPiece.body.trim());
-    const pieceEditor = editingPiece ? (
-        <div
-            className={`max-h-[calc(100vh-200px)] overflow-y-auto px-6 py-4 ${
-                isPromptOnlyPiece ? 'border-t border-gray-200' : ''
-            }`}
-        >
-            <ContentPieceEditor
-                piece={editingPiece}
-                onSave={handleSave}
-                isSaving={isSaving}
-            />
-        </div>
-    ) : null;
 
     return (
         <div className="space-y-6">
@@ -481,6 +473,14 @@ export function ContentPiecesPage() {
                             onRegenerate={() => handleRegenerate(piece)}
                             onEdit={() => setEditingPiece(piece)}
                             onDelete={() => handleDelete(piece.id)}
+                            onOpen={() => {
+                                navigate(
+                                    workspacePath(
+                                        currentWorkspace?.id ?? '',
+                                        `content/${piece.id}`
+                                    )
+                                );
+                            }}
                             isApproving={approvingIds.has(piece.id)}
                             isRegenerating={regeneratingIds.has(piece.id)}
                         />
@@ -488,82 +488,27 @@ export function ContentPiecesPage() {
                 </div>
             )}
 
-            {editingPiece && (
-                <div className="fixed inset-0 z-50 overflow-y-auto">
-                    <div className="flex min-h-full items-center justify-center p-4">
-                        <div
-                            className="fixed inset-0 bg-black/50"
-                            onClick={() => setEditingPiece(null)}
-                        />
-                        <div className="relative w-full max-w-2xl rounded-lg bg-white shadow-xl">
-                            <div className="flex items-center justify-between border-b px-6 py-4">
-                                <h3 className="text-lg font-semibold text-gray-900">
-                                    Editar:{' '}
-                                    {CONTENT_FORMAT_LABELS[editingPiece.format]}
-                                </h3>
-                                <button
-                                    onClick={() => setEditingPiece(null)}
-                                    className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                                >
-                                    <svg
-                                        className="h-5 w-5"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        viewBox="0 0 24 24"
-                                    >
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M6 18L18 6M6 6l12 12"
-                                        />
-                                    </svg>
-                                </button>
-                            </div>
-                            {/* Editor: abaixo do prompt quando a peça só tem prompt, acima
-                                quando já tem conteúdo (ver `isPromptOnlyPiece`). */}
-                            {isPromptOnlyPiece ? null : pieceEditor}
+            {/* Modal único de edição (partilhado com o editor de artigo). O
+                overlay inline anterior — com auto-save e editor próprio — foi
+                removido. */}
+            <ContentPieceModal
+                isOpen={editingPiece !== null}
+                onClose={() => setEditingPiece(null)}
+                piece={editingPiece}
+                onSave={handleSave}
+                onRewritePrompt={handleRewritePrompt}
+                isRewritingPrompt={isRewritingPrompt}
+                isSaving={isSaving}
+            />
 
-                            {/* Prompt da peça: editar, copiar e gerar a partir dele */}
-                            <div
-                                className={`max-h-[calc(100vh-200px)] overflow-y-auto px-6 py-4 ${
-                                    isPromptOnlyPiece ? '' : 'border-t border-gray-200'
-                                }`}
-                            >
-                                <ContentMetaManager
-                                    targetType="PIECE"
-                                    targetId={editingPiece.id}
-                                    assetUrl={editingPiece.assetUrl}
-                                    assetName={editingPiece.assetName}
-                                    onAssetChange={async (data) => {
-                                        await updatePiece(editingPiece.id, data);
-                                    }}
-                                    piece={{
-                                        id: editingPiece.id,
-                                        format: editingPiece.format,
-                                        body: editingPiece.body,
-                                        slideCount: editingPiece.slideCount,
-                                    }}
-                                    onRewritePrompt={handleRewritePrompt}
-                                    isRewritingPrompt={isRewritingPrompt}
-                                />
-                                {rewriteMsg && (
-                                    <p
-                                        className={`mt-3 text-sm ${
-                                            rewriteMsg.ok
-                                                ? 'text-green-700'
-                                                : 'text-red-700'
-                                        }`}
-                                    >
-                                        {rewriteMsg.text}
-                                    </p>
-                                )}
-                            </div>
-
-                            {isPromptOnlyPiece ? pieceEditor : null}
-                        </div>
-                    </div>
-                </div>
+            {rewriteMsg && !editingPiece && (
+                <p
+                    className={`text-sm ${
+                        rewriteMsg.ok ? 'text-green-700' : 'text-red-700'
+                    }`}
+                >
+                    {rewriteMsg.text}
+                </p>
             )}
         </div>
     );

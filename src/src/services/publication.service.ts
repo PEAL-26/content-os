@@ -1,13 +1,12 @@
 import { supabase } from '@/lib/supabase';
 import { v4 as uuidv4 } from 'uuid';
-import type {
-    ContentPublication,
-    PublicationTargetType,
-} from '@/types/database';
+import type { ContentPublication, PublicationTargetType } from '@/types/database';
 
 // =============================================================================
 // CONTENT PUBLICATIONS (multi-plataforma, polimórfico ARTICLE|PIECE|VIDEO_SCRIPT)
-// + helper de assets (upload Storage 'assets' ou link externo).
+// O upload de artefactos e o registo em content_assets vivem em
+// content-asset.service.ts (o wrapper `uploadAsset` que cá existia foi
+// removido: o planeador importa `uploadAssetFile` diretamente).
 // =============================================================================
 
 export type PublicationPlatform = string; // 'LINKEDIN' | 'INSTAGRAM' | 'outros' | ...
@@ -77,47 +76,3 @@ export const publicationService = {
         }
     },
 };
-
-// -----------------------------------------------------------------------------
-// Assets — upload para o bucket 'assets' (supabase.storage)
-// -----------------------------------------------------------------------------
-
-export interface AssetUpload {
-    url: string;
-    name: string;
-}
-
-/**
- * Faz upload de um ficheiro para o bucket "assets" e devolve
- * { url (publica), name }. Usado pelos fluxos de "marcar publicado".
- */
-export async function uploadAsset(
-    file: File,
-    folder: string
-): Promise<AssetUpload> {
-    const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
-    const safeName = `${folder}/${Date.now()}-${file.name
-        .replace(/[^a-zA-Z0-9._-]/g, '-')
-        .slice(0, 80)}`;
-    const path = extension ? `${safeName}` : `${safeName}`;
-
-    const { error } = await supabase.storage
-        .from('assets')
-        .upload(path, file, {
-            cacheControl: '3600',
-            upsert: false,
-        });
-
-    if (error) {
-        throw new Error(`Erro ao carregar artefacto: ${error.message}`);
-    }
-
-    const { data: publicUrlData } = supabase.storage
-        .from('assets')
-        .getPublicUrl(path);
-
-    return {
-        url: publicUrlData.publicUrl,
-        name: file.name,
-    };
-}

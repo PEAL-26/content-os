@@ -28,10 +28,6 @@ export interface UpdatePieceParams {
     slideCount?: number | null;
     channelId?: string | null;
     publishedAt?: string;
-    /** Artefacto publicado: URL (Storage assets ou link externo). */
-    assetUrl?: string | null;
-    /** Nome do ficheiro do artefacto. */
-    assetName?: string | null;
 }
 
 export function useWorkspaceContentPieces(filters?: WorkspaceContentFilters) {

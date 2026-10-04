@@ -22,6 +22,13 @@ export interface ArticlesFilters {
 
 export interface UseArticlesOptions {
     filters: ArticlesFilters;
+    /** Teto de resultados por página (default 20). */
+    limit?: number;
+    /**
+     * false = não pede artigos (mantém a última lista). Default true.
+     * Usado por pickers que só precisam de artigos com o modal aberto.
+     */
+    enabled?: boolean;
 }
 
 export function useArticles(options: UseArticlesOptions) {
@@ -35,11 +42,18 @@ export function useArticles(options: UseArticlesOptions) {
     const [offset, setOffset] = useState(0);
 
     const workspaceId = currentWorkspace?.id;
-    const filters = options.filters;
+    // Primitivos: o objecto `filters` é recriado a cada render pelo caller e,
+    // se fosse para as deps tal e qual, cada fetch relançava o seguinte em loop.
+    const status = options.filters.status;
+    const pillarId = options.filters.pillarId;
+    const productId = options.filters.productId;
+    const search = options.filters.search;
+    const limit = options.limit ?? DEFAULT_LIMIT;
+    const enabled = options.enabled ?? true;
 
     const fetchArticles = useCallback(
         async (loadMore = false) => {
-            if (!workspaceId) return;
+            if (!workspaceId || !enabled) return;
 
             if (loadMore) {
                 setIsLoadingMore(true);
@@ -52,12 +66,11 @@ export function useArticles(options: UseArticlesOptions) {
                 const currentOffset = loadMore ? offset : 0;
 
                 const queryFilters: GetArticlesFilters = {
-                    status:
-                        filters.status === 'ALL' ? undefined : filters.status,
-                    pillarId: filters.pillarId,
-                    productId: filters.productId,
-                    search: filters.search || undefined,
-                    limit: DEFAULT_LIMIT,
+                    status: status === 'ALL' ? undefined : status,
+                    pillarId,
+                    productId,
+                    search: search || undefined,
+                    limit,
                     offset: currentOffset,
                 };
 
@@ -74,7 +87,7 @@ export function useArticles(options: UseArticlesOptions) {
                     setOffset(data.length);
                 }
 
-                setHasMore(data.length === DEFAULT_LIMIT);
+                setHasMore(data.length === limit);
             } catch (err) {
                 setError(
                     err instanceof Error
@@ -87,25 +100,20 @@ export function useArticles(options: UseArticlesOptions) {
             }
         },
         // eslint-disable-next-line react-hooks/exhaustive-deps -- offset intentionally omitted to prevent infinite loops
-        [workspaceId, filters]
+        [workspaceId, enabled, status, pillarId, productId, search, limit]
     );
 
+    // Um único effect: workspace, filtros, limite e enabled mudam juntos o fetch.
+    // Filtrar recomeça a lista na página 1, por isso o offset também resets.
     useEffect(() => {
-        if (workspaceId) {
-            setOffset(0);
-            fetchArticles(false);
-        } else {
+        if (!enabled) return;
+        if (!workspaceId) {
             setArticles([]);
+            return;
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchArticles is stable
-    }, [workspaceId]);
-
-    useEffect(() => {
-        if (workspaceId) {
-            fetchArticles(false);
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchArticles is stable
-    }, [filters]);
+        setOffset(0);
+        fetchArticles(false);
+    }, [fetchArticles, enabled, workspaceId]);
 
     const loadMore = useCallback(async () => {
         if (!hasMore || isLoadingMore) return;

@@ -1,4 +1,3 @@
-import { articleService } from '@/services/article.service';
 import {
     videoScriptService,
     type VideoScriptWithRelations,
@@ -6,39 +5,39 @@ import {
     type UpdateVideoScriptInput,
 } from '@/services/video-script.service';
 import { useWorkspaceStore } from '@/stores/workspace-store';
-import { useAIProviderStore } from '@/stores/ai-provider-store';
-import type { SocialChannel } from '@/types/database';
-import { generateVideoScript } from '@/lib/ai';
 import { useCallback, useEffect, useState } from 'react';
 
-export interface GenerateScriptParams {
-    articleId: string;
-    targetChannel: SocialChannel;
-    durationSec: number;
-    /** Instruções adicionais por geração (anexadas ao system prompt). */
-    additionalInstructions?: string;
-    /** Override opcional de provider+modelo para esta geração (null = padrão). */
-    preferred?: { providerId?: string | null; modelCode?: string | null } | null;
-}
-
+/**
+ * A geração é assíncrona (Inngest): esta hook só lista/actualiza/apaga. O que
+ * dispara a geração é o `generationJobService.enqueue` na página.
+ *
+ * Os filtros entram desestruturados em primitivos de propósito: o `filters`
+ * objecto é recriado a cada render pela página e, se entrasse nas deps tal e
+ * qual, cada `setScripts` relançava o fetch em loop infinito.
+ */
 export function useVideoScripts(filters?: VideoScriptsFilters) {
     const { currentWorkspace } = useWorkspaceStore();
     const [scripts, setScripts] = useState<VideoScriptWithRelations[]>([]);
     const [isLoading, setIsLoading] = useState(false);
-    const [isGenerating, setIsGenerating] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    const workspaceId = currentWorkspace?.id;
+    const status = filters?.status;
+    const targetChannel = filters?.targetChannel;
+    const articleId = filters?.articleId;
+
     const fetchScripts = useCallback(async () => {
-        if (!currentWorkspace?.id) return;
+        if (!workspaceId) return;
 
         setIsLoading(true);
         setError(null);
 
         try {
-            const data = await videoScriptService.getVideoScripts(
-                currentWorkspace.id,
-                filters
-            );
+            const data = await videoScriptService.getVideoScripts(workspaceId, {
+                status,
+                targetChannel,
+                articleId,
+            });
             setScripts(data);
         } catch (err) {
             setError(
@@ -49,93 +48,11 @@ export function useVideoScripts(filters?: VideoScriptsFilters) {
         } finally {
             setIsLoading(false);
         }
-    }, [currentWorkspace?.id, filters]);
+    }, [workspaceId, status, targetChannel, articleId]);
 
     useEffect(() => {
         fetchScripts();
     }, [fetchScripts]);
-
-    const generateScript = useCallback(
-        async (
-            params: GenerateScriptParams
-        ): Promise<{ success: boolean; error?: string }> => {
-            if (!currentWorkspace?.id) {
-                return { success: false, error: 'Workspace não carregado' };
-            }
-
-            setIsGenerating(true);
-            setError(null);
-
-            try {
-                const article = await articleService.getArticle(params.articleId);
-                if (!article) {
-                    return { success: false, error: 'Artigo não encontrado' };
-                }
-
-                // Hidratação preguiçosa: carrega os provedores de IA com o
-                // workspace ativo antes de gerar, se ainda não estiverem.
-                const aiStore = useAIProviderStore.getState();
-                if (aiStore.providers.length === 0 && currentWorkspace) {
-                    await aiStore.hydrateProviders(currentWorkspace.id);
-                }
-                const fresh = useAIProviderStore.getState();
-
-                const result = await generateVideoScript(
-                    {
-                        article,
-                        targetChannel: params.targetChannel,
-                        durationSec: params.durationSec,
-                        workspace: currentWorkspace,
-                    },
-                    fresh.providers,
-                    fresh.apiKeys,
-                    params.preferred ?? {
-                        providerId: fresh.defaultProviderId,
-                        modelCode: fresh.defaultModelCode,
-                    },
-                    params.additionalInstructions
-                );
-
-                if (!result.success) {
-                    return {
-                        success: false,
-                        error: result.error || 'Erro ao gerar roteiro',
-                    };
-                }
-
-                await videoScriptService.createVideoScript({
-                    articleId: params.articleId,
-                    workspaceId: currentWorkspace.id,
-                    title: result.script.title,
-                    hook: result.script.hook,
-                    problem: result.script.problem,
-                    solution: result.script.solution,
-                    cta: result.script.cta,
-                    fullScript: result.script.fullScript || '',
-                    durationSec: result.script.durationSec,
-                    targetChannel: params.targetChannel,
-                    onScreenText: result.script.onScreenText,
-                    bRoll: result.script.bRoll,
-                    aiGenerated: true,
-                    portablePrompts: result.portablePrompts,
-                });
-
-                await fetchScripts();
-                return { success: true };
-            } catch (err) {
-                return {
-                    success: false,
-                    error:
-                        err instanceof Error
-                            ? err.message
-                            : 'Erro desconhecido',
-                };
-            } finally {
-                setIsGenerating(false);
-            }
-        },
-        [currentWorkspace, fetchScripts]
-    );
 
     const updateScript = useCallback(
         async (
@@ -200,11 +117,9 @@ export function useVideoScripts(filters?: VideoScriptsFilters) {
     return {
         scripts,
         isLoading,
-        isGenerating,
         error,
         approvedCount,
         totalCount,
-        generateScript,
         updateScript,
         approveScript,
         deleteScript,

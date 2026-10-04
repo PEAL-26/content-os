@@ -90,6 +90,14 @@ enum PublicationTargetType {
   VIDEO_SCRIPT
 }
 
+// Tipo de entidade a que um artefacto está ligado. Enum próprio (e não
+// PublicationTargetType) para os dois catálogos poderem divergir sem couplings.
+enum AssetTargetType {
+  ARTICLE
+  PIECE
+  VIDEO_SCRIPT
+}
+
 enum GenerationJobType {
   NEW_ARTICLE
   CONTENT_PIECES
@@ -298,9 +306,7 @@ model Article {
   publishedAt  DateTime?
   publishedUrl String? // URL final no site
 
-  // Artefacto publicado
-  assetUrl  String? // URL do artefacto (Storage assets ou link externo)
-  assetName String? // Nome do ficheiro do artefacto
+  // Artefactos: ver tabela content_assets (N artefactos por artigo)
 
   // IA
   aiGenerated  Boolean @default(false)
@@ -356,9 +362,7 @@ model ContentPiece {
   status      ContentPieceStatus @default(DRAFT)
   publishedAt DateTime?
 
-  // Artefacto publicado
-  assetUrl  String? // URL do artefacto (Storage assets ou link externo)
-  assetName String? // Nome do ficheiro do artefacto
+  // Artefactos: ver tabela content_assets (N artefactos por peça)
 
   // IA
   aiGenerated Boolean @default(false)
@@ -402,9 +406,7 @@ model VideoScript {
   status      ArticleStatus @default(DRAFT) // Reutiliza enum
   aiGenerated Boolean       @default(false)
 
-  // Artefacto publicado
-  assetUrl  String? // URL do artefacto (Storage assets ou link externo)
-  assetName String? // Nome do ficheiro do artefacto
+  // Artefactos: ver tabela content_assets (N artefactos por roteiro)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -637,6 +639,29 @@ model ContentPublication {
 
   @@index([targetType, targetId])
   @@map("content_publications")
+}
+
+// =============================================================================
+// CONTENT ASSETS (Artefactos — vários por entidade, polimórfico)
+// Substitui as antigas colunas assetUrl/assetName em articles/content_pieces/
+// video_scripts, que só permitiam um artefacto por entidade.
+// =============================================================================
+
+model ContentAsset {
+  id          String          @id @default(uuid())
+  workspaceId String          // Âmbito do workspace (verificação de fetch)
+  targetType  AssetTargetType // ARTICLE | PIECE | VIDEO_SCRIPT
+  targetId    String          // articles.id | content_pieces.id | video_scripts.id
+  url         String          // URL do Storage ou link externo
+  name        String? // Nome do ficheiro
+  mimeType    String? // MIME do upload; para links externos, inferido da extensão
+  createdAt   DateTime        @default(now())
+
+  @@index([workspaceId])
+  @@index([targetType, targetId])
+  // A grelha de artefactos ordena por createdAt DESC.
+  @@index([createdAt])
+  @@map("content_assets")
 }
 
 // =============================================================================
