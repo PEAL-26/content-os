@@ -49,8 +49,11 @@ interface TabsListProps {
 
 export function TabsList({ children, className = '' }: TabsListProps) {
     return (
+        // overflow em ambos os eixos: em CSS, definir um eixo como diferente de
+        // `visible` força o outro a computar como `auto`; travar o eixo vertical
+        // evita uma barra de scroll vertical espúria quando a linha não cabe.
         <div
-            className={`inline-flex h-10 items-center justify-center rounded-lg bg-gray-100 p-1 text-gray-500 ${className}`}
+            className={`inline-flex h-10 items-center justify-center overflow-x-auto overflow-y-hidden rounded-lg bg-gray-100 p-1 text-gray-500 ${className}`}
             role="tablist"
         >
             {children}
@@ -83,7 +86,7 @@ export function TabsTrigger({
             disabled={disabled}
             aria-selected={isActive}
             onClick={() => context.onValueChange(value)}
-            className={`inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-all ${
+            className={`inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-all ${
                 isActive
                     ? 'bg-white text-gray-900 shadow-sm'
                     : 'hover:bg-gray-200 hover:text-gray-700'

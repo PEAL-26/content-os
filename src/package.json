@@ -4,7 +4,9 @@
     "version": "0.0.0",
     "type": "module",
     "scripts": {
+        "predev": "prisma generate",
         "dev": "vite",
+        "predev:inngest": "prisma generate",
         "dev:inngest": "inngest-cli dev -u http://localhost:5173/api/inngest",
         "check:esm": "node scripts/check-esm-imports.mjs",
         "probe:auth": "tsx scripts/probe-enqueue-auth.ts",

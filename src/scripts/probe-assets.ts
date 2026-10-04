@@ -3,10 +3,11 @@
  *
  * Verifica, contra a Supabase real:
  *   1. Os helpers puros (extensão, MIME, tipo, URL segura, validação de
- *      ficheiro) e os limites de carregamento. Nenhuma verificação desta
- *      secção toca na rede: `createFromFiles` só chega a `uploadAssetFiles` com
- *      ficheiros que a whitelist recusa, e o `throw` acontece antes de
- *      `supabase.storage`.
+ *      ficheiro), a normalização das listas TEXT de `video_scripts`
+ *      (`toStringList`) e os limites de carregamento. Nenhuma verificação
+ *      desta secção toca na rede: `createFromFiles` só chega a
+ *      `uploadAssetFiles` com ficheiros que a whitelist recusa, e o `throw`
+ *      acontece antes de `supabase.storage`.
  *   2. Que a tabela existe e responde a um SELECT.
  *   3. Os invariantes do backfill que continuam a ser verificáveis DEPOIS do
  *      DROP COLUMN (as colunas legacy já não existem, portanto as contagens
@@ -146,10 +147,23 @@ function describePostgrest(error: PostgrestError | null | undefined): string {
  */
 function isMissingColumnError(error: PostgrestError | null): boolean {
     if (!error) return false;
-    if (error.code === 'PGRST204') return true;
+    const code = error.code ?? '';
     const message = error.message ?? '';
-    if (!/Could not find the column|schema cache/i.test(message)) return false;
-    return !/Could not find the table/i.test(message);
+
+    // Uma tabela em falta é outro problema: o check tem de falhar, não passar.
+    if (code === 'PGRST205' || /Could not find the table/i.test(message)) return false;
+
+    // Forma A - o PostgREST recusa o `select` antes de tocar na BD.
+    if (code === 'PGRST204') return true;
+    if (/Could not find the column/i.test(message)) return true;
+
+    // Forma B - o PostgREST repassa o erro do Postgres tal e qual
+    // (42703 / undefined_column, "column articles.assetUrl does not exist").
+    // A query só projecta a coluna em teste, por isso o 42703 é inequívoco.
+    if (code === '42703') return /does not exist|undefined column/i.test(message);
+
+    // Qualquer outro erro (401, 500, DNS, RLS) é uma falha, não uma passagem.
+    return false;
 }
 
 /** MIME esperado para um URL, ou `undefined` quando a extensão é desconhecida
@@ -349,6 +363,135 @@ tally(
     'uploadAssetFile (singular) recusa um ficheiro acima de 25 MB',
     await rejectionMessage(hugeProbe),
     validateAssetFile(hugeProbe).reason
+);
+
+// --- As listas TEXT de video_scripts -----------------------------------------
+//
+// `onScreenText`/`bRoll` são colunas TEXT sem default, o serviço declarava
+// `string[]` e a página de detalhe fazia `.length`/`.map` em cima: uma linha com
+// `NULL` rebentava a página e uma linha com texto JSON devolvia o número de
+// caracteres em `.length` (e `.map` lançava a seguir, porque uma string não tem
+// `.map`). `toStringList` é a fronteira que torna o tipo declarado verdadeiro,
+// e tem de sobreviver a TODAS as formas históricas — daí os checks por forma,
+// e não só ao caminho feliz.
+
+const { toStringList } = await import(
+    '../src/services/video-script.service'
+);
+
+tally(
+    'lista: null (a coluna NULL que rebentava a página)',
+    toStringList(null),
+    []
+);
+tally(
+    'lista: undefined (chave em falta na linha)',
+    toStringList(undefined),
+    []
+);
+tally('lista: array vazio', toStringList([]), []);
+tally('lista: array já normalizado', toStringList(['a', 'b']), ['a', 'b']);
+tally(
+    'lista: array com null e números (resposta da IA) fica só com as strings',
+    toStringList(['a', null, 2, 'b']),
+    ['a', 'b']
+);
+tally(
+    'lista: array com strings vazias/brancas',
+    toStringList(['a', '', '  ', 'b']),
+    ['a', 'b']
+);
+tally("lista: '[]' (texto JSON de lista vazia)", toStringList('[]'), []);
+tally(
+    'lista: texto JSON com duas entradas (o formato gravado)',
+    toStringList('["a","b"]'),
+    ['a', 'b']
+);
+tally(
+    'lista: texto JSON com quebras e espaços nas entradas',
+    toStringList('[" a ", "b"]'),
+    ['a', 'b']
+);
+tally(
+    "lista: '\"texto\"' (JSON.stringify aplicado a uma string)",
+    toStringList('"texto"'),
+    ['texto']
+);
+tally(
+    'lista: texto simples com uma linha por item',
+    toStringList('a\nb'),
+    ['a', 'b']
+);
+tally('lista: string vazia', toStringList(''), []);
+tally('lista: string só com espaços', toStringList('   '), []);
+tally("lista: 'null' literal", toStringList('null'), []);
+tally('lista: número solto não é lista', toStringList(42), []);
+tally('lista: objecto não é lista', toStringList({ a: 1 }), []);
+
+// Total: nunca lança e nunca devolve outra coisa que não seja um array. Estes
+// valores são rotulados por índice porque `String()` de um Symbol lança — o
+// próprio check não pode rebentar ao montar o diagnóstico.
+const HOSTILE_LIST_VALUES: unknown[] = [
+    null,
+    undefined,
+    '',
+    '   ',
+    'null',
+    '[]',
+    'null null',
+    '{"a":1}',
+    '{',
+    '[',
+    '[[["a"]]]',
+    '"',
+    '\\',
+    Symbol.iterator.toString(),
+    () => 'x',
+    new Date(0),
+    NaN,
+    true,
+    [Symbol('x')],
+    { toString: () => '["a"]' },
+];
+
+const hostileProblems: string[] = [];
+HOSTILE_LIST_VALUES.forEach((value, index) => {
+    try {
+        const out = toStringList(value);
+        if (!Array.isArray(out)) {
+            hostileProblems.push(
+                `[${index}] devolveu ${typeof out} em vez de um array`
+            );
+        } else if (out.some((item) => typeof item !== 'string')) {
+            hostileProblems.push(`[${index}] devolveu um array com não-strings`);
+        }
+    } catch (err) {
+        hostileProblems.push(
+            `[${index}] lançou ${err instanceof Error ? err.message : 'excepção'}`
+        );
+    }
+});
+ok(
+    'toStringList nunca lança e nunca devolve nada que não seja string[]',
+    hostileProblems.length === 0,
+    hostileProblems.join(' | ')
+);
+
+// A lista devolvida tem de ser nova a cada chamada: se devolvesse o array da
+// própria linha, editar no modal escrevia por cima do objecto em memória.
+const seedList = ['a', 'b'];
+const firstList = toStringList(seedList);
+const secondList = toStringList(seedList);
+firstList.push('mutado');
+tally(
+    'cada chamada devolve um array novo (o original não é partilhado)',
+    secondList,
+    ['a', 'b']
+);
+tally(
+    'o array recebido como argumento não é alterado',
+    seedList,
+    ['a', 'b']
 );
 
 running();
