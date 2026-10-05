@@ -500,7 +500,13 @@ export function ArticleEditor() {
     /** Repete um campo que falhou — só ele. */
     const handleRetryMetaField = useCallback(
         (field: MetadataField) => {
-            if (!currentWorkspace || metaJob.isActive) return;
+            if (
+                !currentWorkspace ||
+                metaJob.isActive ||
+                isMetaEnqueuingRef.current
+            ) {
+                return;
+            }
             void requestMetadata([field]);
         },
         [currentWorkspace, metaJob.isActive, requestMetadata]
@@ -513,7 +519,9 @@ export function ArticleEditor() {
      */
     const metadataAIState: ArticleMetadataAIState | undefined = article
         ? {
-              isBusy: metaJob.isActive,
+              isBusy: isMetaBusy,
+              /** Enfileirou mas o job ainda não voltou — feedback optimista. */
+              isEnqueuing: isMetaEnqueuing,
               activeFields: metaActiveFields,
               fieldErrors: metaFieldErrors,
               missingFields: missingMetadataFields(state),
@@ -670,7 +678,7 @@ export function ArticleEditor() {
                 />
             )}
 
-            {metaJob.isActive && (
+            {isMetaBusy && (
                 <div className="mx-6 mt-4 flex items-center gap-3 rounded-md border border-purple-200 bg-purple-50 p-3">
                     <svg
                         className="h-5 w-5 shrink-0 animate-spin text-purple-500"
@@ -692,8 +700,9 @@ export function ArticleEditor() {
                         />
                     </svg>
                     <p className="text-sm text-purple-700">
-                        A gerar os metadados em segundo plano… aparecem nos
-                        campos assim que estiverem prontos.
+                        {isMetaEnqueuing
+                            ? 'A preparar a geração dos metadados…'
+                            : 'A gerar os metadados em segundo plano… aparecem nos campos assim que estiverem prontos.'}
                     </p>
                 </div>
             )}

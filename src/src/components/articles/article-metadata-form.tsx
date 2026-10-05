@@ -10,7 +10,7 @@ import {
 import type { MetadataField } from '@/lib/ai/generation-job-types';
 import { generateSlug } from '@/types/article';
 import type { ContentPillar } from '@/types/pillar';
-import { PlusIcon } from 'lucide-react';
+import { Loader2, PlusIcon } from 'lucide-react';
 import type { KeyboardEvent, ReactNode } from 'react';
 import { useState } from 'react';
 
@@ -32,6 +32,12 @@ interface ArticleMetadata extends ArticleMetadataValues {
 export interface ArticleMetadataAIState {
     /** Há um ARTICLE_METADATA activo (desliga todos os botões). */
     isBusy: boolean;
+    /**
+     * O pedido foi enviado e o job ainda não voltou. Janela optimista entre o
+     * clique e o primeiro estado conhecido — sem isto os botões ficam
+     * clicáveis e um segundo clique enfileira um segundo job para o artigo.
+     */
+    isEnqueuing: boolean;
     /** Campos a gerar neste momento (para o spinner por campo). */
     activeFields: MetadataField[];
     /** Erro por campo do último job. */
@@ -129,6 +135,7 @@ export function ArticleMetadataForm({
                 field={field}
                 isGenerating={ai.activeFields.includes(field)}
                 isBusy={ai.isBusy}
+                isEnqueuing={ai.isEnqueuing}
                 error={ai.fieldErrors[field]}
                 onGenerate={(f) => ai.onGenerate([f])}
                 onRetry={ai.onRetryField}
@@ -166,11 +173,26 @@ export function ArticleMetadataForm({
                                 ? 'Escreve o artigo primeiro — os metadados são derivados do texto.'
                                 : undefined
                         }
-                        className="w-full rounded-md bg-purple-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-purple-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+                        className="w-full rounded-md bg-purple-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-purple-700 disabled:cursor-not-allowed disabled:bg-purple-300"
                     >
-                        {ai.missingFields.length === 0
-                            ? 'Metadados completos'
-                            : `Gerar em falta (${ai.missingFields.length})`}
+                        {ai.isEnqueuing ? (
+                            <span className="flex items-center justify-center gap-2">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                A enviar…
+                            </span>
+                        ) : ai.isBusy ? (
+                            <span className="flex items-center justify-center gap-2">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                A gerar
+                                {ai.missingFields.length > 0 &&
+                                    ` (${ai.missingFields.length})`}
+                                …
+                            </span>
+                        ) : ai.missingFields.length === 0 ? (
+                            'Metadados completos'
+                        ) : (
+                            `Gerar em falta (${ai.missingFields.length})`
+                        )}
                     </button>
 
                     {/* "Regenerar todos" só existe quando há conteúdo a
@@ -183,7 +205,14 @@ export function ArticleMetadataForm({
                             disabled={ai.isBusy || !ai.canGenerate}
                             className="w-full rounded-md border border-purple-600 bg-white px-4 py-2.5 text-sm font-medium text-purple-700 transition-colors hover:bg-purple-50 disabled:cursor-not-allowed disabled:border-gray-300 disabled:text-gray-400"
                         >
-                            Regenerar todos
+                            {ai.isBusy ? (
+                                <span className="flex items-center justify-center gap-2">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    A gerar…
+                                </span>
+                            ) : (
+                                'Regenerar todos'
+                            )}
                         </button>
                     )}
 

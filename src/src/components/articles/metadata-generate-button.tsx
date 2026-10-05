@@ -8,6 +8,12 @@ interface MetadataGenerateButtonProps {
     isGenerating: boolean;
     /** Há algum ARTICLE_METADATA activo (desliga os botões todos). */
     isBusy: boolean;
+    /**
+     * Pedido enviado, job ainda não voltou. Sem isto, o "Repetir" de um campo
+     * que falhou aceitava um segundo clique nesse intervalo — o erro do campo
+     * continua preenchido (lê o job antigo) e o `isBusy` ainda é false.
+     */
+    isEnqueuing?: boolean;
     /** Erro do último job neste campo (repetir é o clique no próprio botão). */
     error?: string | null;
     onGenerate: (field: MetadataField) => void;
@@ -27,19 +33,38 @@ export function MetadataGenerateButton({
     field,
     isGenerating,
     isBusy,
+    isEnqueuing = false,
     error,
     onGenerate,
     onRetry,
     className,
 }: MetadataGenerateButtonProps) {
     const failed = Boolean(error);
+    // `locked` cobre os dois lados: o job a correr e o enqueue em curso.
+    const locked = isBusy || isEnqueuing;
 
     if (failed) {
+        // A gerar este campo: o spinner tem de substituir o "Repetir", senão o
+        // utilizador vê o aviso de erro de um job que já foi substituído.
+        if (isEnqueuing) {
+            return (
+                <button
+                    type="button"
+                    disabled
+                    title="A preparar a geração…"
+                    aria-label="A preparar a geração"
+                    className={cn('flex items-center gap-1 p-1', className)}
+                >
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-purple-600" />
+                </button>
+            );
+        }
+
         return (
             <button
                 type="button"
                 onClick={() => (onRetry ? onRetry(field) : onGenerate(field))}
-                disabled={isBusy}
+                disabled={locked}
                 title={error ?? 'A geração falhou — clicar para repetir'}
                 aria-label="A geração falhou — clicar para repetir"
                 className={cn(
@@ -57,7 +82,7 @@ export function MetadataGenerateButton({
         <button
             type="button"
             onClick={() => onGenerate(field)}
-            disabled={isBusy || isGenerating}
+            disabled={locked || isGenerating}
             title="Gerar com IA"
             aria-label="Gerar este campo com IA"
             className={cn(
