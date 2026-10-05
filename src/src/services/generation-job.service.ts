@@ -17,11 +17,13 @@ import type {
 // =============================================================================
 
 export type {
+    ArticleMetadataJobParams,
     GenerationJob,
     GenerationJobItem,
     GenerationJobParams,
     GenerationJobStatusValue,
     GenerationJobTypeValue,
+    MetadataField,
     TargetMode,
 } from '@/lib/ai/generation-job-types';
 
@@ -223,6 +225,8 @@ export function defaultJobParams(
             return { articleId: '', targetChannel: 'TIKTOK', durationSec: 60 };
         case 'CONTENT_ITEM':
             return { pieceId: '', itemKey: 'main' };
+        case 'ARTICLE_METADATA':
+            return { articleId: '', fields: [] };
     }
 }
 

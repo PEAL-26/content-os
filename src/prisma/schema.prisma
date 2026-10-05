@@ -104,6 +104,7 @@ enum GenerationJobType {
   VIDEO_SCRIPT
   CONTENT_PROMPT // Escreve o prompt da peça (sem gerar o conteúdo)
   CONTENT_ITEM // Regenera um item (slide-N / tweet-N) a partir do seu prompt
+  ARTICLE_METADATA // Gera os metadados (summary/keywords/SEO) de um artigo existente
 }
 
 enum GenerationJobStatus {

@@ -1,22 +1,24 @@
+import { ChannelBadge } from '@/components/channels/channel-badge';
 import { ArtefactsPanel } from '@/components/content/artefacts-panel';
 import { ContentNotFound } from '@/components/content/content-not-found';
 import { ContentPromptsPanel } from '@/components/content/content-prompts-panel';
+import { CopyMenu } from '@/components/content/copy-menu';
 import { PublicationsPanel } from '@/components/content/publications-panel';
 import { VideoScriptModal } from '@/components/content/video-script-modal';
-import { ChannelBadge } from '@/components/channels/channel-badge';
 import { useGenerationJob } from '@/hooks/use-generation-job';
 import { useVideoScripts } from '@/hooks/use-video-scripts';
 import { calculateDurationFromScript, calculateReadingTime } from '@/lib/ai';
+import { suggestPlatformForScript } from '@/lib/social-text/suggest-platform';
 import { workspacePath } from '@/lib/workspace-paths';
 import {
     defaultJobParams,
     generationJobService,
 } from '@/services/generation-job.service';
-import { useGenerationJobStore } from '@/stores/generation-jobs-store';
 import {
     videoScriptService,
     type VideoScriptWithRelations,
 } from '@/services/video-script.service';
+import { useGenerationJobStore } from '@/stores/generation-jobs-store';
 import { ARTICLE_STATUS_COLORS, ARTICLE_STATUS_LABELS } from '@/types/database';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -29,7 +31,10 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
  * removido quando o card passou a navegar para cá.
  */
 export function VideoScriptDetailPage() {
-    const { workspaceId, id } = useParams<{ workspaceId: string; id: string }>();
+    const { workspaceId, id } = useParams<{
+        workspaceId: string;
+        id: string;
+    }>();
     const navigate = useNavigate();
     const { approveScript, deleteScript, refetch } = useVideoScripts();
     const rememberJob = useGenerationJobStore((s) => s.rememberJob);
@@ -40,7 +45,6 @@ export function VideoScriptDetailPage() {
     const [isEditOpen, setIsEditOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [actionError, setActionError] = useState<string | null>(null);
-    const [copied, setCopied] = useState(false);
     /** Aviso do "Reescrever prompt" (job enfileirado, ou erro de enqueue). */
     const [rewriteMsg, setRewriteMsg] = useState<{
         ok: boolean;
@@ -156,12 +160,8 @@ export function VideoScriptDetailPage() {
             const result = await generationJobService.enqueue({
                 workspaceId: script.workspaceId,
                 jobType: 'VIDEO_SCRIPT',
-                params:
-                    genJob.job?.params ??
-                    defaultJobParams('VIDEO_SCRIPT'),
-                targets: [
-                    { format: 'VIDEO_SCRIPT', targetId: script.id },
-                ],
+                params: genJob.job?.params ?? defaultJobParams('VIDEO_SCRIPT'),
+                targets: [{ format: 'VIDEO_SCRIPT', targetId: script.id }],
             });
             rememberJob({
                 jobType: 'VIDEO_SCRIPT',
@@ -249,33 +249,6 @@ export function VideoScriptDetailPage() {
         }
     };
 
-    const handleCopy = async () => {
-        if (!script) return;
-
-        const fullText = [
-            script.hook,
-            script.problem,
-            script.solution,
-            script.fullScript,
-            script.cta,
-        ]
-            .filter(Boolean)
-            .join('\n\n');
-
-        try {
-            await navigator.clipboard.writeText(fullText);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        } catch {
-            // `navigator.clipboard` não existe em contextos não seguros (http://
-            // localhost em rede, iframe sem permissão). Sem este catch a
-            // promessa rejeitada ficava por tratar e o utilizador não via nada.
-            setActionError(
-                'Não foi possível copiar. O browser não deu acesso à área de transferência.'
-            );
-        }
-    };
-
     if (isLoading) {
         return (
             <div className="flex flex-1 items-center justify-center py-12">
@@ -298,11 +271,7 @@ export function VideoScriptDetailPage() {
 
     const statusColor = ARTICLE_STATUS_COLORS[script.status];
     const generation = genJob.job
-        ? (genJob.job.status as
-              | 'QUEUED'
-              | 'RUNNING'
-              | 'COMPLETED'
-              | 'FAILED')
+        ? (genJob.job.status as 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED')
         : null;
     const generationError = genJob.job?.error ?? null;
 
@@ -361,12 +330,9 @@ export function VideoScriptDetailPage() {
                             )}
                             <span>
                                 Alvo: {script.durationSec}s · real{' '}
-                                {calculateDurationFromScript(
-                                    script.fullScript
-                                )}
-                                s · ~
-                                {calculateReadingTime(script.fullScript)} min de
-                                leitura
+                                {calculateDurationFromScript(script.fullScript)}
+                                s · ~{calculateReadingTime(script.fullScript)}{' '}
+                                min de leitura
                             </span>
                         </div>
                     </div>
@@ -405,31 +371,16 @@ export function VideoScriptDetailPage() {
                             sítio das acções (Decisão 4), e é onde o detalhe da
                             peça o tem. A versão que vivia no corpo do roteiro
                             foi removida para não haver dois. */}
-                        <button
-                            onClick={() => void handleCopy()}
-                            className="inline-flex items-center gap-1.5 rounded-md bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200"
-                        >
-                            {copied ? (
-                                <>
-                                    <svg
-                                        className="h-4 w-4 text-green-600"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        viewBox="0 0 24 24"
-                                    >
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M5 13l4 4L19 7"
-                                        />
-                                    </svg>
-                                    Copiado!
-                                </>
-                            ) : (
-                                'Copiar roteiro'
-                            )}
-                        </button>
+                        {script && (
+                            <CopyMenu
+                                source={{ type: 'videoScript', script }}
+                                disabled={!script.fullScript.trim()}
+                                variant="button"
+                                defaultPlatform={suggestPlatformForScript(
+                                    script.targetChannel
+                                )}
+                            />
+                        )}
 
                         <button
                             onClick={() => void handleDelete()}
@@ -441,9 +392,7 @@ export function VideoScriptDetailPage() {
                 </div>
 
                 {actionError && (
-                    <p className="mt-2 text-sm text-red-600">
-                        {actionError}
-                    </p>
+                    <p className="mt-2 text-sm text-red-600">{actionError}</p>
                 )}
 
                 {rewriteMsg && (

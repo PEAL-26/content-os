@@ -5,6 +5,7 @@
 // =============================================================================
 
 export type {
+    ArticleMetadataJobParams,
     ContentItemJobParams,
     ContentPiecesJobParams,
     GenerationJob,
@@ -13,6 +14,7 @@ export type {
     GenerationJobStatusValue,
     GenerationJobTypeValue,
     GenerationPreferred,
+    MetadataField,
     NewArticleJobParams,
     TargetMode,
     VideoScriptJobParams,

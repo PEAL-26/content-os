@@ -1,5 +1,7 @@
 import { ChannelBadge } from '@/components/channels/channel-badge';
+import { CopyMenu } from '@/components/content/copy-menu';
 import { PiecePreview } from '@/components/content/piece-preview';
+import { suggestPlatformForPiece } from '@/lib/social-text/suggest-platform';
 import { workspacePath } from '@/lib/workspace-paths';
 import type { ContentPieceWithRelations } from '@/types/database';
 import {
@@ -8,7 +10,6 @@ import {
     CONTENT_PIECE_STATUS_COLORS,
     CONTENT_PIECE_STATUS_LABELS,
 } from '@/types/database';
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
 interface ContentPieceCardProps {
@@ -82,30 +83,10 @@ export function ContentPieceCard({
     const statusColors = CONTENT_PIECE_STATUS_COLORS[piece.status];
     const isDraft = piece.status === 'DRAFT';
     const hasContent = Boolean(piece.body && piece.body.trim());
-    const [copied, setCopied] = useState(false);
-    const [copyError, setCopyError] = useState<string | null>(null);
 
-    /** Copia a peça para a área de transferência (mesmo texto do detalhe). */
-    const handleCopy = async () => {
-        const text = [piece.title, piece.body, piece.hookText, piece.ctaText]
-            .filter((part) => part && part.trim())
-            .join('\n\n');
-        if (!text) return;
-
-        setCopyError(null);
-        try {
-            await navigator.clipboard.writeText(text);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        } catch {
-            // `navigator.clipboard` não existe em contextos não seguros
-            // (http://localhost em rede, iframe sem permissão): sem este catch o
-            // utilizador não recebe qualquer feedback.
-            setCopyError(
-                'Não foi possível copiar. O browser não deu acesso à área de transferência.'
-            );
-        }
-    };
+    // O canal da peça dá a plataforma mais óbvia para o menu de copiar. Uma
+    // peça de Instagram não faz sentido formatada para o limite de 280 do X.
+    const suggestedPlatform = suggestPlatformForPiece(piece);
 
     return (
         <div
@@ -186,11 +167,7 @@ export function ContentPieceCard({
                             disabled={isApproving}
                             className="inline-flex items-center gap-1 rounded-md bg-green-600 px-2 py-1 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
                         >
-                            {isApproving ? (
-                                <Spinner />
-                            ) : (
-                                <CheckIcon />
-                            )}
+                            {isApproving ? <Spinner /> : <CheckIcon />}
                             Aprovar
                         </button>
                     )}
@@ -225,33 +202,13 @@ export function ContentPieceCard({
                     )}
                 </div>
                 <div className="flex items-center gap-1">
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            void handleCopy();
-                        }}
-                        disabled={!hasContent}
-                        className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 disabled:opacity-40"
-                        title="Copiar conteúdo"
-                    >
-                        {copied ? (
-                            <CheckIcon className="h-4 w-4 text-green-600" />
-                        ) : (
-                            <svg
-                                className="h-4 w-4"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                            >
-                                <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M8 4h10a2 2 0 012 2v10a2 2 0 01-2 2h-4M4 8h8a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V10a2 2 0 012-2z"
-                                />
-                            </svg>
-                        )}
-                    </button>
+                    <div onClick={(e) => e.stopPropagation()}>
+                        <CopyMenu
+                            source={{ type: 'piece', piece }}
+                            disabled={!hasContent}
+                            defaultPlatform={suggestedPlatform}
+                        />
+                    </div>
                     {onEdit && (
                         <button
                             onClick={(e) => {
@@ -302,14 +259,6 @@ export function ContentPieceCard({
                     )}
                 </div>
             </div>
-
-            {/* O erro de clipboard fica no próprio card (o da listagem não tem
-                slot de erro); o mesmo texto da página de detalhe. */}
-            {copyError && (
-                <p className="border-t border-red-100 bg-red-50 px-4 py-2 text-xs text-red-700">
-                    {copyError}
-                </p>
-            )}
         </div>
     );
 }

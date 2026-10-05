@@ -1,11 +1,21 @@
+import type { ArticleMetadataAIState } from '@/components/articles/article-metadata-form';
 import { ArticleMetadataForm } from '@/components/articles/article-metadata-form';
+import type { AIProviderSelection } from '@/components/ai/ai-provider-picker';
 import { ArticleStatusBadge } from '@/components/articles/article-status-badge';
 import { ArtefactsPanel } from '@/components/content/artefacts-panel';
 import { ContentGeneratorPanel } from '@/components/content/content-generator-panel';
 import { PublicationsPanel } from '@/components/content/publications-panel';
+import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useDebounce } from '@/hooks/use-debounce';
 import { useGenerationJob } from '@/hooks/use-generation-job';
+import {
+    canGenerateMetadata,
+    METADATA_FIELDS,
+    METADATA_FIELD_LABELS,
+    missingMetadataFields,
+} from '@/lib/ai/article-metadata';
+import type { MetadataField } from '@/lib/ai/generation-job-types';
 import { usePillars } from '@/hooks/use-pillars';
 import { useProducts } from '@/hooks/use-products';
 import { cn } from '@/lib/utils';
@@ -68,6 +78,61 @@ export function ArticleEditor() {
         id ? { kind: 'target', jobType: 'NEW_ARTICLE', targetId: id } : null
     );
     const lastReloadedJobRef = useRef<string | null>(null);
+
+    // Geração dos metadados (ARTICLE_METADATA) deste artigo. O `items` traz um
+    // estado por campo, que é o que dá spinner/erro/retry independentes.
+    const metaJob = useGenerationJob(
+        id ? { kind: 'target', jobType: 'ARTICLE_METADATA', targetId: id } : null
+    );
+    const lastMergedMetaJobRef = useRef<string | null>(null);
+
+    const [metaPreferred, setMetaPreferred] =
+        useState<AIProviderSelection | null>(null);
+    const [metaInstructions, setMetaInstructions] = useState('');
+    const [metaError, setMetaError] = useState<string | null>(null);
+    /**
+     * Enfileirou e ainda não sabe o resultado do job.
+     *
+     * É um estado optimista de propósito: `metaJob.isActive` só fica `true`
+     * depois de o `refresh()` trazer o job novo, e nesse intervalo (um POST ao
+     * enqueue + um fetch ao Supabase) o botão continuava clicável. Como o erro
+     * do campo continuava preenchido (lê o job *antigo*), um segundo clique
+     * enfileirava um segundo job para o mesmo artigo — dois jobs a escrever os
+     * mesmos campos, com o segundo a deitar fora o primeiro.
+     *
+     * O ref espelha o estado para os guards poderem ler sem depender do closure.
+     */
+    const [isMetaEnqueuing, setIsMetaEnqueuing] = useState(false);
+    const isMetaEnqueuingRef = useRef(false);
+    /** true enquanto um job corre OU enquanto este enqueue está em curso. */
+    const isMetaBusy = metaJob.isActive || isMetaEnqueuing;
+    /** Campos a confirmar antes de sobrescrever conteúdo existente. */
+    const [metaOverwriteFields, setMetaOverwriteFields] =
+        useState<MetadataField[] | null>(null);
+
+    /** Campos com erro no job actual (para o botão "Repetir" do campo). */
+    const metaFieldErrors = useMemo(() => {
+        const errors: Partial<Record<MetadataField, string>> = {};
+        for (const item of metaJob.job?.items ?? []) {
+            if (
+                item.status === 'FAILED' &&
+                METADATA_FIELDS.includes(item.format as MetadataField)
+            ) {
+                errors[item.format as MetadataField] =
+                    item.error ?? 'Não foi possível gerar.';
+            }
+        }
+        return errors;
+    }, [metaJob.job]);
+
+    /** Campos com um item em QUEUED/RUNNING (spinner por campo). */
+    const metaActiveFields = useMemo(() => {
+        return (metaJob.job?.items ?? [])
+            .filter(
+                (item) => item.status === 'QUEUED' || item.status === 'RUNNING'
+            )
+            .map((item) => item.format as MetadataField);
+    }, [metaJob.job]);
 
     const [state, setState] = useState<EditorState>({
         title: '',
@@ -133,6 +198,51 @@ export function ArticleEditor() {
         lastReloadedJobRef.current = genJob.job.id;
         setReloadTick((t) => t + 1);
     }, [genJob.job]);
+
+    /**
+     * ARTIGO_METADATA concluído → merge CIRÚRGICO.
+     *
+     * Não pode usar o `setReloadTick` do NEW_ARTICLE: aquele substitui o `state`
+     * inteiro, e aqui o body pode estar a ser escrito por outro writer (o
+     * utilizador a editar). Recarregar deitaria fora o que ele estiver a
+     * escrever. Em vez disso relê-se o artigo e aplicam-se SÓ os 4 campos de
+     * metadados — `body`, `title`, `slug`, `pillarId` e `productId` ficam
+     * intactos.
+     *
+     * O merge não marca `hasUnsavedChanges`: os valores vêm da BD, logo o
+     * estado local passa a coincidir com ela e um auto-save posterior gravaria
+     * exatamente o mesmo.
+     */
+    useEffect(() => {
+        const job = metaJob.job;
+        if (!job || (job.status !== 'COMPLETED' && job.status !== 'FAILED')) {
+            return;
+        }
+        if (lastMergedMetaJobRef.current === job.id) return;
+        lastMergedMetaJobRef.current = job.id;
+        if (!id) return;
+
+        let cancelled = false;
+        void (async () => {
+            try {
+                const fresh = await articleService.getArticleWithRelations(id);
+                if (cancelled || !fresh) return;
+                setState((prev) => ({
+                    ...prev,
+                    summary: fresh.summary,
+                    keywords: fresh.keywords || [],
+                    seoTitle: fresh.seoTitle,
+                    seoDescription: fresh.seoDescription,
+                }));
+            } catch (err) {
+                console.error('Erro ao ler os metadados gerados:', err);
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [metaJob.job, id]);
 
     const handleGenerationRetry = async () => {
         const job = genJob.job;
@@ -235,16 +345,27 @@ export function ArticleEditor() {
         setSaveError(null);
 
         try {
+            // Enquanto um ARTICLE_METADATA corre, os 4 campos de metadados são
+            // OMITIDOS do payload. Sem isto, o debounce de 3s dispara com os
+            // valores antigos em memória e re-escreve por cima do que o job
+            // acabou de gravar na BD — o resultado da IA perdia-se em silêncio.
+            // É uma janela real: o job escreve aos ~6s e o auto-save aos ~7s.
+            const skipMetadata = metaJob.isActive;
+
             await articleService.updateArticle(id, {
                 title: state.title,
                 slug: state.slug,
-                summary: state.summary,
                 body: state.body,
                 pillarId: state.pillarId,
                 productId: state.productId,
-                seoTitle: state.seoTitle,
-                seoDescription: state.seoDescription,
-                keywords: state.keywords,
+                ...(skipMetadata
+                    ? {}
+                    : {
+                          summary: state.summary,
+                          seoTitle: state.seoTitle,
+                          seoDescription: state.seoDescription,
+                          keywords: state.keywords,
+                      }),
             });
 
             sessionStorage.removeItem(SESSION_STORAGE_KEY + id);
@@ -258,7 +379,7 @@ export function ArticleEditor() {
         } finally {
             setIsSaving(false);
         }
-    }, [id, currentWorkspace?.id, slugError, state]);
+    }, [id, currentWorkspace?.id, slugError, state, metaJob.isActive]);
 
     useEffect(() => {
         if (!hasUnsavedChanges || !id || slugError) return;
@@ -281,6 +402,130 @@ export function ArticleEditor() {
             checkSlugExists(state.slug, article.id);
         }
     };
+
+    // -----------------------------------------------------------------------
+    // ARTICLE_METADATA — por campo e global
+    // -----------------------------------------------------------------------
+
+    /**
+     * Pedido ao servidor. Como o enqueue de ARTICLE_METADATA não aceita `targets`
+     * (não há placeholder — o artigo já existe), o "Repetir" de um campo é um
+     * pedido NOVO com `fields: [esse campo]`, o que refaz só esse campo.
+     */
+    const requestMetadata = useCallback(
+        async (fields: MetadataField[]) => {
+            if (!currentWorkspace || !id || fields.length === 0) return;
+
+            // Optimista: liga ANTES do await para cobrir o clique seguinte, e
+            // desliga no `finally` para o botão voltar a ficar disponível se o
+            // enqueue falhar.
+            isMetaEnqueuingRef.current = true;
+            setIsMetaEnqueuing(true);
+            setMetaError(null);
+            try {
+                const result = await generationJobService.enqueue({
+                    workspaceId: currentWorkspace.id,
+                    jobType: 'ARTICLE_METADATA',
+                    params: {
+                        articleId: id,
+                        fields,
+                        additionalInstructions:
+                            metaInstructions.trim() || undefined,
+                        preferred: metaPreferred,
+                    },
+                });
+                rememberJob({
+                    jobType: 'ARTICLE_METADATA',
+                    targetId: id,
+                    jobId: result.jobId,
+                });
+                await metaJob.refresh();
+            } catch (err) {
+                const e = err as { message?: string };
+                setMetaError(e.message ?? 'Erro ao agendar a geração.');
+            } finally {
+                isMetaEnqueuingRef.current = false;
+                setIsMetaEnqueuing(false);
+            }
+        },
+        // `metaJob.refresh` é estável (useCallback sem deps); `metaJob` em si
+        // mudaria de identidade a cada render e re-criaria estes handlers.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [
+            currentWorkspace,
+            id,
+            metaInstructions,
+            metaPreferred,
+            rememberJob,
+            metaJob.refresh,
+        ]
+    );
+
+    const handleGenerateMetadata = useCallback(
+        (fields: MetadataField[]) => {
+            // O ref fecha a janela entre o clique e o `refresh()`: durante o
+            // enqueue o `metaJob.isActive` ainda é false e o `disabled` sozinho
+            // não chega.
+            if (
+                !currentWorkspace ||
+                metaJob.isActive ||
+                isMetaEnqueuingRef.current ||
+                fields.length === 0
+            ) {
+                return;
+            }
+            if (!canGenerateMetadata(state.body)) return;
+
+            // Só pede confirmação o que vai SUBSTITUIR trabalho do utilizador.
+            // "Gerar em falta" nunca chega aqui com campo preenchido (por
+            // construção), por isso o caminho comum não abre modal nenhum.
+            const missing = missingMetadataFields(state);
+            const filled = fields.filter((f) => !missing.includes(f));
+
+            if (filled.length > 0) {
+                setMetaOverwriteFields(fields);
+                return;
+            }
+            void requestMetadata(fields);
+        },
+        [currentWorkspace, metaJob.isActive, state, requestMetadata]
+    );
+
+    const handleConfirmOverwrite = useCallback(() => {
+        const fields = metaOverwriteFields;
+        setMetaOverwriteFields(null);
+        if (fields) void requestMetadata(fields);
+    }, [metaOverwriteFields, requestMetadata]);
+
+    /** Repete um campo que falhou — só ele. */
+    const handleRetryMetaField = useCallback(
+        (field: MetadataField) => {
+            if (!currentWorkspace || metaJob.isActive) return;
+            void requestMetadata([field]);
+        },
+        [currentWorkspace, metaJob.isActive, requestMetadata]
+    );
+
+    /**
+     * Estado de geração dos metadados que vai para o formulário. Só existe se
+     * o artigo já tem corpo — sem texto não há nada a derivar, e os botões
+     * desligam-se com a explicação em vez de mostrarem um erro ao clicar.
+     */
+    const metadataAIState: ArticleMetadataAIState | undefined = article
+        ? {
+              isBusy: metaJob.isActive,
+              activeFields: metaActiveFields,
+              fieldErrors: metaFieldErrors,
+              missingFields: missingMetadataFields(state),
+              canGenerate: canGenerateMetadata(state.body),
+              preferred: metaPreferred,
+              onPreferredChange: setMetaPreferred,
+              additionalInstructions: metaInstructions,
+              onAdditionalInstructionsChange: setMetaInstructions,
+              onGenerate: handleGenerateMetadata,
+              onRetryField: handleRetryMetaField,
+          }
+        : undefined;
 
     const handleStatusChange = async (newStatus: ArticleStatus) => {
         if (!id || !article) return;
@@ -425,6 +670,34 @@ export function ArticleEditor() {
                 />
             )}
 
+            {metaJob.isActive && (
+                <div className="mx-6 mt-4 flex items-center gap-3 rounded-md border border-purple-200 bg-purple-50 p-3">
+                    <svg
+                        className="h-5 w-5 shrink-0 animate-spin text-purple-500"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                    >
+                        <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                        />
+                        <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                        />
+                    </svg>
+                    <p className="text-sm text-purple-700">
+                        A gerar os metadados em segundo plano… aparecem nos
+                        campos assim que estiverem prontos.
+                    </p>
+                </div>
+            )}
+
             <div className="flex flex-1 overflow-hidden">
                 <div
                     className={cn(
@@ -516,7 +789,13 @@ export function ArticleEditor() {
                                     slugError={slugError}
                                     onSlugBlur={handleSlugBlur}
                                     isCheckingSlug={isCheckingSlug}
+                                    ai={metadataAIState}
                                 />
+                                {metaError && (
+                                    <p className="mt-3 text-xs text-red-600">
+                                        {metaError}
+                                    </p>
+                                )}
                             </TabsContent>
 
                             <TabsContent
@@ -553,6 +832,24 @@ export function ArticleEditor() {
                     </div>
                 )}
             </div>
+
+            {/* Confirmação de sobrescrita: só aparece no caminho que substitui
+                conteúdo já escrito por mão. */}
+            <ConfirmModal
+                isOpen={metaOverwriteFields !== null}
+                onClose={() => setMetaOverwriteFields(null)}
+                onConfirm={handleConfirmOverwrite}
+                title="Substituir metadados?"
+                message={
+                    metaOverwriteFields
+                        ? `A IA vai substituir o conteúdo de: ${metaOverwriteFields
+                              .map((f) => METADATA_FIELD_LABELS[f])
+                              .join(', ')}. O texto do artigo e o resto dos campos não são tocados.`
+                        : ''
+                }
+                confirmText="Substituir"
+                variant="warning"
+            />
         </div>
     );
 }

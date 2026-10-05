@@ -1,20 +1,53 @@
+import { MetadataGenerateButton } from '@/components/articles/metadata-generate-button';
+import { MetadataGenerationOptions } from '@/components/articles/metadata-generation-options';
+import type { AIProviderSelection } from '@/components/ai/ai-provider-picker';
 import { PillarBadge } from '@/components/content/pillar-badge';
 import { ProductSelector } from '@/components/products/product-selector';
+import {
+    METADATA_FIELDS as ALL_FIELDS,
+    type ArticleMetadataValues,
+} from '@/lib/ai/article-metadata';
+import type { MetadataField } from '@/lib/ai/generation-job-types';
 import { generateSlug } from '@/types/article';
 import type { ContentPillar } from '@/types/pillar';
 import { PlusIcon } from 'lucide-react';
-import type { KeyboardEvent } from 'react';
+import type { KeyboardEvent, ReactNode } from 'react';
 import { useState } from 'react';
 
-interface ArticleMetadata {
+interface ArticleMetadata extends ArticleMetadataValues {
     title: string;
     slug: string;
-    summary: string | null;
     pillarId: string | null;
     productId: string | null;
-    seoTitle: string | null;
-    seoDescription: string | null;
-    keywords: string[];
+}
+
+/**
+ * Estado da geração de metadados que o editor passa para o formulário.
+ *
+ * Vai como UM objecto (`ai`) em vez de seis props soltas: o formulário continua
+ * controlado e burro, e a forma de dizer "o painel tem geração de IA" é uma
+ * só. `onGenerate` recebe a lista de campos, porque os dois botões globais
+ * geram vários de uma vez.
+ */
+export interface ArticleMetadataAIState {
+    /** Há um ARTICLE_METADATA activo (desliga todos os botões). */
+    isBusy: boolean;
+    /** Campos a gerar neste momento (para o spinner por campo). */
+    activeFields: MetadataField[];
+    /** Erro por campo do último job. */
+    fieldErrors: Partial<Record<MetadataField, string>>;
+    /** Campos sem conteúdo (usado pelo contador do botão global). */
+    missingFields: MetadataField[];
+    /** Sem body não há o que derivar — desliga a geração toda. */
+    canGenerate: boolean;
+    preferred: AIProviderSelection | null;
+    onPreferredChange: (value: AIProviderSelection | null) => void;
+    additionalInstructions: string;
+    onAdditionalInstructionsChange: (value: string) => void;
+    /** Gera os campos indicados (1 no botão por campo, N nos globais). */
+    onGenerate: (fields: MetadataField[]) => void;
+    /** Repete um campo que falhou. */
+    onRetryField: (field: MetadataField) => void;
 }
 
 interface ArticleMetadataFormProps {
@@ -24,6 +57,32 @@ interface ArticleMetadataFormProps {
     slugError?: string | null;
     onSlugBlur?: () => void;
     isCheckingSlug?: boolean;
+    ai?: ArticleMetadataAIState;
+}
+
+/** Linha `label` + acção à direita — base de todos os campos com botão. */
+function FieldHeader({
+    label,
+    hint,
+    action,
+}: {
+    label: ReactNode;
+    hint?: ReactNode;
+    action?: ReactNode;
+}) {
+    return (
+        <div className="mb-1.5 flex items-center justify-between gap-2">
+            <label className="block text-sm font-medium text-gray-700">
+                {label}
+                {hint && (
+                    <span className="ml-1 text-xs font-normal text-gray-500">
+                        {hint}
+                    </span>
+                )}
+            </label>
+            {action}
+        </div>
+    );
 }
 
 export function ArticleMetadataForm({
@@ -33,6 +92,7 @@ export function ArticleMetadataForm({
     slugError,
     onSlugBlur,
     isCheckingSlug,
+    ai,
 }: ArticleMetadataFormProps) {
     const [keywordInput, setKeywordInput] = useState('');
 
@@ -61,8 +121,80 @@ export function ArticleMetadataForm({
 
     const pillar = pillars.find((p) => p.id === metadata.pillarId);
 
+    /** Botão de geração do campo, ou null quando não há geração configurada. */
+    const generateAction = (field: MetadataField) => {
+        if (!ai) return null;
+        return (
+            <MetadataGenerateButton
+                field={field}
+                isGenerating={ai.activeFields.includes(field)}
+                isBusy={ai.isBusy}
+                error={ai.fieldErrors[field]}
+                onGenerate={(f) => ai.onGenerate([f])}
+                onRetry={ai.onRetryField}
+            />
+        );
+    };
+
+    const hasContentField =
+        ai?.missingFields.some((f) => f !== 'keywords') ?? false;
+
     return (
         <div className="space-y-5">
+            {ai && (
+                <div className="space-y-2">
+                    <MetadataGenerationOptions
+                        preferred={ai.preferred}
+                        onPreferredChange={ai.onPreferredChange}
+                        additionalInstructions={ai.additionalInstructions}
+                        onAdditionalInstructionsChange={
+                            ai.onAdditionalInstructionsChange
+                        }
+                        disabled={ai.isBusy}
+                    />
+
+                    <button
+                        type="button"
+                        onClick={() => ai.onGenerate(ai.missingFields)}
+                        disabled={
+                            ai.isBusy ||
+                            !ai.canGenerate ||
+                            ai.missingFields.length === 0
+                        }
+                        title={
+                            !ai.canGenerate
+                                ? 'Escreve o artigo primeiro — os metadados são derivados do texto.'
+                                : undefined
+                        }
+                        className="w-full rounded-md bg-purple-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-purple-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+                    >
+                        {ai.missingFields.length === 0
+                            ? 'Metadados completos'
+                            : `Gerar em falta (${ai.missingFields.length})`}
+                    </button>
+
+                    {/* "Regenerar todos" só existe quando há conteúdo a
+                        substituir — caso contrário seria um botão que só
+                        reescreve o que a IA acabou de escrever. */}
+                    {hasContentField && (
+                        <button
+                            type="button"
+                            onClick={() => ai.onGenerate(ALL_FIELDS)}
+                            disabled={ai.isBusy || !ai.canGenerate}
+                            className="w-full rounded-md border border-purple-600 bg-white px-4 py-2.5 text-sm font-medium text-purple-700 transition-colors hover:bg-purple-50 disabled:cursor-not-allowed disabled:border-gray-300 disabled:text-gray-400"
+                        >
+                            Regenerar todos
+                        </button>
+                    )}
+
+                    {!ai.canGenerate && (
+                        <p className="text-xs text-amber-600">
+                            Escreve o artigo primeiro — os metadados são
+                            derivados do texto.
+                        </p>
+                    )}
+                </div>
+            )}
             <div>
                 <label className="mb-1.5 block text-sm font-medium text-gray-700">
                     Título
@@ -113,9 +245,10 @@ export function ArticleMetadataForm({
             </div>
 
             <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                    Resumo
-                </label>
+                <FieldHeader
+                    label="Resumo"
+                    action={generateAction('summary')}
+                />
                 <textarea
                     value={metadata.summary || ''}
                     onChange={(e) =>
@@ -165,9 +298,10 @@ export function ArticleMetadataForm({
             </div>
 
             <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                    Keywords
-                </label>
+                <FieldHeader
+                    label="Keywords"
+                    action={generateAction('keywords')}
+                />
                 <div className="flex flex-wrap gap-2">
                     {metadata.keywords.map((keyword) => (
                         <span
@@ -220,9 +354,15 @@ export function ArticleMetadataForm({
                 <h4 className="mb-3 text-sm font-medium text-gray-700">SEO</h4>
                 <div className="space-y-4">
                     <div>
-                        <label className="mb-1.5 block text-xs text-gray-500">
-                            Meta Title ({metadata.seoTitle?.length || 0}/60)
-                        </label>
+                        <FieldHeader
+                            label={
+                                <>
+                                    Meta Title (
+                                    {metadata.seoTitle?.length || 0}/60)
+                                </>
+                            }
+                            action={generateAction('seoTitle')}
+                        />
                         <input
                             type="text"
                             value={metadata.seoTitle || ''}
@@ -235,10 +375,15 @@ export function ArticleMetadataForm({
                         />
                     </div>
                     <div>
-                        <label className="mb-1.5 block text-xs text-gray-500">
-                            Meta Description (
-                            {metadata.seoDescription?.length || 0}/160)
-                        </label>
+                        <FieldHeader
+                            label={
+                                <>
+                                    Meta Description (
+                                    {metadata.seoDescription?.length || 0}/160)
+                                </>
+                            }
+                            action={generateAction('seoDescription')}
+                        />
                         <textarea
                             value={metadata.seoDescription || ''}
                             onChange={(e) =>

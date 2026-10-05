@@ -7,6 +7,7 @@ import type {
     SocialChannel,
 } from '../../src/types/database.js';
 import type {
+    ArticleMetadataJobParams,
     ContentItemJobParams,
     ContentPiecesJobParams,
     GenerationJobItem,
@@ -16,6 +17,7 @@ import type {
     TargetMode,
     VideoScriptJobParams,
 } from './types.js';
+import { METADATA_FIELDS } from '../../src/lib/ai/article-metadata.js';
 
 // =============================================================================
 // Enqueue — cria os placeholders + o job (transação) e devolve { jobId, targetId }.
@@ -311,6 +313,14 @@ export async function enqueueGeneration(input: EnqueueInput): Promise<EnqueueRes
                 ({ targetId, items } = await enqueueContentItem(tx, {
                     workspaceId,
                     params: params as ContentItemJobParams,
+                    now,
+                }));
+                break;
+
+            case 'ARTICLE_METADATA':
+                ({ targetId, items } = await enqueueArticleMetadata(tx, {
+                    workspaceId,
+                    params: params as ArticleMetadataJobParams,
                     now,
                 }));
                 break;
@@ -726,6 +736,61 @@ async function enqueueContentItem(
                 error: null,
             },
         ],
+    };
+}
+
+// -----------------------------------------------------------------------------
+// ARTICLE_METADATA — não cria placeholder: o artigo JÁ existe. Só valida o
+// âmbito e monta um `item` por campo pedido (o `format` do item é o nome do
+// campo), que é o que dá ao painel o estado independente por campo.
+// -----------------------------------------------------------------------------
+
+async function enqueueArticleMetadata(
+    tx: Tx,
+    args: {
+        workspaceId: string;
+        params: ArticleMetadataJobParams;
+        now: Date;
+    }
+): Promise<{ targetId: string; items: GenerationJobItem[] }> {
+    const { workspaceId, params } = args;
+
+    const article = await tx.article.findFirst({
+        where: { id: params.articleId, workspaceId },
+        select: { id: true },
+    });
+    if (!article) {
+        throw new EnqueueError(
+            'Artigo não encontrado neste workspace.',
+            'ARTICLE_NOT_FOUND'
+        );
+    }
+
+    // `fields` não pode vir vazio nem com campos desconhecidos: o zod do
+    // endpoint já o garante, mas o enqueue também é chamado pelos scripts de
+    // probe e por qualquer outro caller futuro.
+    const seen = new Set<string>();
+    const fields = params.fields.filter((f) => {
+        if (!METADATA_FIELDS.includes(f) || seen.has(f)) return false;
+        seen.add(f);
+        return true;
+    });
+
+    if (fields.length === 0) {
+        throw new EnqueueError(
+            'Indica pelo menos um metadado a gerar.',
+            'NO_METADATA_FIELDS'
+        );
+    }
+
+    return {
+        targetId: article.id,
+        items: fields.map((field) => ({
+            format: field,
+            targetId: article.id,
+            status: 'QUEUED' as const,
+            error: null,
+        })),
     };
 }
 

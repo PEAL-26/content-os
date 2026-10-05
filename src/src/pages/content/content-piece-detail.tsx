@@ -1,30 +1,29 @@
+import { ChannelBadge } from '@/components/channels/channel-badge';
 import { ArtefactsPanel } from '@/components/content/artefacts-panel';
 import { ContentNotFound } from '@/components/content/content-not-found';
 import { ContentPieceModal } from '@/components/content/content-piece-modal';
 import { ContentPromptsPanel } from '@/components/content/content-prompts-panel';
+import { CopyMenu } from '@/components/content/copy-menu';
 import { PiecePreview } from '@/components/content/piece-preview';
-import { PublicationsPanel } from '@/components/content/publications-panel';
-import { ChannelBadge } from '@/components/channels/channel-badge';
 import { PillarBadge } from '@/components/content/pillar-badge';
-import { useWorkspaceContentPieces } from '@/hooks/use-workspace-content-pieces';
+import { PublicationsPanel } from '@/components/content/publications-panel';
 import { useGenerationJob } from '@/hooks/use-generation-job';
 import { useGenerationJobsForTargets } from '@/hooks/use-generation-jobs';
+import { useWorkspaceContentPieces } from '@/hooks/use-workspace-content-pieces';
+import { suggestPlatformForPiece } from '@/lib/social-text/suggest-platform';
 import { workspacePath } from '@/lib/workspace-paths';
 import { contentPieceService } from '@/services/content-piece.service';
 import { generationJobService } from '@/services/generation-job.service';
 import { useGenerationJobStore } from '@/stores/generation-jobs-store';
 import { useWorkspaceStore } from '@/stores/workspace-store';
-import type { ContentPillar } from '@/types/pillar';
-import type {
-    ContentPieceWithRelations,
-    ContentSlide,
-} from '@/types/database';
+import type { ContentPieceWithRelations, ContentSlide } from '@/types/database';
 import {
     CONTENT_FORMAT_ICONS,
     CONTENT_FORMAT_LABELS,
     CONTENT_PIECE_STATUS_COLORS,
     CONTENT_PIECE_STATUS_LABELS,
 } from '@/types/database';
+import type { ContentPillar } from '@/types/pillar';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
@@ -33,7 +32,10 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
  * A edição vive no ContentPieceModal; aqui o botão "Editar" abre-o.
  */
 export function ContentPieceDetailPage() {
-    const { workspaceId, id } = useParams<{ workspaceId: string; id: string }>();
+    const { workspaceId, id } = useParams<{
+        workspaceId: string;
+        id: string;
+    }>();
     const navigate = useNavigate();
     const { currentWorkspace } = useWorkspaceStore();
     const rememberJob = useGenerationJobStore((s) => s.rememberJob);
@@ -46,7 +48,6 @@ export function ContentPieceDetailPage() {
     const [isEditOpen, setIsEditOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [actionError, setActionError] = useState<string | null>(null);
-    const [copied, setCopied] = useState(false);
     /** "Reescrever prompt": pedido em curso + aviso (sucesso ou erro). */
     const [isRewritingPromptRequest, setIsRewritingPromptRequest] =
         useState(false);
@@ -116,8 +117,7 @@ export function ContentPieceDetailPage() {
               }
             : null
     );
-    const isRewritingPrompt =
-        isRewritingPromptRequest || promptJob.isActive;
+    const isRewritingPrompt = isRewritingPromptRequest || promptJob.isActive;
 
     useEffect(() => {
         if (generationStatus === 'COMPLETED') {
@@ -234,34 +234,13 @@ export function ContentPieceDetailPage() {
         } catch (err) {
             setRewriteMsg({
                 ok: false,
-                text: err instanceof Error
-                    ? err.message
-                    : 'Erro ao reescrever o prompt.',
+                text:
+                    err instanceof Error
+                        ? err.message
+                        : 'Erro ao reescrever o prompt.',
             });
         } finally {
             setIsRewritingPromptRequest(false);
-        }
-    };
-
-    /** Copia o conteúdo da peça (como está na base de dados). */
-    const handleCopy = async () => {
-        if (!piece) return;
-
-        const text = [piece.title, piece.body, piece.hookText, piece.ctaText]
-            .filter((part) => part && part.trim())
-            .join('\n\n');
-
-        try {
-            await navigator.clipboard.writeText(text);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        } catch {
-            // `navigator.clipboard` não existe em contextos não seguros
-            // (http://localhost em rede, iframe sem permissão): sem este
-            // catch o utilizador não recebe qualquer feedback.
-            setActionError(
-                'Não foi possível copiar. O browser não deu acesso à área de transferência.'
-            );
         }
     };
 
@@ -284,8 +263,15 @@ export function ContentPieceDetailPage() {
     }
 
     const statusColors = CONTENT_PIECE_STATUS_COLORS[piece.status];
-    const isPromptOnly =
-        piece.status === 'PROMPT_READY' && !piece.body.trim();
+    const isPromptOnly = piece.status === 'PROMPT_READY' && !piece.body.trim();
+    /**
+     * Uma peça só com prompt (PROMPT_READY sem corpo) não tem o que copiar.
+     * Uma peça com corpo mas sem hook continua a ter — o corpo é o conteúdo.
+     */
+    const hasContent =
+        Boolean(piece.body.trim()) ||
+        Boolean(piece.hookText?.trim()) ||
+        Boolean(piece.ctaText?.trim());
 
     return (
         <div className="flex flex-1 flex-col overflow-hidden">
@@ -393,31 +379,14 @@ export function ContentPieceDetailPage() {
                             </button>
                         )}
 
-                        <button
-                            onClick={() => void handleCopy()}
-                            className="inline-flex items-center gap-1.5 rounded-md bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200"
-                        >
-                            {copied ? (
-                                <>
-                                    <svg
-                                        className="h-4 w-4 text-green-600"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        viewBox="0 0 24 24"
-                                    >
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M5 13l4 4L19 7"
-                                        />
-                                    </svg>
-                                    Copiado!
-                                </>
-                            ) : (
-                                'Copiar conteúdo'
-                            )}
-                        </button>
+                        {piece && (
+                            <CopyMenu
+                                source={{ type: 'piece', piece }}
+                                disabled={!hasContent}
+                                variant="button"
+                                defaultPlatform={suggestPlatformForPiece(piece)}
+                            />
+                        )}
 
                         <button
                             onClick={() => void handleDelete()}
@@ -429,9 +398,7 @@ export function ContentPieceDetailPage() {
                 </div>
 
                 {actionError && (
-                    <p className="mt-2 text-sm text-red-600">
-                        {actionError}
-                    </p>
+                    <p className="mt-2 text-sm text-red-600">{actionError}</p>
                 )}
 
                 {/* A mensagem do hook (que sabe o erro do Supabase) fica

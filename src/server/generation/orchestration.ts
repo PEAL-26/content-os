@@ -3,6 +3,14 @@ import { prisma } from '../../src/lib/prisma.js';
 import { Prisma } from '../../src/generated/prisma/client.js';
 import { generateSlug } from '../../src/helpers/slug.js';
 import {
+    ARTICLE_METADATA_CONTENT_TYPE,
+    articleMetadataUpdateData,
+    buildArticleMetadataSystemPrompt,
+    buildArticleMetadataUserPrompt,
+    parseArticleMetadataResponse,
+    type ParsedArticleMetadata,
+} from '../../src/lib/ai/article-metadata.js';
+import {
     buildArticleSystemPrompt,
     buildArticleUserPrompt,
     parseArticleResponse,
@@ -21,6 +29,7 @@ import {
     parseVideoScriptResponse,
     type ParsedGeneratedPiece,
 } from '../../src/lib/ai/content-prompts.js';
+import { METADATA_FIELDS } from '../../src/lib/ai/article-metadata.js';
 import { MAIN_ITEM_KEY } from '../../src/lib/ai/generation-job-types.js';
 import {
     buildPromptWriterSystemPrompt,
@@ -56,6 +65,7 @@ import {
 } from './job-store.js';
 import { createServerTransport } from './transport.js';
 import type {
+    ArticleMetadataJobParams,
     ContentItemJobParams,
     ContentPiecesJobParams,
     GenerationJobItem,
@@ -73,6 +83,12 @@ import type {
 const ARTICLE_TIMEOUT_MS = 300_000; // 5 min — artigos longos
 const PIECE_TIMEOUT_MS = 180_000; // 3 min por peça/roteiro
 const CONCURRENCY_LIMIT = 3; // peças em paralelo
+/**
+ * Metadados: uma chamada, output pequeno (um JSON). O input pesado é o body do
+ * artigo, não a resposta — por isso o tecto do provider serve bem e o timeout
+ * é só a rede de segurança.
+ */
+const METADATA_TIMEOUT_MS = 120_000;
 
 type JobRow = NonNullable<Awaited<ReturnType<typeof getJob>>>;
 
@@ -121,6 +137,13 @@ export async function runGenerationJob(
                 break;
             case 'CONTENT_ITEM':
                 await runContentItem(job, params as ContentItemJobParams);
+                break;
+            case 'ARTICLE_METADATA':
+                await runArticleMetadata(
+                    job,
+                    params as ArticleMetadataJobParams,
+                    items
+                );
                 break;
             default:
                 throw new Error(`Tipo de job desconhecido: ${String(job.jobType)}`);
@@ -842,6 +865,154 @@ async function runContentItem(
             error: null,
         })
     );
+}
+
+// -----------------------------------------------------------------------------
+// ARTICLE_METADATA — preenche os metadados em falta de um artigo que já existe.
+//
+// UMA chamada ao modelo cobre os N campos pedidos (barato e coerente entre
+// campos); o `items` do job fica com um item por campo, cada um com o seu estado.
+// O parse só devolve os campos pedidos — um clique em "Gerar resumo" não escreve
+// o `seoTitle` que o modelo devolvesse por Iniciativa própria.
+// -----------------------------------------------------------------------------
+
+/** O item cujo `format` é um dos 4 campos de metadados deste job. */
+function isMetadataItem(item: GenerationJobItem): boolean {
+    return (METADATA_FIELDS as string[]).includes(item.format);
+}
+
+async function runArticleMetadata(
+    job: JobRow,
+    params: ArticleMetadataJobParams,
+    items: GenerationJobItem[]
+): Promise<void> {
+    const ctx = await loadGenerationContext(job.workspaceId, job.userId);
+    const preferred = params.preferred ?? ctx.defaultPreferred;
+
+    const articleRow = await prisma.article.findFirst({
+        where: { id: params.articleId, workspaceId: job.workspaceId },
+    });
+    if (!articleRow) {
+        throw new Error('Artigo não encontrado neste workspace.');
+    }
+
+    const article = toArticleClient(articleRow);
+    const workspace = ctx.workspace;
+    const pillar = await loadPillar(job.workspaceId, articleRow.pillarId);
+    const product = articleRow.productId
+        ? await prisma.product.findUnique({ where: { id: articleRow.productId } })
+        : null;
+
+    // Só os items cujo `format` é um campo pedido (um retry pode vir com um
+    // subconjunto). `items` é a fonte de verdade do que esta execução escreve.
+    const requestedFields = METADATA_FIELDS.filter((field) =>
+        items.some((item) => item.format === field)
+    );
+
+    if (requestedFields.length === 0) {
+        await markJobFailed(
+            job.id,
+            'O job não tem nenhum campo de metadados para gerar.',
+            items
+        );
+        return;
+    }
+
+    const runningItems: GenerationJobItem[] = items.map((item) =>
+        isMetadataItem(item)
+            ? { ...item, status: 'RUNNING', error: null }
+            : item
+    );
+
+    const systemPrompt = await resolveSystemPrompt(
+        job.workspaceId,
+        job.userId,
+        ARTICLE_METADATA_CONTENT_TYPE,
+        () => buildArticleMetadataSystemPrompt({ workspace })
+    );
+    const fullSystem = withAdditionalInstructions(
+        systemPrompt,
+        params.additionalInstructions
+    );
+
+    const result = await generateWithFallback<ParsedArticleMetadata>({
+        providers: getAvailableProvidersFromStore(ctx.providers, ctx.apiKeys),
+        apiKeys: ctx.apiKeys,
+        preferred,
+        buildSystem: () => fullSystem,
+        buildPrompt: () =>
+            buildArticleMetadataUserPrompt({
+                article,
+                workspace,
+                pillar,
+                product: product ? toProductClient(product) : undefined,
+                fields: requestedFields,
+            }),
+        // Só os pedidos; um campo em falta simplesmente não vem no resultado e
+        // fica FAILED abaixo (com a sua própria mensagem), sem pôr em risco os
+        // outros campos do mesmo job.
+        parse: (text) => parseArticleMetadataResponse(text, requestedFields),
+        maxAttempts: 2,
+        transport: createServerTransport(METADATA_TIMEOUT_MS),
+    });
+
+    if (!result.ok || !result.data) {
+        const error =
+            result.error ??
+            'Não foi possível gerar os metadados. Tenta novamente.';
+        await markJobFailed(
+            job.id,
+            error,
+            runningItems.map((item) =>
+                isMetadataItem(item)
+                    ? { ...item, status: 'FAILED', error }
+                    : item
+            )
+        );
+        return;
+    }
+
+    const update = articleMetadataUpdateData(result.data);
+    const succeeded = new Set(Object.keys(update));
+
+    // Um `article.update` com os campos válidos de uma vez: ou entra tudo, ou
+    // não entra nada. `updatedAt` é tocado para o editor reagir.
+    if (Object.keys(update).length > 0) {
+        await prisma.article.update({
+            where: { id: articleRow.id },
+            data: { ...update, updatedAt: new Date() },
+        });
+    }
+
+    const finalItems: GenerationJobItem[] = runningItems.map((item) => {
+        if (!isMetadataItem(item)) return item;
+        if (succeeded.has(item.format)) {
+            return { ...item, status: 'COMPLETED', error: null };
+        }
+        // O modelo não devolveu este campo (em falta, inválido ou placeholder).
+        return {
+            ...item,
+            status: 'FAILED',
+            error: `A IA não devolveu um valor válido para "${item.format}".`,
+        };
+    });
+
+    const failed = finalItems.filter((i) => i.status === 'FAILED');
+    const completed = finalItems.filter((i) => i.status === 'COMPLETED');
+
+    // Só é job falhado quando NENHUM campo ficou bom — uma falha parcial é um
+    // job concluído com items a falhar, para o painel mostrar "Repetir" só
+    // nesses (mesmo critério do CONTENT_PIECES).
+    if (failed.length === finalItems.length && completed.length === 0) {
+        await markJobFailed(
+            job.id,
+            failed[0]?.error ?? 'Todos os metadados falharam a gerar.',
+            finalItems
+        );
+        return;
+    }
+
+    await markJobCompleted(job.id, finalItems);
 }
 
 /** Todas as chaves de prompt do target excepto a que vai ser substituída. */

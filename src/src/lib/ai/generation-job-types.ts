@@ -9,7 +9,8 @@ export type GenerationJobTypeValue =
     | 'CONTENT_PIECES'
     | 'VIDEO_SCRIPT'
     | 'CONTENT_PROMPT'
-    | 'CONTENT_ITEM';
+    | 'CONTENT_ITEM'
+    | 'ARTICLE_METADATA';
 
 export type GenerationJobStatusValue =
     | 'QUEUED'
@@ -17,9 +18,41 @@ export type GenerationJobStatusValue =
     | 'COMPLETED'
     | 'FAILED';
 
+/**
+ * Campos de metadados do artigo que a IA pode gerar. Vêm do mesmo grupo dos 4
+ * derivados que o `NEW_ARTICLE` escreve; `title`, `slug`, `pillarId` e `productId`
+ * ficam de fora de propósito (identidade editorial, URL pública e classificação).
+ *
+ * Vive aqui — e não no módulo de prompts — porque é o contrato partilhado entre
+ * `generation_jobs.items.format`, o zod do enqueue e a UI.
+ */
+export type MetadataField =
+    | 'summary'
+    | 'keywords'
+    | 'seoTitle'
+    | 'seoDescription';
+
+/**
+ * ARTICLE_METADATA — preenche os metadados em falta de um artigo JÁ EXISTENTE
+ * (ao contrário do NEW_ARTICLE, que escreve o artigo inteiro). Uma única chamada
+ * ao modelo cobre os N campos pedidos: `items` fica com um item por campo, o que
+ * dá estado/spinner/erro/retry independentes sem machinery nova.
+ */
+export interface ArticleMetadataJobParams {
+    articleId: string;
+    /** Campos a gerar (1..4 — o zod do enqueue recusa lista vazia). */
+    fields: MetadataField[];
+    /** Instruções adicionais por geração (anexadas ao system prompt). */
+    additionalInstructions?: string;
+    preferred?: GenerationPreferred | null;
+}
+
 /** Segmento de `generation_jobs.items` — estado por item da geração. */
 export interface GenerationJobItem {
-    /** 'NEW_ARTICLE' | ContentFormat ('CAROUSEL', …) | 'VIDEO_SCRIPT' */
+    /**
+     * 'NEW_ARTICLE' | 'ARTICLE_METADATA' | ContentFormat ('CAROUSEL', …) |
+     * 'VIDEO_SCRIPT' | MetadataField ('summary', 'seoTitle', …)
+     */
     format: string;
     /** articles.id | content_pieces.id | video_scripts.id (placeholder) */
     targetId: string;
@@ -88,7 +121,8 @@ export type GenerationJobParams =
     | NewArticleJobParams
     | ContentPiecesJobParams
     | VideoScriptJobParams
-    | ContentItemJobParams;
+    | ContentItemJobParams
+    | ArticleMetadataJobParams;
 
 /**
  * Como usar um target existente quando se regenera.

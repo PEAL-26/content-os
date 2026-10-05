@@ -434,6 +434,29 @@ const contentItemEnqueueParamsSchema = z.object({
     preferred: enqueuePreferredSchema,
 });
 
+/** Campos de metadados do artigo (espelha METADATA_FIELDS no núcleo puro). */
+const metadataFieldSchema = z.enum([
+    'summary',
+    'keywords',
+    'seoTitle',
+    'seoDescription',
+]);
+
+/**
+ * ARTICLE_METADATA — `fields` com `.min(1)` é o que garante que um job sem
+ * campos nunca chega ao Inngest (a UI desactiva "Gerar em falta" em N=0, mas o
+ * servidor recusa na mesma). `max(4)` trava o pedido arbitrário.
+ */
+const articleMetadataEnqueueParamsSchema = z.object({
+    articleId: z.string().min(1).max(100),
+    fields: z
+        .array(metadataFieldSchema)
+        .min(1, 'Indica pelo menos um metadado a gerar.')
+        .max(4),
+    additionalInstructions: z.string().max(60000).optional(),
+    preferred: enqueuePreferredSchema,
+});
+
 const enqueueSchema = z.object({
     jobType: z.enum([
         'NEW_ARTICLE',
@@ -441,6 +464,7 @@ const enqueueSchema = z.object({
         'VIDEO_SCRIPT',
         'CONTENT_PROMPT',
         'CONTENT_ITEM',
+        'ARTICLE_METADATA',
     ]),
     workspaceId: z.string().min(1).max(100),
     params: z.unknown(),
@@ -463,6 +487,7 @@ const enqueueParamsSchemas = {
     VIDEO_SCRIPT: videoScriptEnqueueParamsSchema,
     CONTENT_PROMPT: contentPromptEnqueueParamsSchema,
     CONTENT_ITEM: contentItemEnqueueParamsSchema,
+    ARTICLE_METADATA: articleMetadataEnqueueParamsSchema,
 } as const;
 
 /**

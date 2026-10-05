@@ -360,6 +360,11 @@ O output DEVE ser JSON válido:
 
 export const CONTENT_TYPE_LABELS: Record<string, string> = {
     article: 'Artigo',
+    // Metadados de um artigo existente (job ARTICLE_METADATA). Não é um
+    // ContentFormat — é resolvido por `default-system-prompts.ts`, que tem de o
+    // tratar ANTES do fallthrough para `buildSystemPromptForFormat` (o `default:`
+    // dessa função devolve o prompt de LinkedIn).
+    article_metadata: 'Metadados do artigo',
     CAROUSEL: 'Carrossel (LinkedIn)',
     LINKEDIN_POST: 'Post LinkedIn',
     IMAGE: 'Post Instagram',

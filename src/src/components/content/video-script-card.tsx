@@ -1,13 +1,14 @@
 import { ChannelBadge } from '@/components/channels/channel-badge';
-import type { VideoScriptWithRelations } from '@/services/video-script.service';
+import { CopyMenu } from '@/components/content/copy-menu';
 import {
-    calculateReadingTime,
     calculateDurationFromScript,
+    calculateReadingTime,
     isDurationExceeded,
 } from '@/lib/ai';
+import { suggestPlatformForScript } from '@/lib/social-text/suggest-platform';
 import { workspacePath } from '@/lib/workspace-paths';
+import type { VideoScriptWithRelations } from '@/services/video-script.service';
 import { ARTICLE_STATUS_COLORS, ARTICLE_STATUS_LABELS } from '@/types/database';
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
 interface VideoScriptCardProps {
@@ -49,36 +50,10 @@ export function VideoScriptCard({
     const estimatedDuration = calculateReadingTime(scriptText);
     const durationExceeded = isDurationExceeded(scriptText, script.durationSec);
     const actualDuration = calculateDurationFromScript(scriptText);
-    const [copied, setCopied] = useState(false);
-    const [copyError, setCopyError] = useState<string | null>(null);
 
-    /** Copia o roteiro para a área de transferência (mesmo texto do detalhe). */
-    const handleCopy = async () => {
-        const text = [
-            script.hook,
-            script.problem,
-            script.solution,
-            script.fullScript,
-            script.cta,
-        ]
-            .filter(Boolean)
-            .join('\n\n');
-        if (!text) return;
-
-        setCopyError(null);
-        try {
-            await navigator.clipboard.writeText(text);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        } catch {
-            // `navigator.clipboard` não existe em contextos não seguros
-            // (http://localhost em rede, iframe sem permissão): sem este catch o
-            // utilizador não recebe qualquer feedback.
-            setCopyError(
-                'Não foi possível copiar. O browser não deu acesso à área de transferência.'
-            );
-        }
-    };
+    // Roteiros vão para TikTok/Reels ou Instagram; o menu de copiar sugere a
+    // plataforma a partir do canal configurado.
+    const suggestedPlatform = suggestPlatformForScript(script.targetChannel);
 
     return (
         <div
@@ -149,16 +124,14 @@ export function VideoScriptCard({
                         </button>
                     )}
 
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            void handleCopy();
-                        }}
-                        disabled={!scriptText}
-                        className="rounded-md px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-40"
-                    >
-                        {copied ? 'Copiado!' : 'Copiar'}
-                    </button>
+                    <div onClick={(e) => e.stopPropagation()}>
+                        <CopyMenu
+                            source={{ type: 'videoScript', script }}
+                            disabled={!scriptText}
+                            variant="button"
+                            defaultPlatform={suggestedPlatform}
+                        />
+                    </div>
 
                     {onDelete && (
                         <button
@@ -190,14 +163,6 @@ export function VideoScriptCard({
                         Artigo: {script.article.title}
                     </Link>
                 </div>
-            )}
-
-            {/* O erro de clipboard fica no próprio card (o da listagem não tem
-                slot de erro); o mesmo texto da página de detalhe. */}
-            {copyError && (
-                <p className="border-t border-red-100 bg-red-50 px-4 py-2 text-xs text-red-700">
-                    {copyError}
-                </p>
             )}
 
             {generation && generation.status !== 'COMPLETED' && (

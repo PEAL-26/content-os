@@ -1,4 +1,8 @@
 import type { ContentFormat, Workspace } from '@/types/database';
+import {
+    ARTICLE_METADATA_CONTENT_TYPE,
+    buildArticleMetadataSystemPrompt,
+} from './article-metadata';
 import { buildSystemPromptForFormat } from './content-prompts';
 import { buildArticleSystemPrompt } from './prompts';
 import {
@@ -25,6 +29,14 @@ export function buildDefaultSystemPrompt(
 
     if (contentType === 'article') {
         return buildArticleSystemPrompt({ workspace: ws, topic: '' });
+    }
+
+    // Metadados de artigo existente (ARTICLE_METADATA). TEM de vir antes do
+    // fallthrough para `buildSystemPromptForFormat`: esse `default:` devolve o
+    // prompt de post LinkedIn, e o editor de Definições de IA pré-preenchia o
+    // textarea de "Metadados do artigo" com o prompt de outro formato.
+    if (contentType === ARTICLE_METADATA_CONTENT_TYPE) {
+        return buildArticleMetadataSystemPrompt({ workspace: ws });
     }
 
     // Escritor de prompts ("Gerar apenas o prompt"): `prompt_<FORMATO>`.
