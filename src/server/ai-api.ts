@@ -5,7 +5,10 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { z } from 'zod';
 import { describePool } from '../src/lib/prisma.js';
 import { enqueueGeneration, EnqueueError } from './generation/enqueue.js';
-import { sendGenerationRequested } from './generation/inngest.js';
+import {
+    sendGenerationRequested,
+    sendMediaRequested,
+} from './generation/inngest.js';
 import { markJobFailed } from './generation/job-store.js';
 
 // =============================================================================
@@ -387,36 +390,43 @@ const newArticleEnqueueParamsSchema = z.object({
     preferred: enqueuePreferredSchema,
 });
 
+const contentFormatSchema = z.string().min(1).max(50);
+
+/** Um canal do workspace (id de `channel_configs.id`), no máximo 10. */
+const channelIdsSchema = z.array(z.string().min(1).max(100)).max(10);
+
+/** Modalidade de media: só as três que o registry conhece. */
+const mediaModalitySchema = z.enum(['image', 'audio', 'video']);
+
 const contentPiecesEnqueueParamsSchema = z.object({
     articleId: z.string().min(1).max(100),
     formats: z
-        .array(z.string().min(1).max(50))
+        .array(contentFormatSchema)
         .min(1, 'Seleciona pelo menos um formato.')
-        .max(10),
-    channelIds: z.record(z.string(), z.string()).optional(),
+        .max(5),
+    /**
+     * Canais destino, como LISTA. A geração é o produto cartesiano de canais ×
+     * tipos; antes era um canal por tipo, o que impedia pedir POST para LinkedIn
+     * e POST para Instagram na mesma corrida.
+     */
+    channelIds: channelIdsSchema,
     productId: z.string().min(1).max(100).nullable().optional(),
     pillarId: z.string().min(1).max(100).nullable().optional(),
     additionalInstructions: z.string().max(60000).optional(),
     /** Usa o prompt gravado da peça em vez do contexto automático. */
     useStoredPrompt: z.boolean().optional(),
-    preferred: enqueuePreferredSchema,
-});
-
-const videoScriptEnqueueParamsSchema = z.object({
-    articleId: z.string().min(1).max(100),
-    targetChannel: z.string().min(1).max(50),
-    durationSec: z.number().int().min(15).max(600),
-    additionalInstructions: z.string().max(60000).optional(),
+    /** Modalidades cujos PROMPTS de media são gerados automaticamente. */
+    modalities: z.array(mediaModalitySchema).max(3).optional(),
     preferred: enqueuePreferredSchema,
 });
 
 const contentPromptEnqueueParamsSchema = z.object({
     articleId: z.string().min(1).max(100),
     formats: z
-        .array(z.string().min(1).max(50))
-        .min(1, 'Selecciona pelo menos um formato.')
-        .max(10),
-    channelIds: z.record(z.string(), z.string()).optional(),
+        .array(contentFormatSchema)
+        .min(1, 'Seleciona pelo menos um formato.')
+        .max(5),
+    channelIds: channelIdsSchema,
     productId: z.string().min(1).max(100).nullable().optional(),
     pillarId: z.string().min(1).max(100).nullable().optional(),
     additionalInstructions: z.string().max(60000).optional(),
@@ -430,8 +440,47 @@ const contentItemEnqueueParamsSchema = z.object({
         .trim()
         .min(2)
         .max(40)
-        .regex(/^(main|slide-\d+|tweet-\d+)$/, 'itemKey inválido.'),
+        .regex(
+            /^(main|slide-\d+|scene-\d+|ilustracao-\d+)$/,
+            'itemKey inválido.'
+        ),
+    /** Regenera também o prompt de media do item (não o artefacto). */
+    regenerateMediaPrompt: z.boolean().optional(),
+    /**
+     * Regenera também o FICHEIRO (Decisão 30). É uma chamada paga — o
+     * cliente só liga isto quando o utilizador pediu explicitamente.
+     */
+    regenerateArtifact: z.boolean().optional(),
     preferred: enqueuePreferredSchema,
+});
+
+/**
+ * MEDIA_PROMPT — escreve os prompts portáteis de imagem/áudio/vídeo.
+ *
+ * Corre automaticamente depois de a peça existir (é barato), por isso o
+ * `targetId` aponta para o artigo OU para a peça, nunca para um artefacto.
+ */
+const mediaPromptEnqueueParamsSchema = z.object({
+    targetId: z.string().min(1).max(100),
+    targetType: z.enum(['ARTICLE', 'PIECE']),
+    modalities: z
+        .array(mediaModalitySchema)
+        .min(1, 'Seleciona pelo menos uma modalidade.')
+        .max(3),
+    overwrite: z.boolean().optional(),
+    preferred: enqueuePreferredSchema,
+});
+
+/**
+ * MEDIA_ARTIFACT — gera o FICHEIRO. Só chega aqui depois de confirmação com o
+ * custo estimado à vista (Decisão 27), e a linha em `content_assets` já existe
+ * em PENDING — o que impede um duplo clique de enfileirar dois jobs.
+ */
+const mediaArtifactEnqueueParamsSchema = z.object({
+    mediaPromptId: z.string().min(1).max(100),
+    assetId: z.string().min(1).max(100),
+    providerTechnicalId: z.string().max(200).nullable().optional(),
+    modelCode: z.string().max(300).nullable().optional(),
 });
 
 /** Campos de metadados do artigo (espelha METADATA_FIELDS no núcleo puro). */
@@ -461,10 +510,11 @@ const enqueueSchema = z.object({
     jobType: z.enum([
         'NEW_ARTICLE',
         'CONTENT_PIECES',
-        'VIDEO_SCRIPT',
         'CONTENT_PROMPT',
         'CONTENT_ITEM',
         'ARTICLE_METADATA',
+        'MEDIA_PROMPT',
+        'MEDIA_ARTIFACT',
     ]),
     workspaceId: z.string().min(1).max(100),
     params: z.unknown(),
@@ -477,17 +527,18 @@ const enqueueSchema = z.object({
                 mode: z.enum(['FILL', 'NEW_VERSION']).optional(),
             })
         )
-        .max(10)
+        .max(60)
         .optional(),
 });
 
 const enqueueParamsSchemas = {
     NEW_ARTICLE: newArticleEnqueueParamsSchema,
     CONTENT_PIECES: contentPiecesEnqueueParamsSchema,
-    VIDEO_SCRIPT: videoScriptEnqueueParamsSchema,
     CONTENT_PROMPT: contentPromptEnqueueParamsSchema,
     CONTENT_ITEM: contentItemEnqueueParamsSchema,
     ARTICLE_METADATA: articleMetadataEnqueueParamsSchema,
+    MEDIA_PROMPT: mediaPromptEnqueueParamsSchema,
+    MEDIA_ARTIFACT: mediaArtifactEnqueueParamsSchema,
 } as const;
 
 /**
@@ -579,7 +630,17 @@ export async function handleAiEnqueue(
         });
 
         try {
-            await sendGenerationRequested(created.jobId);
+            // Os jobs de media vão para o evento delas (timeout de 25 min e
+            // concorrência 1) — o `veo-3` precisa do tempo e o custo não
+            // tolera paralelismo (R3 do plano).
+            if (
+                envelope.data.jobType === 'MEDIA_PROMPT' ||
+                envelope.data.jobType === 'MEDIA_ARTIFACT'
+            ) {
+                await sendMediaRequested(created.jobId);
+            } else {
+                await sendGenerationRequested(created.jobId);
+            }
         } catch (queueErr) {
             const message =
                 queueErr instanceof Error

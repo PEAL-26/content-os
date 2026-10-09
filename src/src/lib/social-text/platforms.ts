@@ -4,10 +4,46 @@
  * Não é só o limite de caracteres. Cada plataforma tem manias próprias de
  * whitespace, de truncagem e de hashtags, e ignorá-las faz o post colado ficar
  * diferente do que se vê no editor.
+ *
+ * A taxonomia deixou de ser um tipo próprio que vivia aqui (`SocialPlatformId`,
+ * com 'X' enquanto o enum da BD dizia 'TWITTER') e passou a ser `SocialChannel`
+ * — o enum da BD, sem taxonomia paralela. Os limites vêm de `platform-rules`,
+ * com overrides do canal, para que a peça e o medidor nunca discordem.
  */
 
-/** Plataformas suportadas no menu de copiar. */
-export type SocialPlatformId = 'LINKEDIN' | 'INSTAGRAM' | 'X' | 'THREADS';
+import {
+    aspectRatioFor,
+    resolveRules,
+    type ResolvedChannelRules,
+} from '@/lib/platform-rules';
+import { CHANNEL_LABELS, type SocialChannel } from '@/types/database';
+
+/**
+ * Os 10 canais — o menu de copiar cobre a taxonomia toda (Decisão 14).
+ *
+ * Todos têm preset (vêm de `platform-rules`), portanto não há por que excluir
+ * TikTok ou YouTube: colar texto formatado para a descrição de um vídeo é
+ * precisamente o caso de uso do planeador.
+ */
+export const COPY_CHANNELS: readonly SocialChannel[] = [
+    'LINKEDIN',
+    'INSTAGRAM',
+    'TIKTOK',
+    'YOUTUBE',
+    'TWITTER',
+    'FACEBOOK',
+    'THREADS',
+    'PINTEREST',
+    'TELEGRAM',
+    'WHATSAPP',
+];
+
+/**
+ * @deprecated O enum `SocialChannel` é a taxonomia única (Decisão 14). Este
+ * alias fica só para não partir os consumidores de uma vez; não introduzir
+ * nenhuma taxonomia nova.
+ */
+export type SocialPlatformId = SocialChannel;
 
 export interface PlatformPreset {
     id: SocialPlatformId;
@@ -39,7 +75,7 @@ export interface PlatformPreset {
      * abaixo do "more" — que é onde as queres.
      */
     hashtagGap: number;
-    /** Prefixar cada tweet com `1/N` (convenção de thread no X). */
+    /** Prefixar cada bloco com `1/N` (convenção de thread no X). */
     numberTweets: boolean;
 }
 
@@ -54,24 +90,19 @@ export interface PlatformPreset {
  */
 export const BRAILLE_BLANK = '⠀';
 
-export const PLATFORM_PRESETS: Record<SocialPlatformId, PlatformPreset> = {
-    LINKEDIN: {
-        id: 'LINKEDIN',
-        label: 'LinkedIn',
-        charLimit: 3000,
-        visibleChars: 210,
-        hashtagLimit: 30,
-        spacer: true,
-        blankLines: 1,
-        hashtagGap: 1,
-        numberTweets: false,
-    },
+/**
+ * As manias de FORMATAÇÃO que não são limites — não estão no `platform-rules`
+ * porque não interessam à IA, só ao colar do texto.
+ */
+const FORMATTING: Record<
+    SocialChannel,
+    Pick<
+        PlatformPreset,
+        'spacer' | 'blankLines' | 'hashtagGap' | 'numberTweets'
+    >
+> = {
+    LINKEDIN: { spacer: true, blankLines: 1, hashtagGap: 1, numberTweets: false },
     INSTAGRAM: {
-        id: 'INSTAGRAM',
-        label: 'Instagram',
-        charLimit: 2200,
-        visibleChars: 125,
-        hashtagLimit: 30,
         // O Instagram remove trailing whitespace em algumas apps; o gap de
         // hashtags é feito com linhas em branco normais.
         spacer: false,
@@ -79,38 +110,63 @@ export const PLATFORM_PRESETS: Record<SocialPlatformId, PlatformPreset> = {
         hashtagGap: 4,
         numberTweets: false,
     },
-    X: {
-        id: 'X',
-        label: 'X',
-        charLimit: 280,
-        visibleChars: 280,
-        // No X as hashtags contam para o limite e mais de uma é praticamente
-        // inútil num post curto — o corte é por omisso.
-        hashtagLimit: 1,
+    TWITTER: {
         spacer: false,
         blankLines: 1,
         hashtagGap: 1,
         numberTweets: true,
     },
-    THREADS: {
-        id: 'THREADS',
-        label: 'Threads',
-        charLimit: 500,
-        visibleChars: 500,
-        hashtagLimit: 3,
-        spacer: false,
-        blankLines: 1,
-        hashtagGap: 1,
-        numberTweets: false,
-    },
+    THREADS: { spacer: false, blankLines: 1, hashtagGap: 1, numberTweets: false },
+    FACEBOOK: { spacer: false, blankLines: 1, hashtagGap: 1, numberTweets: false },
+    PINTEREST: { spacer: false, blankLines: 1, hashtagGap: 1, numberTweets: false },
+    TELEGRAM: { spacer: false, blankLines: 1, hashtagGap: 1, numberTweets: false },
+    WHATSAPP: { spacer: false, blankLines: 1, hashtagGap: 1, numberTweets: false },
+    TIKTOK: { spacer: false, blankLines: 1, hashtagGap: 1, numberTweets: false },
+    YOUTUBE: { spacer: false, blankLines: 1, hashtagGap: 1, numberTweets: false },
 };
 
-export const PLATFORM_IDS: readonly SocialPlatformId[] = [
-    'LINKEDIN',
-    'INSTAGRAM',
-    'X',
-    'THREADS',
-];
+// Os rótulos vêm de `CHANNEL_LABELS` (types/database), que é a fonte única —
+// duplicá-los aqui era a razão de o menu dizer "X / Twitter" num sítio e
+// "X (Twitter)" noutro.
+
+/**
+ * Constrói o preset de um canal, fundindo os overrides do utilizador.
+ *
+ * `rules` vem de `channel_configs.rules` — se o utilizador pôs `hashtagLimit: 5`
+ * no Instagram, o medidor e o prompt de geração passam a dizer 5, e não 30.
+ */
+export function platformPresetFor(
+    channel: SocialChannel,
+    rules?: ResolvedChannelRules
+): PlatformPreset {
+    const resolved = rules ?? resolveRules({ channel });
+    return {
+        id: channel,
+        label: CHANNEL_LABELS[channel],
+        charLimit: resolved.charLimit,
+        visibleChars: resolved.visibleChars,
+        hashtagLimit: resolved.hashtagLimit,
+        ...FORMATTING[channel],
+    };
+}
+
+/** Preset com os defaults de código. */
+export function defaultPlatformPreset(
+    channel: SocialChannel
+): PlatformPreset {
+    return platformPresetFor(channel);
+}
+
+/** Presets de todos os canais do menu de copiar. */
+export function allPlatformPresets(
+    rulesByChannel?: Partial<Record<SocialChannel, ResolvedChannelRules>>
+): PlatformPreset[] {
+    return COPY_CHANNELS.map((channel) =>
+        platformPresetFor(channel, rulesByChannel?.[channel])
+    );
+}
+
+export const PLATFORM_IDS: readonly SocialPlatformId[] = COPY_CHANNELS;
 
 /**
  * Conta o custo em unidades UTF-16 — o mesmo cálculo que as plataformas fazem.
@@ -155,3 +211,5 @@ export function normaliseHashtag(raw: string): string {
     const trimmed = raw.trim().replace(/^#+/, '');
     return trimmed ? `#${trimmed}` : '';
 }
+
+export { aspectRatioFor };

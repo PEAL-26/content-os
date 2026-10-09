@@ -42,14 +42,21 @@ enum SocialChannel {
   WHATSAPP
 }
 
+// Tipos de peça GENÉRICOS: nenhum nome de plataforma. O canal é uma dimensão
+// separada (`ContentPiece.channelId`) e decide como o conteúdo é escrito.
+//   POST        — texto corrido (legenda, post, artigo). Thread é um POST
+//                 sequencial nos canais que suportam `supportsThread`.
+//   CAROUSEL    — sequência de slides. Vira texto numerado nos canais sem
+//                 carrossel nativo (ver `platform-rules/platform-block`).
+//   IMAGE       — imagem + legenda que a acompanha.
+//   SHORT_VIDEO — vídeo curto (roteiro + artefacto de vídeo).
+//   VIDEO       — vídeo longo (roteiro + artefacto de vídeo).
 enum ContentFormat {
-  CAROUSEL // Carrossel (slides)
-  SHORT_VIDEO // TikTok / Reels
-  LINKEDIN_POST // Post opinativo LinkedIn
+  POST
+  CAROUSEL
   IMAGE
-  THREAD // Thread (X/Twitter)
-  CTA_POST // Call to Action direto
-  VIDEO_SCRIPT // Roteiro de vídeo
+  SHORT_VIDEO
+  VIDEO
 }
 
 enum ArticleStatus {
@@ -81,13 +88,11 @@ enum FunnelStage {
 
 enum PromptTargetType {
   PIECE
-  VIDEO_SCRIPT
 }
 
 enum PublicationTargetType {
   ARTICLE
   PIECE
-  VIDEO_SCRIPT
 }
 
 // Tipo de entidade a que um artefacto está ligado. Enum próprio (e não
@@ -95,16 +100,34 @@ enum PublicationTargetType {
 enum AssetTargetType {
   ARTICLE
   PIECE
-  VIDEO_SCRIPT
 }
 
+// Como nasceu um artefacto. UPLOAD = ficheiro carregado pelo utilizador;
+// GENERATED = produzido por um modelo de media (ver server/media/).
+enum AssetSource {
+  UPLOAD
+  GENERATED
+}
+
+// Estado do artefacto. Só os gerados usam PENDING/GENERATING/FAILED — um
+// upload entra sempre como READY.
+enum AssetStatus {
+  PENDING
+  GENERATING
+  READY
+  FAILED
+}
+
+// Modalidades de saída de um modelo. Ver `lib/platform-rules` para os canais e
+// `server/media/dispatcher` para a resolução de modelo por modalidade.
 enum GenerationJobType {
   NEW_ARTICLE
   CONTENT_PIECES
-  VIDEO_SCRIPT
   CONTENT_PROMPT // Escreve o prompt da peça (sem gerar o conteúdo)
-  CONTENT_ITEM // Regenera um item (slide-N / tweet-N) a partir do seu prompt
+  CONTENT_ITEM // Regenera um item (slide-N / scene-N) a partir do seu prompt
   ARTICLE_METADATA // Gera os metadados (summary/keywords/SEO) de um artigo existente
+  MEDIA_PROMPT // Gera o prompt de media (imagem/áudio/vídeo) de uma peça ou artigo
+  MEDIA_ARTIFACT // Gera o ficheiro de media a partir do prompt guardado
 }
 
 enum GenerationJobStatus {
@@ -112,6 +135,7 @@ enum GenerationJobStatus {
   RUNNING
   COMPLETED
   FAILED
+  EXPIRED // Job deixado de fora por uma migração que invalidou os seus params
 }
 
 // =============================================================================
@@ -144,6 +168,10 @@ model Workspace {
   // Configurações de IA
   defaultAIProviderId String? // Row id (UUID) do AIProvider padrão
   defaultAIModel      String? // Código do modelo padrão (ex: "claude-sonnet-4-20250514")
+
+  // Modelo por modalidade de media: { image?, audio?, video? } com modelCode.
+  // Ausente/null = "Automático" (1º modelo activo da modalidade por priority).
+  artifactModels Json?
 
   // Relações
   members       WorkspaceMember[]
@@ -240,8 +268,11 @@ model ChannelConfig {
   isActive    Boolean       @default(true)
   handle      String? // @username ou URL do perfil
   isPrimary   Boolean       @default(false) // Canal principal (ex: LinkedIn B2B)
-  defaultTone String? // Tom específico para este canal
-  notes       String? // Notas internas
+  defaultTone String? // Tom específico deste canal. Sobrepõe o voiceTone do workspace.
+  notes       String? // Instruções internas que a IA recebe para este canal
+  // Overrides das regras de plataforma, por campo (ver ChannelRules).
+  // null / campo ausente = herdar o default de `lib/platform-rules`.
+  rules       Json?
   createdAt   DateTime      @default(now())
 
   workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -325,7 +356,6 @@ model Article {
   pillar        PillarConfig?  @relation(fields: [pillarId], references: [id])
   tags          ArticleTag[]
   contentPieces ContentPiece[]
-  videoScripts  VideoScript[]
   planItems     PlanItem[]
 
   @@unique([workspaceId, slug])
@@ -359,6 +389,11 @@ model ContentPiece {
   slides     Json? // Array de slides: [{order, title, body}]
   slideCount Int?
 
+  // Vídeo (SHORT_VIDEO / VIDEO). `scenes` é a decomposição em cenas que o
+  // prompt-writer e a geração de media usam: [{order, kind, narration, visual, onScreenText}]
+  scenes      Json?
+  durationSec Int?
+
   // Estado
   status      ContentPieceStatus @default(DRAFT)
   publishedAt DateTime?
@@ -378,43 +413,6 @@ model ContentPiece {
   planItems PlanItem[]
 
   @@map("content_pieces")
-}
-
-// =============================================================================
-// VIDEO SCRIPTS (Roteiros de vídeo curto — TikTok / Reels)
-// =============================================================================
-
-model VideoScript {
-  id          String @id @default(uuid())
-  articleId   String
-  workspaceId String
-
-  // Conteúdo do roteiro
-  title      String
-  hook       String // Primeiros 3 segundos (gancho visual/verbal)
-  problem    String? // Apresentação do problema
-  solution   String? // A solução / conteúdo central
-  cta        String // Call to action final
-  fullScript String // Roteiro completo formatado
-
-  // Configuração de produção
-  durationSec   Int?          @default(60) // Duração estimada em segundos
-  targetChannel SocialChannel @default(INSTAGRAM) // INSTAGRAM ou TIKTOK
-  onScreenText  String? // Textos para aparecer no vídeo
-  bRoll         String? // Sugestões de b-roll / cenas de apoio
-
-  // Estado
-  status      ArticleStatus @default(DRAFT) // Reutiliza enum
-  aiGenerated Boolean       @default(false)
-
-  // Artefactos: ver tabela content_assets (N artefactos por roteiro)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
-
-  @@map("video_scripts")
 }
 
 // =============================================================================
@@ -554,6 +552,10 @@ model AIProviderModel {
   displayName String   // "Claude Sonnet 4"
   modelCode   String   // "claude-sonnet-4-20250514"
   config      Json?    // Configuração padrão do modelo (temperature, max_tokens, ...)
+  // Que tipos de dados este modelo produz: ["text"] | ["image"] | ["audio"] |
+  // ["video"] | combinações (ex.: ["text","image"]) | ["embedding"] | ["other"].
+  // Vazio = desconhecido (a UI de artefactos mostra "sem modelo definido").
+  modalities  String[] @default([])
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
 
@@ -588,7 +590,11 @@ model AISystemPrompt {
   id           String   @id @default(uuid())
   userId       String? // Override a nível de utilizador
   workspaceId  String? // Override a nível de workspace (ganha sobre o do utilizador)
-  contentType  String // "article" | "image" | "carousel" | "linkedin_post" | ...
+  // Tipo de conteúdo: "article" | os 5 tipos genéricos (POST, CAROUSEL, IMAGE,
+  // SHORT_VIDEO, VIDEO) | os `media_*` | os escritores `prompt_<TIPO>`. Texto
+  // livre de propósito — a taxonomia vive em código (`helpers/content-format.ts`,
+  // `lib/ai/content-prompts.ts`), não num enum que fossilizaria as chaves.
+  contentType  String
   systemPrompt String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -602,15 +608,15 @@ model AISystemPrompt {
 }
 
 // =============================================================================
-// CONTENT GENERATION PROMPTS (Prompt final portátil de cada peça/roteiro gerado)
-// Uma linha por item (carrossel → por slide; thread → por tweet; simples → "main").
+// CONTENT GENERATION PROMPTS (Prompt final portátil de cada item gerado)
+// Uma linha por item (carrossel → por slide; vídeo → por cena; simples → "main").
 // =============================================================================
 
 model ContentGenerationPrompt {
   id         String           @id @default(uuid())
-  targetType PromptTargetType // PIECE | VIDEO_SCRIPT
-  targetId   String           // content_pieces.id ou video_scripts.id (polimórfico)
-  itemKey    String?          // "main" | "slide-1" | "tweet-3" | ...
+  targetType PromptTargetType // PIECE
+  targetId   String           // content_pieces.id (polimórfico)
+  itemKey    String?          // "main" | "slide-1" | "scene-3" | ...
   prompt     String           // Prompt final self-contained (portátil)
   providerId String?          // Row id do ai_providers usado na geração
   modelCode  String?          // Código do modelo usado na geração
@@ -625,15 +631,45 @@ model ContentGenerationPrompt {
 }
 
 // =============================================================================
+// CONTENT MEDIA PROMPTS (Prompt de media genérico e portátil)
+// Uma linha por (alvo, modalidade, itemKey). O prompt é SEMPRE puro descritivo
+// — nunca nome de plataforma, formato nem limites — para poder ser gerado noutro
+// sítio. A descrição semântica vem do próprio conteúdo: `slides[n].text` num
+// carrossel, `scenes[n]` num vídeo, `[IMAGEM SUGERIDA — ...]` num artigo.
+// =============================================================================
+
+model ContentMediaPrompt {
+  id          String          @id @default(uuid())
+  workspaceId String
+  targetType  AssetTargetType // ARTICLE | PIECE
+  targetId    String          // articles.id | content_pieces.id
+  modality    String          // "image" | "audio" | "video"
+  itemKey     String          // "main" | "slide-1" | "scene-2" | "ilustracao-3"
+  prompt      String          // Prompt portátil (sem plataforma/dimensões)
+  negativePrompt String?      // Só para imagem/vídeo
+  // Aspecto/dimensões vai FORA do prompt, como parâmetro da API (Decisão 29).
+  aspectRatio String?
+  providerId  String? // Row id do ai_providers que escreveu o prompt
+  modelCode   String? // Código do modelo que escreveu o prompt
+  createdAt   DateTime        @default(now())
+  editedAt    DateTime?       // Preenchido quando o utilizador edita à mão
+
+  @@unique([targetType, targetId, modality, itemKey])
+  @@index([workspaceId])
+  @@index([targetType, targetId])
+  @@map("content_media_prompts")
+}
+
+// =============================================================================
 // CONTENT PUBLICATIONS (Publicações multi-plataforma de conteúdo publicável)
-// Polimórfico: ARTICLE | PIECE | VIDEO_SCRIPT → targetId.
+// Polimórfico: ARTICLE | PIECE → targetId.
 // =============================================================================
 
 model ContentPublication {
   id         String                @id @default(uuid())
-  targetType PublicationTargetType // ARTICLE | PIECE | VIDEO_SCRIPT
-  targetId   String                // articles.id | content_pieces.id | video_scripts.id
-  platform   String                // "LINKEDIN" | "INSTAGRAM" | "outros" | ...
+  targetType PublicationTargetType // ARTICLE | PIECE
+  targetId   String                // articles.id | content_pieces.id
+  platform   SocialChannel         // Plataforma onde foi publicado
   url        String                // Link da publicação
   publishedAt DateTime             @default(now())
   createdAt   DateTime             @default(now())
@@ -644,22 +680,32 @@ model ContentPublication {
 
 // =============================================================================
 // CONTENT ASSETS (Artefactos — vários por entidade, polimórfico)
-// Substitui as antigas colunas assetUrl/assetName em articles/content_pieces/
-// video_scripts, que só permitiam um artefacto por entidade.
+// Substitui as antigas colunas assetUrl/assetName em articles/content_pieces,
+// que só permitiam um artefacto por entidade.
 // =============================================================================
 
 model ContentAsset {
   id          String          @id @default(uuid())
   workspaceId String          // Âmbito do workspace (verificação de fetch)
-  targetType  AssetTargetType // ARTICLE | PIECE | VIDEO_SCRIPT
-  targetId    String          // articles.id | content_pieces.id | video_scripts.id
+  targetType  AssetTargetType // ARTICLE | PIECE
+  targetId    String          // articles.id | content_pieces.id
   url         String          // URL do Storage ou link externo
   name        String? // Nome do ficheiro
   mimeType    String? // MIME do upload; para links externos, inferido da extensão
+  // Proveniência. UPLOAD = carregado pelo utilizador (default);
+  // GENERATED = produzido por server/media/.
+  source      AssetSource     @default(UPLOAD)
+  status      AssetStatus     @default(READY)
+  error       String? // Motivo da falha (só GENERATED)
+  itemKey     String? // "main" | "slide-2" | "scene-1" | "ilustracao-1"
+  mediaPromptId String? // content_media_prompts.id que gerou este ficheiro
+  providerId  String? // ai_providers.id que gerou
+  modelCode   String? // modelo que gerou
   createdAt   DateTime        @default(now())
 
   @@index([workspaceId])
   @@index([targetType, targetId])
+  @@index([status])
   // A grelha de artefactos ordena por createdAt DESC.
   @@index([createdAt])
   @@map("content_assets")
@@ -682,7 +728,7 @@ model GenerationJob {
   items       Json? // [{ format, targetId, status, error }] por item (CONTENT_PIECES)
   params      Json? // Snapshot dos parâmetros da geração (para retry)
   runId       String? // Inngest run id (idempotência/pista)
-  targetId    String? // NEW_ARTICLE/VIDEO_SCRIPT → id do placeholder; CONTENT_PIECES → articleId
+  targetId    String? // NEW_ARTICLE → id do placeholder; CONTENT_PIECES → articleId
   createdAt   DateTime            @default(now())
   updatedAt   DateTime            @updatedAt
 

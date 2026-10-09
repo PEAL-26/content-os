@@ -24,6 +24,18 @@ export interface GenerationContextData {
     apiKeys: Record<string, string>;
 }
 
+/**
+ * O mesmo contexto, com o `workspaceId` — o que o `MEDIA_ARTIFACT` precisa para
+ * ir buscar `artifactModels` e o idioma quando resolve o modelo de media.
+ *
+ * Alias em vez de interface nova: os dois shapes são o mesmo objecto, e ter dois
+ * tipos obrigaria a converter em cada chamada.
+ */
+export type LoadedGenerationContext = GenerationContextData & {
+    workspaceId: string;
+    userId?: string | null;
+};
+
 function toIso(date: Date): string {
     return date.toISOString();
 }
@@ -243,6 +255,11 @@ export async function loadAvailableProviders(
                 displayName: m.displayName,
                 modelCode: m.modelCode,
                 config: normalizeConfig(m.config),
+                // ⚠️ Sem este campo, `AIProviderModelLike.modalities` chega
+                // `undefined` ao dispatcher e `resolveMediaModel` filtra
+                // TODOS os candidatos — nenhum artefacto seria gerável, e a
+                // feature pareceria morta sem erro visível.
+                modalities: m.modalities,
                 isActive: m.isActive,
                 createdAt: toIso(m.createdAt),
             })),
@@ -284,14 +301,29 @@ export async function resolveSystemPrompt(
     return buildDefault();
 }
 
-/** Anexa as instruções adicionais (por geração) ao system prompt. */
+/**
+ * Anexa, por ordem, ao system prompt: instruções adicionais da geração e o
+ * bloco de plataforma.
+ *
+ * O bloco de plataforma entra DEPOIS do prompt editável, nunca dentro dele — é
+ * o que garante que um prompt afinado ao LinkedIn não possa vazar para o
+ * Instagram quando o utilizador muda de canal.
+ */
 export function withAdditionalInstructions(
     systemPrompt: string,
-    additionalInstructions?: string
+    additionalInstructions?: string,
+    platformBlock?: string
 ): string {
-    return additionalInstructions?.trim()
-        ? `${systemPrompt}\n\n## Instruções Adicionais\n${additionalInstructions.trim()}`
-        : systemPrompt;
+    let prompt = systemPrompt;
+
+    if (additionalInstructions?.trim()) {
+        prompt += `\n\n## Instruções Adicionais\n${additionalInstructions.trim()}`;
+    }
+    if (platformBlock?.trim()) {
+        prompt += `\n\n${platformBlock.trim()}`;
+    }
+
+    return prompt;
 }
 
 /**
@@ -301,7 +333,7 @@ export function withAdditionalInstructions(
 export async function loadGenerationContext(
     workspaceId: string,
     userId?: string | null
-): Promise<GenerationContextData> {
+): Promise<LoadedGenerationContext> {
     const workspaceRow = await prisma.workspace.findUnique({
         where: { id: workspaceId },
     });
@@ -315,6 +347,8 @@ export async function loadGenerationContext(
     );
 
     return {
+        workspaceId,
+        userId: userId ?? null,
         workspace: toWorkspaceClient(workspaceRow),
         defaultPreferred: {
             providerId: workspaceRow.defaultAIProviderId,

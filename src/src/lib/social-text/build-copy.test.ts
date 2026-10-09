@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { VideoScriptWithRelations } from '@/services/video-script.service';
+
 import type { ContentPieceWithRelations } from '@/types/database';
 
 import {
@@ -11,7 +11,7 @@ import {
     renderPlain,
     type CopySource,
 } from './build-copy';
-import { PLATFORM_PRESETS } from './platforms';
+import { platformPresetFor } from './platforms';
 import { applyStyle } from './unicode-styles';
 
 // ---------------------------------------------------------------------------
@@ -27,7 +27,7 @@ function piece(
         workspaceId: 'w1',
         productId: null,
         channelId: null,
-        format: 'LINKEDIN_POST',
+        format: 'POST',
         pillar: null,
         // O `title` é interno por definição — nenhum teste deve depender dele.
         title: 'Título interno que não se publica',
@@ -46,33 +46,8 @@ function piece(
     } as ContentPieceWithRelations;
 }
 
-function script(
-    over: Partial<VideoScriptWithRelations> = {}
-): VideoScriptWithRelations {
-    return {
-        id: 'v1',
-        articleId: 'a1',
-        workspaceId: 'w1',
-        title: 'Roteiro interno',
-        hook: '',
-        problem: null,
-        solution: null,
-        cta: '',
-        fullScript: '',
-        durationSec: 60,
-        targetChannel: 'INSTAGRAM',
-        onScreenText: [],
-        bRoll: [],
-        status: 'DRAFT',
-        aiGenerated: false,
-        createdAt: '2026-01-01',
-        updatedAt: '2026-01-01',
-        ...over,
-    } as VideoScriptWithRelations;
-}
-
-const LINKEDIN = PLATFORM_PRESETS.LINKEDIN;
-const X = PLATFORM_PRESETS.X;
+const LINKEDIN = platformPresetFor('LINKEDIN');
+const X = platformPresetFor('TWITTER');
 
 function plain(
     source: CopySource,
@@ -134,53 +109,53 @@ describe('buildBlocks — usa os campos que o schema já tem', () => {
         expect(text).not.toContain('##');
     });
 
-    it('numera os tweets de uma thread', () => {
+    it('numera um POST quando o canal é o X (thread)', () => {
+        // THREAD deixou de ser um tipo: é um POST num canal que suporta threads.
+        // A numeração é convenção do X, e vem do preset do canal — não do tipo.
         const text = plain(
             {
                 type: 'piece',
                 piece: piece({
-                    format: 'THREAD',
-                    body: 'Primeiro tweet.\n\nSegundo tweet.\n\nTerceiro tweet.',
+                    format: 'POST',
+                    body: 'Primeiro.\n\nSegundo.\n\nTerceiro.',
                 }),
             },
             X
         );
 
-        expect(text).toContain('1/3 Primeiro tweet.');
-        expect(text).toContain('2/3 Segundo tweet.');
-        expect(text).toContain('3/3 Terceiro tweet.');
+        expect(text).toContain('1/3 Primeiro.');
+        expect(text).toContain('2/3 Segundo.');
+        expect(text).toContain('3/3 Terceiro.');
     });
 
-    it('não numera tweets fora do X', () => {
+    it('não numera um POST fora do X', () => {
         // A numeração é convenção do X; no LinkedIn é ruído.
         const text = plain({
             type: 'piece',
             piece: piece({
-                format: 'THREAD',
+                format: 'POST',
                 body: 'Primeiro.\n\nSegundo.',
             }),
         });
         expect(text).not.toContain('1/2');
     });
 
-    it('monta o roteiro a partir de hook/problem/solution/cta', () => {
+    it('monta o vídeo a partir de hook/body/cta', () => {
+        // `video_scripts` foi fundido em `content_pieces`: o roteiro deixou de
+        // ter tabela própria e passou a ser um tipo genérico com `scenes`.
         const text = plain({
-            type: 'videoScript',
-            script: script({
-                hook: 'O gancho do vídeo',
-                problem: 'O problema',
-                solution: 'A solução',
-                cta: 'Segue para mais',
-                fullScript: 'O roteiro completo.',
+            type: 'piece',
+            piece: piece({
+                format: 'VIDEO',
+                hookText: 'O gancho do vídeo',
+                body: 'O roteiro completo.',
+                ctaText: 'Segue para mais',
             }),
         });
 
         expect(text).toContain(applyStyle('O gancho do vídeo', 'BOLD_SANS'));
-        expect(text).toContain('O problema');
-        expect(text).toContain('A solução');
         expect(text).toContain('O roteiro completo.');
         expect(text).toContain(applyStyle('Segue para mais', 'BOLD_SANS'));
-        expect(text).not.toContain('Roteiro interno');
     });
 });
 
@@ -280,7 +255,7 @@ describe('presets de plataforma', () => {
                     body: 'Primeiro parágrafo.\n\nSegundo parágrafo.',
                 }),
             },
-            PLATFORM_PRESETS.INSTAGRAM
+            platformPresetFor('INSTAGRAM')
         );
 
         expect(text).not.toContain('⠀');
@@ -296,7 +271,7 @@ describe('presets de plataforma', () => {
                     hashtags: ['marketing', 'socialmedia'],
                 }),
             },
-            PLATFORM_PRESETS.INSTAGRAM
+            platformPresetFor('INSTAGRAM')
         );
 
         const lines = text.split('\n');

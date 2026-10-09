@@ -4,12 +4,18 @@ import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { Modal } from '@/components/ui/modal';
 import type { AIProviderConfigOptions } from '@/lib/ai/types';
 import type { AIProvider, AIProviderModel } from '@/services/ai-provider.service';
+import { ModelModalitiesEditor } from '@/components/ai/model-modalities-editor';
 
 export interface ModelDraft {
     displayName: string;
     modelCode: string;
     config: AIProviderConfigOptions;
     isActive: boolean;
+    /**
+     * Que dados o modelo produz. É o que o dispatcher usa para escolher quem
+     * gera cada artefacto — sem isto, nenhum modelo é candidato.
+     */
+    modalities: string[];
 }
 
 export interface HeaderDraft {
@@ -90,6 +96,9 @@ const EMPTY_MODEL: Omit<ModelRow, 'rowKey'> = {
     modelCode: '',
     config: {},
     isActive: true,
+    // Um modelo novo nasce sem modalidades: o utilizador marca-as, e o
+    // servidor preenche pelo catálogo curado se o `modelCode` for conhecido.
+    modalities: [],
 };
 
 function isValidUrl(value: string): boolean {
@@ -130,6 +139,10 @@ function serialize(values: FormValues, apiKey: string): string {
             modelCode: m.modelCode,
             config: m.config,
             isActive: m.isActive,
+            // Entra na serialização para que mexer nas modalidades marque o
+            // formulário como "sujo" — sem isto, a alteração não chegava ao
+            // servidor.
+            modalities: m.modalities,
         })),
         headers: values.headers.map((h) => ({ key: h.key, value: h.value })),
         apiKey: apiKey.trim(),
@@ -208,6 +221,7 @@ export function ProviderEditorModal({
                                     modelCode: m.modelCode,
                                     config: m.config ?? {},
                                     isActive: m.isActive,
+                                    modalities: m.modalities ?? [],
                                 }))
                               : [
                                     {
@@ -502,6 +516,7 @@ export function ProviderEditorModal({
                     modelCode: m.modelCode.trim(),
                     config: m.config,
                     isActive: m.isActive,
+                    modalities: m.modalities,
                 })),
                 headers: values.headers
                     .filter((h) => h.key.trim() && h.value.trim())
@@ -958,6 +973,34 @@ export function ProviderEditorModal({
                                                             : ''
                                                     }`}
                                                 />
+
+                                                {/* Modalidades: o que decide se
+                                                    este modelo pode gerar
+                                                    imagem/áudio/vídeo. */}
+                                                <div className="w-full basis-full pt-1">
+                                                    <ModelModalitiesEditor
+                                                        modelCode={
+                                                            model.modelCode
+                                                        }
+                                                        value={
+                                                            model.modalities ??
+                                                            []
+                                                        }
+                                                        onChange={(
+                                                            modalities
+                                                        ) =>
+                                                            updateModel(
+                                                                model.rowKey,
+                                                                {
+                                                                    modalities,
+                                                                }
+                                                            )
+                                                        }
+                                                        disabled={
+                                                            readOnly
+                                                        }
+                                                    />
+                                                </div>
 
                                                 <button
                                                     type="button"

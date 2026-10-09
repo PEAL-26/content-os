@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import type { ArtifactModelMapping } from '@/lib/media/resolution';
 import type {
     Workspace,
     WorkspaceMember,
@@ -36,6 +37,14 @@ export interface UpdateWorkspaceInput {
     productRatio?: number;
     postsPerWeek?: number;
     articlesPerWeek?: number;
+    /**
+     * Modelo fixo por modalidade de artefacto (`{ image?, audio?, video? }`).
+     *
+     * `null` limpa o mapeamento e volta a "automático": o dispatcher escolhe o
+     * primeiro modelo activo que produz a modalidade, por `priority`. É a mesma
+     * cadeia de resolução do texto, só que por modalidade.
+     */
+    artifactModels?: ArtifactModelMapping | null;
 }
 
 export const workspaceService = {

@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
 import { v4 as uuidv4 } from 'uuid';
 import { diffHeaders, diffModels } from '@/lib/ai/provider-diff';
+import { resolveModalities } from '@/lib/ai/model-modalities';
 import type { AIProviderConfigOptions } from '@/lib/ai/types';
 
 // =============================================================================
@@ -15,6 +16,13 @@ export interface AIProviderModel {
     modelCode: string;
     /** Configuração padrão do modelo (temperature, max_tokens, ...). */
     config?: AIProviderConfigOptions | null;
+    /**
+     * Que tipos de dados este modelo produz: `['text']`, `['image']`, …
+     *
+     * É o que o dispatcher de artefactos usa para escolher o modelo. Vazio =
+     * desconhecido, e nenhum modelo com modalidades vazias é candidato.
+     */
+    modalities?: string[];
     isActive: boolean;
     createdAt: string;
 }
@@ -63,7 +71,13 @@ export interface CreateCustomProviderInput {
     baseUrl: string;
     description?: string;
     config?: AIProviderConfigOptions | null;
-    models: { displayName: string; modelCode: string; config?: AIProviderConfigOptions | null }[];
+    models: {
+        displayName: string;
+        modelCode: string;
+        config?: AIProviderConfigOptions | null;
+        /** Quem não declarar fica a herdar o catálogo curado. */
+        modalities?: string[];
+    }[];
     headers?: { key: string; value: string }[];
 }
 
@@ -83,6 +97,12 @@ export interface ModelInput {
     modelCode: string;
     config?: AIProviderConfigOptions | null;
     isActive: boolean;
+    /**
+     * Modalidades escolhidas no editor (checkbox por modelo). É o que dá ao
+     * dispatcher a informação "este modelo gera imagem" — sem isto, a coluna
+     * fica vazia e o botão de gerar artefacto aparece desactivado.
+     */
+    modalities?: string[];
 }
 
 /** Header como chega do formulário de edição. */
@@ -153,7 +173,12 @@ interface DefaultProviderConfig {
     description: string;
     baseUrl?: string;
     priority: number;
-    models: { displayName: string; modelCode: string }[];
+    /**
+     * `modalities` é opcional e é lido de `CURATED_MODALITIES` (por `modelCode`)
+     * quando não vem explícito — o seed aplica o catálogo em vez de duplicar
+     * aqui a lista, para que acrescentar um modelo seja num sítio só.
+     */
+    models: { displayName: string; modelCode: string; modalities?: string[] }[];
 }
 
 export const DEFAULT_AI_PROVIDERS: DefaultProviderConfig[] = [
@@ -177,6 +202,19 @@ export const DEFAULT_AI_PROVIDERS: DefaultProviderConfig[] = [
         models: [
             { displayName: 'GPT-4o', modelCode: 'gpt-4o' },
             { displayName: 'GPT-4o Mini', modelCode: 'gpt-4o-mini' },
+            // Media: os dois adaptadores do registry de `server/media/` talking
+            // de OpenAI. Sem estas linhas, o dispatcher nunca encontraria um
+            // modelo de imagem/áudio activo.
+            {
+                displayName: 'GPT Image 1',
+                modelCode: 'gpt-image-1',
+                modalities: ['image'],
+            },
+            {
+                displayName: 'GPT-4o Mini TTS',
+                modelCode: 'gpt-4o-mini-tts',
+                modalities: ['audio'],
+            },
         ],
     },
     {
@@ -188,6 +226,19 @@ export const DEFAULT_AI_PROVIDERS: DefaultProviderConfig[] = [
         models: [
             { displayName: 'Gemini 2.0 Flash', modelCode: 'gemini-2.0-flash' },
             { displayName: 'Gemini 1.5 Flash', modelCode: 'gemini-1.5-flash' },
+            // Media: Imagen (imagem) e Veo (vídeo) usam a API REST do Google,
+            // não o endpoint OpenAI-compatible — daí o `baseUrl` acima servir
+            // apenas para o texto.
+            {
+                displayName: 'Imagen 3',
+                modelCode: 'imagen-3.0-generate-002',
+                modalities: ['image'],
+            },
+            {
+                displayName: 'Veo 3',
+                modelCode: 'veo-3.0-generate-preview',
+                modalities: ['video'],
+            },
         ],
     },
     {
@@ -436,6 +487,12 @@ export const aiProviderService = {
                 displayName: m.displayName,
                 modelCode: m.modelCode,
                 config: m.config ?? null,
+                // Um provider customizado não tem detecção automática: o que o
+                // utilizador não marcar herda o catálogo curado por modelCode.
+                modalities: resolveModalities({
+                    saved: m.modalities ?? [],
+                    modelCode: m.modelCode,
+                }),
                 isActive: true,
                 createdAt: new Date().toISOString(),
             }));
@@ -546,6 +603,15 @@ export const aiProviderService = {
                     displayName: m.displayName,
                     modelCode: m.modelCode,
                     config: m.config ?? null,
+                    // Resolvidas por precedência: o que veio no draft, depois a
+                    // detecção do provider, depois o catálogo curado. Sem isto
+                    // o modelo nascia com `[]` e nunca seria candidato para
+                    // gerar artefactos.
+                    modalities: resolveModalities({
+                        saved: m.modalities ?? [],
+                        detected: m.detectedModalities,
+                        modelCode: m.modelCode,
+                    }),
                     isActive: m.isActive,
                     createdAt: new Date().toISOString(),
                 }))
@@ -562,6 +628,10 @@ export const aiProviderService = {
                     displayName: model.displayName,
                     config: model.config,
                     isActive: model.isActive,
+                    // As modalidades também se actualizam: o diff só empurra
+                    // este `update` quando elas mudaram, e limpá-las deixaria
+                    // o modelo fora da resolução de artefactos.
+                    modalities: model.modalities ?? [],
                 })
                 .eq('id', model.id);
             if (error) {
@@ -689,6 +759,7 @@ export const aiProviderService = {
             providerId: string;
             displayName: string;
             modelCode: string;
+            modalities: string[];
             isActive: boolean;
             createdAt: string;
         }> = [];
@@ -705,6 +776,14 @@ export const aiProviderService = {
                         providerId: inserted.id,
                         displayName: model.displayName,
                         modelCode: model.modelCode,
+                        // Precedência: explícito no catálogo → detecção do
+                        // provider → catálogo curado por `modelCode`. É o que
+                        // garante que `gpt-image-1` nasce com `['image']` e um
+                        // modelo de texto com `['text']`.
+                        modalities: resolveModalities({
+                            saved: model.modalities ?? [],
+                            modelCode: model.modelCode,
+                        }),
                         isActive: true,
                         createdAt: new Date().toISOString(),
                     });

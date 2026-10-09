@@ -6,12 +6,12 @@ import {
 import { useChannels } from '@/hooks/use-channels';
 import { useContentPieces } from '@/hooks/use-content-pieces';
 import { useGenerationJob } from '@/hooks/use-generation-job';
+import type { ContentPiecesJobParams } from '@/lib/ai/generation-job-types';
 import {
     getMainPromptsForPieces,
     type MainPiecePrompt,
 } from '@/services/ai-prompt.service';
 import {
-    defaultJobParams,
     generationJobService,
     type GenerationJobItem,
 } from '@/services/generation-job.service';
@@ -24,14 +24,17 @@ import type {
     Product,
 } from '@/types/database';
 import {
-    CHANNEL_LABELS,
-    CONTENT_FORMAT_DEFAULTS,
     CONTENT_FORMAT_LABELS,
     CONTENT_PIECE_STATUS_COLORS,
     CONTENT_PIECE_STATUS_LABELS,
 } from '@/types/database';
 import type { PillarConfig } from '@/types/pillar';
 import { workspacePath } from '@/lib/workspace-paths';
+import {
+    ALL_CONTENT_FORMATS,
+    getFormatEmoji,
+} from '@/helpers/content-format';
+import { TypeChannelPicker } from './type-channel-picker';
 import {
     useCallback,
     useEffect,
@@ -46,35 +49,21 @@ interface ContentGeneratorPanelProps {
     article: Article;
     product?: Product;
     pillar?: PillarConfig;
+    /**
+     * Avisa que as peças mudaram, para o painel de artefactos/ilustrações do
+     * artigo reler os prompts de media e os ficheiros gerados.
+     */
+    onAssetsChanged?: () => void;
 }
-
-const ALL_FORMATS: ContentFormat[] = [
-    'CAROUSEL',
-    'LINKEDIN_POST',
-    'IMAGE',
-    'SHORT_VIDEO',
-    'CTA_POST',
-    'THREAD',
-    'VIDEO_SCRIPT',
-];
 
 /** Cadência de consulta dos jobs CONTENT_ITEM enquanto algum está activo. */
 const ITEM_POLL_MS = 4_000;
-
-const FORMAT_ICONS: Record<ContentFormat, string> = {
-    CAROUSEL: '📱',
-    LINKEDIN_POST: '💼',
-    IMAGE: '📸',
-    SHORT_VIDEO: '🎬',
-    CTA_POST: '🔗',
-    THREAD: '🧵',
-    VIDEO_SCRIPT: '📝',
-};
 
 export function ContentGeneratorPanel({
     article,
     product,
     pillar,
+    onAssetsChanged,
 }: ContentGeneratorPanelProps) {
     const {
         pieces,
@@ -158,6 +147,8 @@ export function ContentGeneratorPanel({
             // Saiu de activo → o conteúdo da peça mudou, vale a pena reler.
             if (wasActive && !active) {
                 void refetchPieces();
+                // O item pode ter trazido prompts de media novos (Decisão 26).
+                onAssetsChanged?.();
             }
             wasActive = active;
             if (active) {
@@ -170,7 +161,7 @@ export function ContentGeneratorPanel({
             cancelled = true;
             if (timeoutId) clearTimeout(timeoutId);
         };
-    }, [loadItemJobs, refetchPieces]);
+    }, [loadItemJobs, refetchPieces, onAssetsChanged]);
 
     const [isGenerating, setIsGenerating] = useState(false);
     const [isGeneratingPrompts, setIsGeneratingPrompts] = useState(false);
@@ -198,12 +189,15 @@ export function ContentGeneratorPanel({
     const [errors, setErrors] = useState<
         { format: ContentFormat; message: string }[]
     >([]);
+    // Canais primeiro, depois tipos — a ordem inversa é a origem do bug: com o
+    // tipo escolhido primeiro, dava para pedir "post" e escolher LinkedIn como
+    // canal, e o prompt era afinado ao tipo, não ao canal.
+    const [selectedChannelIds, setSelectedChannelIds] = useState<string[]>([]);
     const [selectedFormats, setSelectedFormats] = useState<Set<ContentFormat>>(
-        new Set(['CAROUSEL', 'LINKEDIN_POST'])
+        new Set(['POST'])
     );
-    const [selectedChannels, setSelectedChannels] = useState<
-        Partial<Record<ContentFormat, string>>
-    >({});
+    /** Modalidades cujos prompts de media são gerados automaticamente. */
+    const [selectedModalities, setSelectedModalities] = useState<string[]>([]);
     const [editingPiece, setEditingPiece] =
         useState<ContentPieceWithRelations | null>(null);
     const [isSavingModal, setIsSavingModal] = useState(false);
@@ -259,23 +253,37 @@ export function ContentGeneratorPanel({
         });
     };
 
-    const handleChannelChange = (format: ContentFormat, channelId: string) => {
-        setSelectedChannels((prev) => ({
-            ...prev,
-            [format]: channelId,
-        }));
+    /** Só canais activos podem ser escolhidos na criação (Decisão 15). */
+    const activeChannels = useMemo(
+        () => channels.filter((c) => c.isActive),
+        [channels]
+    );
+
+    /** Sem canal escolhido, pré-selecciona o primário (ou o primeiro activo). */
+    useEffect(() => {
+        if (selectedChannelIds.length > 0 || activeChannels.length === 0) return;
+        const primary = activeChannels.find((c) => c.isPrimary) ?? activeChannels[0];
+        setSelectedChannelIds([primary.id]);
+    }, [selectedChannelIds.length, activeChannels]);
+
+    const toggleChannel = (channelId: string) => {
+        setSelectedChannelIds((prev) =>
+            prev.includes(channelId)
+                ? prev.filter((id) => id !== channelId)
+                : [...prev, channelId]
+        );
     };
 
-    const getDefaultChannel = (format: ContentFormat): string => {
-        const defaultChannel = CONTENT_FORMAT_DEFAULTS[format];
-        const matchingChannel = channels.find(
-            (c) => c.channel === defaultChannel
+    const toggleModality = (modality: string) => {
+        setSelectedModalities((prev) =>
+            prev.includes(modality)
+                ? prev.filter((m) => m !== modality)
+                : [...prev, modality]
         );
-        return matchingChannel?.id || channels[0]?.id || '';
     };
 
     const handleGenerate = async () => {
-        if (selectedFormats.size === 0) return;
+        if (selectedFormats.size === 0 || selectedChannelIds.length === 0) return;
 
         setErrors([]);
         setEnqueueError(null);
@@ -285,12 +293,6 @@ export function ContentGeneratorPanel({
             return;
         }
 
-        const channelIds: Partial<Record<ContentFormat, string>> = {};
-        for (const format of selectedFormats) {
-            channelIds[format] =
-                selectedChannels[format] || getDefaultChannel(format);
-        }
-
         setIsGenerating(true);
         try {
             const result = await generationJobService.enqueue({
@@ -298,8 +300,12 @@ export function ContentGeneratorPanel({
                 jobType: 'CONTENT_PIECES',
                 params: {
                     articleId: article.id,
+                    // Produto cartesiano canais × tipos: o servidor cria uma peça
+                    // por par. Antes era um canal por tipo, o que impedia pedir
+                    // POST para LinkedIn e POST para Instagram na mesma corrida.
                     formats: Array.from(selectedFormats),
-                    channelIds,
+                    channelIds: selectedChannelIds,
+                    modalities: selectedModalities,
                     productId: product?.id ?? null,
                     pillarId: pillar?.id ?? null,
                     additionalInstructions:
@@ -338,12 +344,6 @@ export function ContentGeneratorPanel({
             return;
         }
 
-        const channelIds: Partial<Record<ContentFormat, string>> = {};
-        for (const format of selectedFormats) {
-            channelIds[format] =
-                selectedChannels[format] || getDefaultChannel(format);
-        }
-
         setIsGeneratingPrompts(true);
         try {
             const result = await generationJobService.enqueue({
@@ -352,7 +352,7 @@ export function ContentGeneratorPanel({
                 params: {
                     articleId: article.id,
                     formats: Array.from(selectedFormats),
-                    channelIds,
+                    channelIds: selectedChannelIds,
                     productId: product?.id ?? null,
                     pillarId: pillar?.id ?? null,
                     additionalInstructions:
@@ -466,6 +466,9 @@ export function ContentGeneratorPanel({
                 params: {
                     articleId: article.id,
                     formats: [piece.format],
+                    // O canal da própria peça: o prompt guardado foi escrito com
+                    // as regras desta plataforma e tem de continuar com elas.
+                    channelIds: piece.channelId ? [piece.channelId] : [],
                     useStoredPrompt: true,
                 },
                 targets: [
@@ -517,10 +520,45 @@ export function ContentGeneratorPanel({
             // um "Gerar peça a partir do prompt", repeti-lo com esse sinal
             // mandaria o modelo reproduzir o prompt em vez de escrever algo
             // novo — e o utilizador não pediu isso ao carregar em "Repetir".
-            const replayed = {
-                ...(job.params ?? defaultJobParams('CONTENT_PIECES')),
+            /**
+ * O `channelIds` pode vir de um job gravado com o esquema antigo (um canal por
+ * tipo: `Partial<Record<ContentFormat, string>>`). Espalha os valores numa lista
+ * para que o retry de um job anterior não deite os canais ao chão.
+ */
+function normaliseStoredChannelIds(params: unknown): string[] {
+    const raw = (params as { channelIds?: unknown } | null)?.channelIds;
+    if (Array.isArray(raw)) {
+        return raw.filter((id): id is string => typeof id === 'string');
+    }
+    if (raw && typeof raw === 'object') {
+        return Object.values(raw as Record<string, string>).filter(
+            (id): id is string => typeof id === 'string'
+        );
+    }
+    return [];
+}
+
+const stored = (job.params ?? {}) as Partial<ContentPiecesJobParams>;
+            // O `params` do job pode ser de um job antigo, com `channelIds` no
+            // formato antigo (um canal por tipo). Espalha-o pela lista para não
+            // perder nada, e deixa o canal da peça sobrepor abaixo.
+            const replayed: ContentPiecesJobParams = {
+                articleId: stored.articleId ?? article.id,
+                formats: stored.formats ?? [piece.format],
+                channelIds: normaliseStoredChannelIds(job.params),
+                productId: stored.productId ?? product?.id ?? null,
+                pillarId: stored.pillarId ?? pillar?.id ?? null,
+                additionalInstructions: stored.additionalInstructions,
+                preferred: stored.preferred,
+                modalities: stored.modalities ?? [],
                 useStoredPrompt: false,
             };
+            // O `params` do job pode ser de um job antigo, com `channelIds` no
+            // formato antigo (um canal por tipo). O canal da peça é a verdade,
+            // por isso sobrepõe sempre.
+            if (piece.channelId) {
+                (replayed as ContentPiecesJobParams).channelIds = [piece.channelId];
+            }
             const result = await generationJobService.enqueue({
                 workspaceId: currentWorkspace.id,
                 jobType: 'CONTENT_PIECES',
@@ -574,13 +612,11 @@ export function ContentGeneratorPanel({
                 params: {
                     articleId: article.id,
                     formats: [piece.format],
-                    // O canal vem junto para o prompt reescrito ter a mesma
-                    // linha "Canal: …" do prompt original desta peça.
-                    channelIds: {
-                        [piece.format]:
-                            selectedChannels[piece.format] ||
-                            getDefaultChannel(piece.format),
-                    },
+                    // O canal da PEÇA (não o que está seleccionado no picker):
+                    // o prompt reescrito tem de ter as mesmas regras de
+                    // plataforma do original, senão a peça deixa de bater certo
+                    // com o que está escrito.
+                    channelIds: piece.channelId ? [piece.channelId] : [],
                     productId: product?.id ?? null,
                     pillarId: pillar?.id ?? null,
                     additionalInstructions:
@@ -676,7 +712,7 @@ export function ContentGeneratorPanel({
             pieces: ContentPieceWithRelations[];
         }> = [];
 
-        for (const format of ALL_FORMATS) {
+        for (const format of ALL_CONTENT_FORMATS) {
             const formatPieces = piecesByFormat.get(format);
             if (formatPieces && formatPieces.length > 0) {
                 groups.push({ format, pieces: formatPieces });
@@ -688,63 +724,16 @@ export function ContentGeneratorPanel({
 
     return (
         <div className="space-y-6">
-            <div>
-                <h3 className="mb-3 text-sm font-medium text-gray-700">
-                    Selecionar formatos a gerar
-                </h3>
-                <div className="space-y-2">
-                    {ALL_FORMATS.map((format) => {
-                        const isSelected = selectedFormats.has(format);
-                        const channelId =
-                            selectedChannels[format] ||
-                            getDefaultChannel(format);
-
-                        return (
-                            <div
-                                key={format}
-                                className="flex h-10 items-center gap-3 rounded-md border border-gray-200 p-3"
-                            >
-                                <input
-                                    type="checkbox"
-                                    id={`format-${format}`}
-                                    checked={isSelected}
-                                    onChange={() => toggleFormat(format)}
-                                    disabled={isGenerating}
-                                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                />
-                                <label
-                                    htmlFor={`format-${format}`}
-                                    className="flex-1 cursor-pointer text-sm"
-                                >
-                                    <span className="mr-2">
-                                        {FORMAT_ICONS[format]}
-                                    </span>
-                                    {CONTENT_FORMAT_LABELS[format]}
-                                </label>
-                                {isSelected && (
-                                    <select
-                                        value={channelId}
-                                        onChange={(e) =>
-                                            handleChannelChange(
-                                                format,
-                                                e.target.value
-                                            )
-                                        }
-                                        disabled={isGenerating}
-                                        className="rounded-md border border-gray-300 px-2 py-1 text-xs focus:border-blue-500 focus:outline-none"
-                                    >
-                                        {channels.map((c) => (
-                                            <option key={c.id} value={c.id}>
-                                                {CHANNEL_LABELS[c.channel]}
-                                            </option>
-                                        ))}
-                                    </select>
-                                )}
-                            </div>
-                        );
-                    })}
-                </div>
-            </div>
+            <TypeChannelPicker
+                channels={channels}
+                selectedChannelIds={selectedChannelIds}
+                onToggleChannel={toggleChannel}
+                selectedFormats={selectedFormats}
+                onToggleFormat={toggleFormat}
+                selectedModalities={selectedModalities}
+                onToggleModality={toggleModality}
+                disabled={isGenerating || isGeneratingPrompts}
+            />
 
             <div>
                 <label className="mb-1.5 block text-sm font-medium text-gray-700">
@@ -941,7 +930,7 @@ export function ContentGeneratorPanel({
                             ({ format, pieces: formatPieces }) => (
                                 <div key={format}>
                                     <h4 className="mb-2 flex items-center gap-2 text-xs font-medium text-gray-500">
-                                        <span>{FORMAT_ICONS[format]}</span>
+                                        <span>{getFormatEmoji(format)}</span>
                                         {CONTENT_FORMAT_LABELS[format]} (
                                         {formatPieces.length})
                                     </h4>

@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CONTENT_TYPE_LABELS } from '@/lib/ai/content-prompts';
 import { buildDefaultSystemPrompt } from '@/lib/ai/default-system-prompts';
+import {
+    MEDIA_PROMPT_CONTENT_TYPES,
+    MEDIA_PROMPT_LABELS,
+} from '@/lib/ai/media-prompts';
 import { PROMPT_WRITER_LABELS } from '@/lib/ai/prompt-writer';
 import {
     deleteSystemPrompt,
@@ -27,6 +31,13 @@ const CONTENT_TYPES: { key: string; label: string }[] = [
     ...Object.entries(PROMPT_WRITER_LABELS).map(([k, label]) => ({
         key: k,
         label,
+    })),
+    // Prompts de MEDIA (imagem/áudio/vídeo) — um por modalidade. Sem estes o
+    // utilizador não tinha onde ajustar o que descreve o ficheiro, e o prompt
+    // gerado saía sempre com o default em código.
+    ...Object.entries(MEDIA_PROMPT_CONTENT_TYPES).map(([modality, key]) => ({
+        key,
+        label: MEDIA_PROMPT_LABELS[modality as keyof typeof MEDIA_PROMPT_LABELS],
     })),
 ];
 

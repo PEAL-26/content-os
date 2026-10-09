@@ -10,6 +10,15 @@ export type JobWithItems = Awaited<
     ReturnType<typeof prisma.generationJob.findUnique>
 > & { itemsJson: GenerationJobItem[] | null };
 
+/** A linha de `generation_jobs` como os runners a usam. */
+/**
+ * A linha de `generation_jobs` como os runners a usam.
+ *
+ * O `getJob` devolve a linha crua (sem `itemsJson`, que é um campo virtual do
+ * `JobWithItems`), por isso o tipo é derivado de `findUnique` directamente.
+ */
+export type JobRow = NonNullable<Awaited<ReturnType<typeof getJob>>>;
+
 /** Lê um job (raw). */
 export async function getJob(jobId: string) {
     return prisma.generationJob.findUnique({ where: { id: jobId } });
@@ -78,7 +87,7 @@ export async function updateJobItems(
  * utilizador é a fonte da verdade e o delete+insert não pode apagá-lo.
  */
 export async function saveGenerationPrompts(
-    targetType: 'PIECE' | 'VIDEO_SCRIPT',
+    targetType: 'PIECE',
     targetId: string,
     items: Array<{ itemKey: string; prompt: string }>,
     preserveItemKeys: string[] = []
@@ -114,7 +123,7 @@ export async function saveGenerationPrompts(
 
 /** Lê todos os prompts de uma peça/roteiro. */
 export async function getGenerationPrompts(
-    targetType: 'PIECE' | 'VIDEO_SCRIPT',
+    targetType: 'PIECE',
     targetId: string
 ): Promise<
     Array<{
@@ -132,7 +141,7 @@ export async function getGenerationPrompts(
 
 /** Lê o prompt de um item específico (null se não existir). */
 export async function getGenerationPrompt(
-    targetType: 'PIECE' | 'VIDEO_SCRIPT',
+    targetType: 'PIECE',
     targetId: string,
     itemKey: string
 ): Promise<string | null> {
@@ -148,7 +157,7 @@ export async function getGenerationPrompt(
  * editado à mão. Devolve false se o prompt não existir (o caller decide).
  */
 export async function updateGenerationPrompt(
-    targetType: 'PIECE' | 'VIDEO_SCRIPT',
+    targetType: 'PIECE',
     targetId: string,
     itemKey: string,
     prompt: string
@@ -162,7 +171,7 @@ export async function updateGenerationPrompt(
 
 /** Copia todos os prompts de um target para outro (nova versão da peça). */
 export async function copyGenerationPrompts(
-    targetType: 'PIECE' | 'VIDEO_SCRIPT',
+    targetType: 'PIECE',
     fromTargetId: string,
     toTargetId: string
 ): Promise<void> {

@@ -220,13 +220,18 @@ export function defaultJobParams(
             return { topic: '' };
         case 'CONTENT_PIECES':
         case 'CONTENT_PROMPT':
-            return { articleId: '', formats: [] };
-        case 'VIDEO_SCRIPT':
-            return { articleId: '', targetChannel: 'TIKTOK', durationSec: 60 };
+            // `channelIds` é uma LISTA: a geração é o produto cartesiano de
+            // canais × tipos. Antes era um canal por tipo, o que impedia pedir o
+            // mesmo tipo em duas plataformas na mesma corrida.
+            return { articleId: '', formats: [], channelIds: [] };
         case 'CONTENT_ITEM':
             return { pieceId: '', itemKey: 'main' };
         case 'ARTICLE_METADATA':
             return { articleId: '', fields: [] };
+        case 'MEDIA_PROMPT':
+            return { targetId: '', targetType: 'PIECE', modalities: [] };
+        case 'MEDIA_ARTIFACT':
+            return { mediaPromptId: '', assetId: '' };
     }
 }
 

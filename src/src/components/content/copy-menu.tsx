@@ -2,8 +2,8 @@ import {
     buildCopy,
     buildPlainCopy,
     measureForPlatform,
+    platformPresetFor,
     PLATFORM_IDS,
-    PLATFORM_PRESETS,
     UNICODE_STYLES,
     writeToClipboard,
     type CopySource,
@@ -206,7 +206,7 @@ export function CopyMenu({
                 }
                 const built = buildCopy(source, {
                     style,
-                    platform: PLATFORM_PRESETS[platform],
+                    platform: platformPresetFor(platform),
                 });
                 await writeToClipboard({
                     text: built.text,
@@ -298,9 +298,9 @@ export function CopyMenu({
                                                             }
                                                             onClick={() =>
                                                                 void copySocial(
-                                                                    PLATFORM_PRESETS[
+                                                                    platformPresetFor(
                                                                         platform
-                                                                    ],
+                                                                    ),
                                                                     option.id
                                                                 )
                                                             }
@@ -333,7 +333,7 @@ export function CopyMenu({
                                                 </Menu.GroupLabel>
                                                 {PLATFORM_IDS.map((id) => {
                                                     const preset =
-                                                        PLATFORM_PRESETS[id];
+                                                        platformPresetFor(id);
                                                     // Cada opção mostra o custo
                                                     // *naquela* plataforma — o
                                                     // texto muda com o preset, e

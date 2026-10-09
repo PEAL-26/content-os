@@ -1,14 +1,30 @@
 import { ChannelIconOnly } from '@/components/channels/channel-badge';
+import { ChannelRulesEditor } from '@/components/channels/channel-rules-editor';
 import { useChannels } from '@/hooks/use-channels';
 import type { ChannelConfig, SocialChannel } from '@/types/database';
 import { ALL_CHANNELS, CHANNEL_LABELS, VOICE_TONES } from '@/types/database';
 import { useCallback, useState } from 'react';
 
+/**
+ * O que o `channelService.updateChannel` aceita.
+ *
+ * `Partial<ChannelConfig>` não serve: `ChannelConfig.rules` é `unknown` (o
+ * valor cru da BD, que pode ser lixo vindo de uma edição manual) e o serviço
+ * quer `Record | null`. O editor de regras só produz objectos, por isso o
+ * alarme do tipo fica no limite do formulário.
+ */
+type ChannelUpdate = Omit<Partial<ChannelConfig>, 'rules'> & {
+    rules?: Record<string, unknown> | null;
+};
+
 interface ChannelFormData {
     handle: string;
     defaultTone: string;
     customTone: string;
+    /** Instruções que a IA recebe em cada geração deste canal. */
     notes: string;
+    /** Overrides das regras de plataforma (`channel_configs.rules`). */
+    rules: Record<string, unknown> | null;
     isActive: boolean;
     isPrimary: boolean;
 }
@@ -23,6 +39,12 @@ function createInitialFormData(channel: ChannelConfig): ChannelFormData {
         defaultTone: isCustomTone ? 'custom' : defaultToneValue,
         customTone: isCustomTone ? defaultToneValue : '',
         notes: channel.notes || '',
+        rules:
+            channel.rules &&
+            typeof channel.rules === 'object' &&
+            !Array.isArray(channel.rules)
+                ? (channel.rules as Record<string, unknown>)
+                : null,
         isActive: channel.isActive,
         isPrimary: channel.isPrimary,
     };
@@ -35,7 +57,7 @@ function ChannelCard({
     isSaving,
 }: {
     channel: ChannelConfig;
-    onUpdate: (id: string, data: Partial<ChannelConfig>) => Promise<boolean>;
+    onUpdate: (id: string, data: ChannelUpdate) => Promise<boolean>;
     onDelete: (id: string) => Promise<boolean>;
     isSaving: boolean;
 }) {
@@ -55,7 +77,7 @@ function ChannelCard({
     };
 
     const handleSave = async () => {
-        const dataToSave: Partial<ChannelConfig> = {
+        const dataToSave: ChannelUpdate = {
             handle: formData.handle || null,
             isActive: formData.isActive,
             isPrimary: formData.isPrimary,
@@ -64,6 +86,8 @@ function ChannelCard({
                 formData.defaultTone === 'custom'
                     ? formData.customTone || null
                     : formData.defaultTone || null,
+            // `null` limpa os overrides e volta aos defaults de código.
+            rules: formData.rules,
         };
 
         const success = await onUpdate(channel.id, dataToSave);
@@ -213,17 +237,36 @@ function ChannelCard({
 
                 <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700">
-                        Notas internas
+                        Instruções para a IA (este canal)
                     </label>
                     <textarea
                         value={formData.notes}
                         onChange={(e) => updateField('notes', e.target.value)}
                         disabled={!formData.isActive}
-                        rows={2}
-                        placeholder="Notas para a equipa sobre este canal..."
+                        rows={3}
+                        placeholder="Ex.: awareness e educação. Vídeos curtos e carrosséis. Não usar siglas."
                         className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-100"
                     />
+                    {/* O campo passou de "notas para a equipa" (que ninguém lia) a
+                        ser lido pela IA em cada geração deste canal — daí o
+                        aviso explícito. */}
+                    <p className="mt-1 text-xs text-amber-700">
+                        Estas instruções são enviadas ao modelo em cada geração
+                        para este canal. Escreve-as como briefing, não como
+                        comentário interno.
+                    </p>
                 </div>
+
+                {/* Regras de plataforma: o que a IA recebe como limites
+                    (caracteres, hashtags, extensão, tom). Vazio = os defaults
+                    da plataforma — que vivem em `lib/platform-rules`, por isso
+                    nunca ficam fossilizados na BD. */}
+                <ChannelRulesEditor
+                    channel={channel.channel}
+                    rules={formData.rules}
+                    onChange={(rules) => updateField('rules', rules)}
+                    disabled={isSaving}
+                />
 
                 <button
                     type="button"
@@ -316,7 +359,7 @@ export function ChannelsPage() {
     const handleUpdate = useCallback(
         async (
             channelId: string,
-            data: Partial<ChannelConfig>
+            data: ChannelUpdate
         ): Promise<boolean> => {
             setSavingIds((prev) => new Set(prev).add(channelId));
             try {

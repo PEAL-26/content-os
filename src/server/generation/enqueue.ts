@@ -4,8 +4,9 @@ import { Prisma } from '../../src/generated/prisma/client.js';
 import type {
     ContentFormat,
     ContentPillar,
-    SocialChannel,
+    MediaModality,
 } from '../../src/types/database.js';
+import { CONTENT_FORMAT_SET } from '../../src/helpers/content-format.js';
 import type {
     ArticleMetadataJobParams,
     ContentItemJobParams,
@@ -13,11 +14,14 @@ import type {
     GenerationJobItem,
     GenerationJobParams,
     GenerationJobTypeValue,
+    MediaArtifactJobParams,
+    MediaPromptJobParams,
     NewArticleJobParams,
     TargetMode,
-    VideoScriptJobParams,
 } from './types.js';
 import { METADATA_FIELDS } from '../../src/lib/ai/article-metadata.js';
+
+
 
 // =============================================================================
 // Enqueue — cria os placeholders + o job (transação) e devolve { jobId, targetId }.
@@ -66,38 +70,18 @@ export interface EnqueueResult {
     targetId: string;
 }
 
-const CONTENT_FORMATS = new Set([
-    'CAROUSEL',
-    'SHORT_VIDEO',
-    'LINKEDIN_POST',
-    'IMAGE',
-    'THREAD',
-    'CTA_POST',
-    'VIDEO_SCRIPT',
-]);
-
-const SOCIAL_CHANNELS = new Set([
-    'LINKEDIN',
-    'INSTAGRAM',
-    'TIKTOK',
-    'YOUTUBE',
-    'TWITTER',
-    'FACEBOOK',
-    'THREADS',
-    'PINTEREST',
-    'TELEGRAM',
-    'WHATSAPP',
-]);
+/** Modalidades de media válidas (os prompts são gerados automaticamente). */
+const MEDIA_MODALITIES = new Set(['image', 'audio', 'video']);
 
 function assertFormat(value: string): asserts value is ContentFormat {
-    if (!CONTENT_FORMATS.has(value)) {
+    if (!CONTENT_FORMAT_SET.has(value)) {
         throw new EnqueueError(`Formato de conteúdo inválido: ${value}`, 'INVALID_FORMAT');
     }
 }
 
-function assertChannel(value: string): asserts value is SocialChannel {
-    if (!SOCIAL_CHANNELS.has(value)) {
-        throw new EnqueueError(`Canal de publicação inválido: ${value}`, 'INVALID_CHANNEL');
+function assertModality(value: string): asserts value is MediaModality {
+    if (!MEDIA_MODALITIES.has(value)) {
+        throw new EnqueueError(`Modalidade inválida: ${value}`, 'INVALID_MODALITY');
     }
 }
 
@@ -291,15 +275,6 @@ export async function enqueueGeneration(input: EnqueueInput): Promise<EnqueueRes
                 }));
                 break;
 
-            case 'VIDEO_SCRIPT':
-                ({ targetId, items } = await enqueueVideoScript(tx, {
-                    workspaceId,
-                    params: params as VideoScriptJobParams,
-                    targets,
-                    now,
-                }));
-                break;
-
             case 'CONTENT_PROMPT':
                 ({ targetId, items } = await enqueueContentPrompts(tx, {
                     workspaceId,
@@ -321,6 +296,22 @@ export async function enqueueGeneration(input: EnqueueInput): Promise<EnqueueRes
                 ({ targetId, items } = await enqueueArticleMetadata(tx, {
                     workspaceId,
                     params: params as ArticleMetadataJobParams,
+                    now,
+                }));
+                break;
+
+            case 'MEDIA_PROMPT':
+                ({ targetId, items } = await enqueueMediaPrompt(tx, {
+                    workspaceId,
+                    params: params as MediaPromptJobParams,
+                    now,
+                }));
+                break;
+
+            case 'MEDIA_ARTIFACT':
+                ({ targetId, items } = await enqueueMediaArtifact(tx, {
+                    workspaceId,
+                    params: params as MediaArtifactJobParams,
                     now,
                 }));
                 break;
@@ -508,6 +499,8 @@ async function createPlaceholderPiece(
             hashtags: [],
             slides: Prisma.DbNull,
             slideCount: null,
+            scenes: Prisma.DbNull,
+            durationSec: null,
             status: args.status,
             aiGenerated: true,
             createdAt: args.now,
@@ -529,6 +522,13 @@ async function enqueueContentPieces(
     const { workspaceId, params, targets, now } = args;
 
     const { pillar } = await resolveContentScope(tx, workspaceId, params);
+
+    // Canais: validados e filtrados por ACTIVO. Um canal inactivo não pode
+    // receber peça nova (Decisão 15) — mas o conteúdo já gerado continua
+    // legível, por isso isto só vale na criação.
+    const channelIds = await resolveActiveChannelIds(tx, workspaceId, params);
+
+    for (const modality of params.modalities ?? []) assertModality(modality);
 
     if (targets?.length) {
         for (const t of targets) {
@@ -554,28 +554,106 @@ async function enqueueContentPieces(
             });
         }
     } else {
+        // PRODUTO CARTESIANO canais × tipos (Decisão 10). Antes era um canal por
+        // tipo, o que impedia pedir POST para LinkedIn e POST para Instagram na
+        // mesma corrida. Sem canais, cai no canal primário (ou no primeiro activo)
+        // para não deixar o utilizador sem geração possível.
+        const effectiveChannels = channelIds.length
+            ? channelIds
+            : await fallbackChannelIds(tx, workspaceId);
+
+        if (effectiveChannels.length === 0) {
+            throw new EnqueueError(
+                'Não tens canais activos. Activa um canal em Definições → Canais para gerar peças.',
+                'NO_ACTIVE_CHANNEL'
+            );
+        }
+
         for (const format of params.formats) {
-            const pieceId = await createPlaceholderPiece(tx, {
-                workspaceId,
-                articleId: params.articleId,
-                productId: params.productId,
-                channelId: params.channelIds?.[format] ?? null,
-                format: format as ContentFormat,
-                pillar,
-                title: 'A gerar peça…',
-                status: 'DRAFT',
-                now,
-            });
-            items.push({
-                format: format as string,
-                targetId: pieceId,
-                status: 'QUEUED',
-                error: null,
-            });
+            assertFormat(format);
+            for (const channelId of effectiveChannels) {
+                const pieceId = await createPlaceholderPiece(tx, {
+                    workspaceId,
+                    articleId: params.articleId,
+                    productId: params.productId,
+                    channelId,
+                    format,
+                    pillar,
+                    title: 'A gerar peça…',
+                    status: 'DRAFT',
+                    now,
+                });
+                items.push({
+                    // O par (tipo, canal) vive na chave do item, porque agora há
+                    // várias peças do mesmo tipo no mesmo job.
+                    format: itemKey(format as ContentFormat, channelId),
+                    targetId: pieceId,
+                    status: 'QUEUED',
+                    error: null,
+                });
+            }
         }
     }
 
     return { targetId: params.articleId, items };
+}
+
+/**
+ * Chave do item de um CONTENT_PIECES: `<TIPO>@<canalId>`.
+ *
+ * Antes o `format` do item era só o tipo, o que ainda funcionava porque havia
+ * uma peça por tipo. Com o produto cartesiano, dois items podem ter o mesmo
+ * tipo em canais diferentes — e `setItemStatus`/`updateItemsForTarget`
+ * procuram por `targetId`, por isso a chave é informativa. Ainda assim fica
+ * explícita: o painel mostra "POST → Instagram" sem ter de ir buscar a peça.
+ */
+export function itemKey(format: ContentFormat, channelId: string): string {
+    return `${format}@${channelId}`;
+}
+
+/** Separa a chave do item em (tipo, canalId). */
+export function parseItemKey(
+    key: string
+): { format: ContentFormat | null; channelId: string | null } {
+    const at = key.lastIndexOf('@');
+    if (at <= 0) {
+        return {
+            format: CONTENT_FORMAT_SET.has(key) ? (key as ContentFormat) : null,
+            channelId: null,
+        };
+    }
+    const format = key.slice(0, at);
+    const channelId = key.slice(at + 1);
+    return {
+        format: CONTENT_FORMAT_SET.has(format) ? (format as ContentFormat) : null,
+        channelId,
+    };
+}
+
+/** Canais pedidos que existem no workspace e estão ACTIVOS. */
+async function resolveActiveChannelIds(
+    tx: Tx,
+    workspaceId: string,
+    params: ContentPiecesJobParams
+): Promise<string[]> {
+    const requested = params.channelIds ?? [];
+    if (requested.length === 0) return [];
+
+    const rows = await tx.channelConfig.findMany({
+        where: { id: { in: requested }, workspaceId, isActive: true },
+        select: { id: true },
+    });
+    return rows.map((r) => r.id);
+}
+
+/** Canal primário, ou o primeiro activo — para nunca ficar sem geração. */
+async function fallbackChannelIds(tx: Tx, workspaceId: string): Promise<string[]> {
+    const row = await tx.channelConfig.findFirst({
+        where: { workspaceId, isActive: true },
+        orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+        select: { id: true },
+    });
+    return row ? [row.id] : [];
 }
 
 /**
@@ -613,6 +691,8 @@ async function clonePieceVersion(
             hashtags: [],
             slides: Prisma.DbNull,
             slideCount: null,
+            scenes: Prisma.DbNull,
+            durationSec: source.durationSec,
             // A nova peça nasce só com o prompt (copiado do original). Se a
             // geração falhar, fica em PROMPT_READY — escondida em /content e
             // fora das contagens — em vez de um DRAFT vazio aXiv.
@@ -666,6 +746,8 @@ async function enqueueContentPrompts(
     // o que é criado: uma peça em PROMPT_READY em vez de um DRAFT.
     const { pillar } = await resolveContentScope(tx, workspaceId, params);
 
+    const channelIds = await resolveActiveChannelIds(tx, workspaceId, params);
+
     const items: GenerationJobItem[] = [];
 
     if (targets?.length) {
@@ -675,20 +757,34 @@ async function enqueueContentPrompts(
             items.push({ format: t.format, targetId: t.targetId, status: 'QUEUED', error: null });
         }
     } else {
+        const effectiveChannels = channelIds.length
+            ? channelIds
+            : await fallbackChannelIds(tx, workspaceId);
+
+        // Mesmo produto cartesiano do CONTENT_PIECES — o prompt tem de saber
+        // para que canal está a ser escrito, senão nasce um prompt que não
+        // respeita as regras da plataforma (é o bug outra vez, um passo antes).
         for (const format of params.formats) {
             assertFormat(format);
-            const pieceId = await createPlaceholderPiece(tx, {
-                workspaceId,
-                articleId: params.articleId,
-                productId: params.productId,
-                channelId: params.channelIds?.[format] ?? null,
-                format: format as ContentFormat,
-                pillar,
-                title: 'A escrever prompt…',
-                status: 'PROMPT_READY',
-                now,
-            });
-            items.push({ format, targetId: pieceId, status: 'QUEUED', error: null });
+            for (const channelId of effectiveChannels) {
+                const pieceId = await createPlaceholderPiece(tx, {
+                    workspaceId,
+                    articleId: params.articleId,
+                    productId: params.productId,
+                    channelId,
+                    format: format as ContentFormat,
+                    pillar,
+                    title: 'A escrever prompt…',
+                    status: 'PROMPT_READY',
+                    now,
+                });
+                items.push({
+                    format: itemKey(format as ContentFormat, channelId),
+                    targetId: pieceId,
+                    status: 'QUEUED',
+                    error: null,
+                });
+            }
         }
     }
 
@@ -776,88 +872,166 @@ async function enqueueArticleMetadata(
         return true;
     });
 
-    if (fields.length === 0) {
-        throw new EnqueueError(
-            'Indica pelo menos um metadado a gerar.',
-            'NO_METADATA_FIELDS'
-        );
-    }
-
     return {
         targetId: article.id,
         items: fields.map((field) => ({
             format: field,
             targetId: article.id,
-            status: 'QUEUED' as const,
+            status: 'QUEUED',
             error: null,
         })),
     };
 }
 
-async function enqueueVideoScript(
+// -----------------------------------------------------------------------------
+// MEDIA_PROMPT — escreve os prompts portáteis de media.
+//
+// Não cria placeholder: o ARTIGO ou a PEÇA já existe (é o próprio job de conteúdo
+// que disparou este). Só valida o âmbito e monta um `item` por modalidade — o
+// `runMediaPrompt` emparelha cada uma com os assuntos (slides/cenas/marcadores)
+// quando corre.
+// -----------------------------------------------------------------------------
+
+async function enqueueMediaPrompt(
     tx: Tx,
     args: {
         workspaceId: string;
-        params: VideoScriptJobParams;
-        targets?: EnqueueTargetRequest[];
+        params: MediaPromptJobParams;
         now: Date;
     }
 ): Promise<{ targetId: string; items: GenerationJobItem[] }> {
-    const { workspaceId, params, targets, now } = args;
+    const { workspaceId, params } = args;
 
-    assertChannel(params.targetChannel);
-    if (!Number.isInteger(params.durationSec) || params.durationSec < 15 || params.durationSec > 600) {
-        throw new EnqueueError(
-            'Duração do roteiro inválida (15–600 segundos).',
-            'INVALID_DURATION'
-        );
-    }
-
-    const article = await tx.article.findUnique({ where: { id: params.articleId } });
-    if (!article || article.workspaceId !== workspaceId) {
-        throw new EnqueueError('Artigo associado não encontrado.', 'ARTICLE_NOT_FOUND');
-    }
-
-    let scriptId = targets?.[0]?.targetId;
-
-    if (scriptId) {
-        const script = await tx.videoScript.findFirst({
-            where: { id: scriptId, workspaceId, articleId: params.articleId },
+    if (params.targetType === 'ARTICLE') {
+        const article = await tx.article.findFirst({
+            where: { id: params.targetId, workspaceId },
+            select: { id: true },
         });
-        if (!script) {
-            throw new EnqueueError('Roteiro de destino não encontrado.', 'TARGET_NOT_FOUND');
+        if (!article) {
+            throw new EnqueueError(
+                'Artigo não encontrado neste workspace.',
+                'ARTICLE_NOT_FOUND'
+            );
         }
-    } else {
-        scriptId = randomUUID();
-        await tx.videoScript.create({
-            data: {
-                id: scriptId,
-                articleId: params.articleId,
-                workspaceId,
-                title: 'A gerar roteiro…',
-                hook: '',
-                problem: null,
-                solution: null,
-                cta: '',
-                fullScript: '',
-                durationSec: params.durationSec,
-                targetChannel: params.targetChannel as SocialChannel,
-                onScreenText: null,
-                bRoll: null,
-                status: 'DRAFT',
-                aiGenerated: true,
-                createdAt: now,
-                updatedAt: now,
-            },
-        });
+        return {
+            targetId: article.id,
+            items: params.modalities.map((modality) => ({
+                format: modality,
+                targetId: article.id,
+                status: 'QUEUED',
+                error: null,
+            })),
+        };
+    }
+
+    const piece = await tx.contentPiece.findFirst({
+        where: { id: params.targetId, workspaceId },
+        select: { id: true },
+    });
+    if (!piece) {
+        throw new EnqueueError('Peça não encontrada.', 'TARGET_NOT_FOUND');
     }
 
     return {
-        targetId: scriptId,
+        targetId: piece.id,
+        items: params.modalities.map((modality) => ({
+            format: modality,
+            targetId: piece.id,
+            status: 'QUEUED',
+            error: null,
+        })),
+    };
+}
+
+// -----------------------------------------------------------------------------
+// MEDIA_ARTIFACT — gera o FICHEIRO a partir de um prompt guardado.
+//
+// Cria a linha em `content_assets` em PENDING ANTES de o job correr, e é isso
+// que dá ao dispatcher um sítio onde escrever o progresso: um duplo clique
+// encontra a linha e não enfileira dois jobs, e o painel mostra "a gerar" durante
+// o polling do `veo-3`, que pode demorar minutos.
+// -----------------------------------------------------------------------------
+
+async function enqueueMediaArtifact(
+    tx: Tx,
+    args: {
+        workspaceId: string;
+        params: MediaArtifactJobParams;
+        now: Date;
+    }
+): Promise<{ targetId: string; items: GenerationJobItem[] }> {
+    const { workspaceId, params } = args;
+
+    const prompt = await tx.contentMediaPrompt.findFirst({
+        where: { id: params.mediaPromptId, workspaceId },
+    });
+    if (!prompt) {
+        throw new EnqueueError('Prompt de media não encontrado.', 'PROMPT_NOT_FOUND');
+    }
+
+    const asset = await tx.contentAsset.findFirst({
+        where: { id: params.assetId, workspaceId },
+        select: { id: true, status: true },
+    });
+
+    // Já está a gerar ou pronto: um duplo clique no botão não deve pagar duas
+    // chamadas. O job termina aqui como concluído.
+    if (asset && asset.status !== 'PENDING' && asset.status !== 'FAILED') {
+        return {
+            targetId: prompt.id,
+            items: [
+                {
+                    format: prompt.modality,
+                    targetId: prompt.id,
+                    status: 'COMPLETED',
+                    error: null,
+                },
+            ],
+        };
+    }
+
+    // A linha em PENDING é criada AQUI, dentro da transacção do enqueue — e não
+    // pelo cliente. Criá-la no browser deixaria uma janela entre o clique e o
+    // insert em que dois cliques enfileiravam dois jobs (e duas chamadas pagas),
+    // e um `MEDIA_ARTIFACT` órfão ficaria sem sítio onde mostrar "a gerar".
+    const assetId = params.assetId || randomUUID();
+    await tx.contentAsset.upsert({
+        where: { id: assetId },
+        create: {
+            id: assetId,
+            workspaceId,
+            targetType: prompt.targetType,
+            targetId: prompt.targetId,
+            // `url` é NOT NULL no schema, mas uma linha em PENDING ainda não
+            // tem ficheiro — a string vazia é o marcador temporário e o job
+            // substitui-a pelo URL público assim que o upload termina.
+            url: '',
+            name: null,
+            mimeType: null,
+            source: 'GENERATED',
+            status: 'PENDING',
+            error: null,
+            itemKey: prompt.itemKey,
+            mediaPromptId: prompt.id,
+            createdAt: args.now,
+        },
+        // Uma linha PENDING/FAILED existente é reutilizada (retry) — reescreve
+        // o estado sem perder o `mediaPromptId` nem o `itemKey`.
+        update: {
+            source: 'GENERATED',
+            status: 'PENDING',
+            error: null,
+            itemKey: prompt.itemKey,
+            mediaPromptId: prompt.id,
+        },
+    });
+
+    return {
+        targetId: prompt.id,
         items: [
             {
-                format: 'VIDEO_SCRIPT',
-                targetId: scriptId,
+                format: prompt.modality,
+                targetId: prompt.id,
                 status: 'QUEUED',
                 error: null,
             },

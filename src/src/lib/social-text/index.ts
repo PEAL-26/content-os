@@ -22,11 +22,15 @@ export {
 
 export {
     BRAILLE_BLANK,
+    COPY_CHANNELS,
     PLATFORM_IDS,
-    PLATFORM_PRESETS,
+    allPlatformPresets,
+    aspectRatioFor,
     countUtf16,
+    defaultPlatformPreset,
     measureForPlatform,
     normaliseHashtag,
+    platformPresetFor,
     type CharCountStatus,
     type PlatformPreset,
     type SocialPlatformId,
@@ -49,7 +53,6 @@ export {
 
 export {
     suggestPlatformForPiece,
-    suggestPlatformForScript,
 } from './suggest-platform';
 
 export {

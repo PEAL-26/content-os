@@ -1,5 +1,6 @@
 import type { GenerateArticleParams } from './types.js';
 import { generateSlug } from '../../helpers/slug.js';
+import { ARTICLE_ILLUSTRATION_INSTRUCTIONS } from './illustrations.js';
 
 // =============================================================================
 // Prompt do artigo — dividido em system (função + regras + formato) e user
@@ -27,7 +28,7 @@ export function buildArticleSystemPrompt(
     prompt += `  "title": "Título SEO atrativo (max 60 chars)",\n`;
     prompt += `  "slug": "url-amigavel-separada-por-hifens",\n`;
     prompt += `  "summary": "Resumo atrativo (max 150 chars)",\n`;
-    prompt += `  "body": "Conteúdo em Markdown estruturado com H2, H3, listas, blockquotes. Mínimo 800 palavras.",\n`;
+    prompt += `  "body": "Conteúdo em Markdown estruturado com H2, H3, listas, blockquotes. Mínimo 800 palavras. Inclui linhas [IMAGEM SUGERIDA — ...] onde uma ilustração ajude (ver ## Ilustrações).",\n`;
     prompt += `  "seoTitle": "Título SEO alternativo (max 60 chars)",\n`;
     prompt += `  "seoDescription": "Descrição meta para SEO (max 160 chars)",\n`;
     prompt += `  "keywords": ["keyword1", "keyword2", "keyword3", "keyword4", "keyword5"],\n`;
@@ -41,6 +42,12 @@ export function buildArticleSystemPrompt(
     prompt += `- Estrutura o body com pelo menos 3 secções H2\n`;
     prompt += `- O slug deve ser URL-friendly em ${languageLabel}\n`;
     prompt += `- Keywords devem ser termos de pesquisa relevantes\n`;
+
+    // Os marcadores viram prompts de media e artefactos gerados por IA.
+    // Ver `illustrations.ts` — o formato `[IMAGEM SUGERIDA — ...]` é o que o
+    // gerador consome, por isso tem de ser pedido aqui exactamente assim.
+    prompt += `\n## Ilustrações\n`;
+    prompt += `${ARTICLE_ILLUSTRATION_INSTRUCTIONS}\n`;
 
     return prompt;
 }

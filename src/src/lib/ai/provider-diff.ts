@@ -15,6 +15,7 @@
  */
 
 import { normalizeConfig } from '@/lib/ai/resolver';
+import { normalizeModalities } from '@/lib/ai/model-modalities';
 import type { AIProviderConfigOptions } from '@/lib/ai/types';
 
 export interface ModelDraftRow {
@@ -22,6 +23,20 @@ export interface ModelDraftRow {
     modelCode: string;
     config?: AIProviderConfigOptions | null;
     isActive: boolean;
+    /**
+     * Modalidades de saída do modelo (`['text']`, `['image']`, …).
+     *
+     * Entra no diff para que o `syncModels` NÃO as perca: sem isto, um sync
+     * reescreveria a coluna a `[]` e o modelo deixaria de ser candidato para
+     * gerar artefactos — sem qualquer erro visível.
+     */
+    modalities?: string[];
+    /**
+     * O que o provider declarou em `/models` (ex.: `output_modalities` do
+     * OpenRouter). Só é usado no INSERT, como fonte intermédia antes do
+     * catálogo curado — nunca sobrepõe o que o utilizador escolheu.
+     */
+    detectedModalities?: string[] | null;
 }
 
 export interface HeaderDraftRow {
@@ -36,6 +51,7 @@ export interface StoredModel {
     displayName: string;
     config?: AIProviderConfigOptions | null;
     isActive: boolean;
+    modalities?: string[];
 }
 
 export interface StoredHeader {
@@ -51,6 +67,12 @@ export interface ModelDiff {
         displayName: string;
         config: AIProviderConfigOptions | null;
         isActive: boolean;
+        /**
+         * Modalidades resolvidas (normalizadas), prontas a gravar. O `diff` não
+         * decide o que vale — só preserva o que mudou, para o `syncModels`
+         * resolver por precedência (utilizador → provider → catálogo).
+         */
+        modalities?: string[];
     }[];
     /** Ids a apagar. */
     remove: string[];
@@ -97,10 +119,17 @@ export function diffModels(
             JSON.stringify(normalizeConfig(prev.config)) !==
             JSON.stringify(normalizeConfig(model.config));
 
+        // As modalidades são parte da identidade funcional do modelo: sem
+        // comparação, um sync podia limpá-las sem o utilizador pedir nada.
+        const modalitiesChanged =
+            JSON.stringify(normalizeModalities(prev.modalities ?? [])) !==
+            JSON.stringify(normalizeModalities(model.modalities ?? []));
+
         if (
             prev.displayName !== model.displayName ||
             prev.isActive !== model.isActive ||
-            configChanged
+            configChanged ||
+            modalitiesChanged
         ) {
             update.push({
                 id: prev.id,
@@ -111,6 +140,7 @@ export function diffModels(
                 // que ninguém pediu.
                 config: configChanged ? (model.config ?? null) : (prev.config ?? null),
                 isActive: model.isActive,
+                modalities: normalizeModalities(model.modalities ?? []),
             });
         }
     }

@@ -4,7 +4,7 @@ import { contentPieceService } from '@/services/content-piece.service';
 import { useWorkspaceStore } from '@/stores/workspace-store';
 import type { ContentPieceWithRelations } from '@/types/database';
 import { formatWeekRange } from '@/lib/date-utils';
-import { CONTENT_FORMAT_EMOJIS } from '@/helpers/content-format';
+import { getFormatEmoji } from '@/helpers/content-format';
 import {
     Calendar,
     CheckCircle,
@@ -72,7 +72,7 @@ export function PlannerSidebar({
 
     const isOverTarget = stats.totalItems > targetPostsPerWeek;
 
-    const formatIcons = CONTENT_FORMAT_EMOJIS;
+    const formatIcons = getFormatEmoji;
 
     return (
         <aside className="h-full w-80 shrink-0 space-y-4 overflow-y-auto rounded-lg bg-white p-4 shadow-sm">
@@ -214,7 +214,7 @@ export function PlannerSidebar({
                                         className="flex items-center gap-2 rounded p-2 hover:bg-gray-50"
                                     >
                                         <span className="text-base">
-                                            {formatIcons[piece.format] || '📄'}
+                                            {formatIcons(piece.format)}
                                         </span>
                                         <div className="min-w-0 flex-1">
                                             <p className="truncate text-xs font-medium text-gray-900">

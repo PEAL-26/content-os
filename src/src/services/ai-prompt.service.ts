@@ -18,7 +18,7 @@ function getCurrentUserId(): string | null {
 
 export interface ResolveSystemPromptOptions {
     workspaceId: string;
-    /** 'article' | 'CAROUSEL' | 'VIDEO_SCRIPT' | ... */
+    /** 'article' | 'POST' | 'CAROUSEL' | 'media_image' | ... */
     contentType: string;
     /** Prompt padrão (em código) usado quando não há override. */
     buildDefault: () => string;

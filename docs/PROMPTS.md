@@ -5,6 +5,31 @@ Stack: **React + Vite + Supabase + Prisma + Tailwind CSS + Zustand**
 Cada prompt inclui uma fase de análise obrigatória antes de qualquer implementação.
 Segue a ordem das fases para evitar dependências em falta.
 
+> ## ⚠️ Documento histórico
+>
+> Este ficheiro é o **registo de como a aplicação foi construída**, prompt a
+> prompt. Os prompts ficam escritos como foram executados — não se reescrevem
+> depois. Portanto as enumerações antigas aqui registradas **já não descrevem o
+> código actual**.
+>
+> Para saber o que existe hoje, ler antes:
+>
+> | Assunto | Onde está a verdade |
+> | --- | --- |
+> | Tipos de conteúdo genéricos | `src/helpers/content-format.ts` |
+> | Regras de plataforma e capacidades por canal | `src/lib/platform-rules/` |
+> | Prompts de conteúdo | `src/lib/ai/content-prompts.ts` |
+> | Prompts de media (imagem/áudio/vídeo) | `src/lib/ai/media-prompts.ts` |
+> | Geração e fila de media | `server/generation/media-jobs.ts`, `server/media/` |
+> | Modalidades dos modelos | `src/lib/ai/model-modalities.ts` |
+>
+> Em particular, os nomes `LINKEDIN_POST`, `INSTAGRAM_POST`, `THREAD`,
+> `CTA_POST` e `VIDEO_SCRIPT` que aparecem nos prompts antigos **não existem
+> mais**: foram substituídos por 5 tipos genéricos (`POST`, `CAROUSEL`, `IMAGE`,
+> `SHORT_VIDEO`, `VIDEO`) mais o canal, que passou a ser uma dimensão real da
+> geração. Onde um prompt antigo falar de "um post de LinkedIn", o equivalente
+> actual é "um `POST` para o canal LinkedIn".
+
 ---
 
 ## FASE 1 — Setup & Autenticação
@@ -188,7 +213,10 @@ verifica se existe página de settings com tabs ou navegação lateral, se o
 se existem ícones para redes sociais (Lucide ou outro), e os canais criados
 pelo seed no Supabase (LinkedIn, Instagram, TikTok, YouTube). Confirma no
 schema os campos de `ChannelConfig` (channel, isActive, handle, isPrimary,
-defaultTone, notes). Só depois de teres esse contexto completo, implementa
+defaultTone, notes).
+**[Actual]** `ChannelConfig` tem também `rules Json?` — os overrides das regras
+de plataforma sobre os defaults de `src/lib/platform-rules/`.
+Só depois de teres esse contexto completo, implementa
 o seguinte:
 
 Implementa a configuração dos canais de distribuição. Cria:
@@ -197,7 +225,11 @@ Implementa a configuração dos canais de distribuição. Cria:
   Cada card tem: ícone do canal, toggle activo/inactivo, campo para handle/URL
   do perfil, toggle "canal principal" (só um pode ser principal — LinkedIn por
   defeito), campo de tom padrão para esse canal, e notas internas. Canal
-  inactivo fica com card em estado desabilitado (opacity reduzida)
+  inactivo fica com card em estado desabilitado (opacity reduzida).
+  **[Actual]** O campo "notas internas" passou a "Instruções para a IA" e é
+  lido em cada geração do canal; o card ganhou também o editor de regras de
+  plataforma (`channel-rules-editor.tsx`), que grava os overrides em
+  `channel_configs.rules` sobre os defaults de `src/lib/platform-rules/`.
 - `src/hooks/use-channels.ts` — hook com `getChannels()`, `updateChannel()`,
   `getActiveChannels()`. O método `getActiveChannels()` será usado no
   planeador e gerador de conteúdo
@@ -338,11 +370,17 @@ se existe alguma página de content pieces em `src/pages/content/`, e se
 o `ChannelBadge` já está implementado. Confirma no schema os campos do
 modelo `ContentPiece` incluindo o campo `slides` (Json) e o enum
 `ContentFormat` (CAROUSEL, SHORT_VIDEO, LINKEDIN_POST, INSTAGRAM_POST,
-THREAD, CTA_POST). Só depois de teres esse contexto completo, implementa
+THREAD, CTA_POST).
+**[Actual]** `ContentFormat` passou a ter 5 valores genéricos — `POST`,
+`CAROUSEL`, `IMAGE`, `SHORT_VIDEO`, `VIDEO` — e o canal deixou de estar no
+formato: uma peça aponta para `channelId` e o canal é uma dimensão da
+geração (o produto cartesiano é canais × tipos). `ContentPiece` ganhou também
+`scenes Json?` e `durationSec Int?`.
+Só depois de teres esse contexto completo, implementa
 o seguinte:
 
 Implementa a geração automática de peças de conteúdo a partir de um artigo.
-Cria:
+Cira:
 
 - `src/lib/ai.ts` (expandir) — adicionar a função `generateContentPieces({
   article, formats, workspace })` que, dado um artigo, gera múltiplas peças
@@ -352,10 +390,17 @@ Cria:
   de 150-300 palavras com gancho forte, INSTAGRAM_POST gera post curto com
   hashtags, SHORT_VIDEO gera apenas hook + CTA (o roteiro completo é gerado
   separadamente), CTA_POST gera post directo com link para landing do produto
+  **[Actual]** os templates são 5 e livres de plataforma (o bloco do canal é
+  injectado à parte, o que é o que corrigiu "pedi LinkedIn + Instagram e saiu
+  conteúdo de LinkedIn"); todos devolvem o mesmo envelope
+  `{title, hookText, body, ctaText, hashtags, slides?, scenes?, durationSec?}`
 - `src/components/content/content-generator-panel.tsx` — painel que aparece
   dentro do `ArticleDetail` com checkboxes para seleccionar quais os formatos
   a gerar, selector de canal por formato, e botão "Gerar conteúdo
   seleccionado". Mostra progresso individual por peça durante a geração
+  **[Actual]** o selector de canal passou a ser um *picker* só de canais
+  activos, com as capacidades de cada canal a ordenar os tipos e a avisar
+  (nunca bloquear) quando o tipo não é nativo naquele canal
 - `src/hooks/use-content-pieces.ts` — hook com `getContentPieces(articleId)`,
   `generatePieces()`, `updatePiece()`, `approvePiece()`, `deletePiece()`
 
@@ -438,6 +483,12 @@ Implementa o gerador de roteiros de vídeo curto (TikTok/Reels). Cria:
 O tempo de leitura estimado deve ser calculado automaticamente:
 150 palavras/minuto (ritmo de fala). Mostrar aviso se o roteiro gerado
 exceder a duração seleccionada.
+
+**[Actual — prompt superado]** A tabela `video_scripts`, a página, o card, o
+hook e o gerador próprio foram removidos. O roteiro passou a ser o tipo
+genérico `VIDEO` dentro de `content_pieces` (com `scenes Json` e
+`durationSec Int?`), e o áudio/vídeo de verdade é gerado pela pipeline de
+media (`src/lib/ai/media-prompts.ts` + `server/media/`).
 ```
 
 ---
@@ -1154,6 +1205,8 @@ componentes usarem, sem exporem directamente o store:
   retorna o `jobId`
 - `generateContentPieces(params)` — idem para peças de conteúdo
 - `generateVideoScript(params)` — idem para roteiro de vídeo
+  **[Actual]** não existe: `VIDEO` é um `ContentFormat` como outro qualquer,
+  e a geração de media entra por `MEDIA_PROMPT` / `MEDIA_ARTIFACT`.
 - `jobsInProgress` — array de jobs com status `'pending'` ou `'running'`
 - `completedJobs` — array de jobs com status `'completed'`
 - `failedJobs` — array de jobs com status `'failed'`

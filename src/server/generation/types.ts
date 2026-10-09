@@ -14,17 +14,15 @@ export type {
     GenerationJobStatusValue,
     GenerationJobTypeValue,
     GenerationPreferred,
+    MediaArtifactJobParams,
+    MediaPromptJobParams,
     MetadataField,
     NewArticleJobParams,
     TargetMode,
-    VideoScriptJobParams,
 } from '../../src/lib/ai/generation-job-types.js';
-import type { GenerationPreferred } from '../../src/lib/ai/generation-job-types.js';
+import type { JobRow } from './job-store.js';
 
-/** Params já normalizados para a execução (cargas resolvidas da BD). */
-export interface LoadedGenerationContext {
-    workspaceId: string;
-    userId?: string | null;
-    /** Default do workspace (row id + model code) para `preferred`. */
-    defaultPreferred: GenerationPreferred;
-}
+// O contexto vive em `context.ts` (que tem as funções de mapeamento) — este
+// ficheiro só o re-exporta, para não criar dois sites a dizer a mesma coisa.
+export type { LoadedGenerationContext } from './context.js';
+export type { JobRow };

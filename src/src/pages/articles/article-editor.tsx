@@ -1,5 +1,6 @@
 import type { ArticleMetadataAIState } from '@/components/articles/article-metadata-form';
 import { ArticleMetadataForm } from '@/components/articles/article-metadata-form';
+import { IllustrationPanel } from '@/components/articles/illustration-panel';
 import type { AIProviderSelection } from '@/components/ai/ai-provider-picker';
 import { ArticleStatusBadge } from '@/components/articles/article-status-badge';
 import { ArtefactsPanel } from '@/components/content/artefacts-panel';
@@ -15,7 +16,10 @@ import {
     METADATA_FIELD_LABELS,
     missingMetadataFields,
 } from '@/lib/ai/article-metadata';
-import type { MetadataField } from '@/lib/ai/generation-job-types';
+import type {
+    GenerationJobParams,
+    MetadataField,
+} from '@/lib/ai/generation-job-types';
 import { usePillars } from '@/hooks/use-pillars';
 import { useProducts } from '@/hooks/use-products';
 import { cn } from '@/lib/utils';
@@ -71,6 +75,10 @@ export function ArticleEditor() {
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const [showMetadata, setShowMetadata] = useState(true);
     const [reloadTick, setReloadTick] = useState(0);
+    // Relê os artefactos/ilustrações depois de uma geração ou upload. Sepado
+    // do `reloadTick` (que recarrega o artigo) porque mexer aqui não deve
+    // ressuscitar o documento em edição.
+    const [assetsReloadKey, setAssetsReloadKey] = useState(0);
 
     // Geração assíncrona em segundo plano (NEW_ARTICLE deste artigo).
     const rememberJob = useGenerationJobStore((s) => s.rememberJob);
@@ -252,7 +260,10 @@ export function ArticleEditor() {
             const result = await generationJobService.enqueue({
                 workspaceId: job.workspaceId,
                 jobType: 'NEW_ARTICLE',
-                params: job.params ?? defaultJobParams(job.jobType),
+                // O `params` vem de JSON colunado; o default cobre um job sem snapshot (o
+            // enqueue popa-o). O cast é seguro porque o retry reenvia o mesmo
+            // jobType que o job original tinha.
+            params: (job.params ?? defaultJobParams(job.jobType)) as GenerationJobParams,
                 targets:
                     job.items?.map((item) => ({
                         format: item.format,
@@ -670,7 +681,11 @@ export function ArticleEditor() {
                 </div>
             )}
 
-            {genJob.job && genJob.job.status !== 'COMPLETED' && (
+            {/* Um job EXPIRED foi invalidado por uma migração (os seus `params` já não
+            descrevem nada que se possa gerar). Repetir não o resolveria. */}
+            {genJob.job &&
+                genJob.job.status !== 'COMPLETED' &&
+                genJob.job.status !== 'EXPIRED' && (
                 <GenerationStatusBanner
                     status={genJob.job.status}
                     error={genJob.job.error}
@@ -819,6 +834,9 @@ export function ArticleEditor() {
                                     pillar={pillars.find(
                                         (p) => p.id === state.pillarId
                                     )}
+                                    onAssetsChanged={() =>
+                                        setAssetsReloadKey((k) => k + 1)
+                                    }
                                 />
                             </TabsContent>
 
@@ -828,9 +846,20 @@ export function ArticleEditor() {
                                 value="assets"
                                 className="flex-1 space-y-5 overflow-y-auto p-4"
                             >
+                                {/* Ilustrações: os marcadores
+                                    `[IMAGEM SUGERIDA — …]` do corpo, cada um
+                                    com o seu prompt portátil e a imagem
+                                    gerada. */}
+                                <IllustrationPanel
+                                    workspaceId={workspaceId}
+                                    articleId={article.id}
+                                    body={state.body}
+                                    reloadKey={assetsReloadKey}
+                                />
                                 <ArtefactsPanel
                                     targetType="ARTICLE"
                                     targetId={article.id}
+                                    reloadKey={assetsReloadKey}
                                 />
                                 <PublicationsPanel
                                     targetType="ARTICLE"

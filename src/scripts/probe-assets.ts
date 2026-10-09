@@ -3,8 +3,8 @@
  *
  * Verifica, contra a Supabase real:
  *   1. Os helpers puros (extensão, MIME, tipo, URL segura, validação de
- *      ficheiro), a normalização das listas TEXT de `video_scripts`
- *      (`toStringList`) e os limites de carregamento. Nenhuma verificação
+ *      ficheiro), a normalização das listas TEXT (`toStringList`, em
+ *      `helpers/coerce`) e os limites de carregamento. Nenhuma verificação
  *      desta secção toca na rede: `createFromFiles` só chega a
  *      `uploadAssetFiles` com ficheiros que a whitelist recusa, e o `throw`
  *      acontece antes de `supabase.storage`.
@@ -15,7 +15,7 @@
  *   4. CRUD completo (criar → ler → apagar) de artefactos descartáveis, mais
  *      o teste NEGATIVO de âmbito por workspace.
  *   5. Que as SEIS colunas legacy já não existem (`assetUrl` E `assetName` em
- *      `articles`, `content_pieces` e `video_scripts`).
+ *      `articles` e `content_pieces`).
  *
  * O passo 4 cria dados com um targetId fictício, que não corresponde a nenhum
  * artigo/peça/roteiro real, e apaga exactamente as linhas que criou. Não toca
@@ -365,7 +365,7 @@ tally(
     validateAssetFile(hugeProbe).reason
 );
 
-// --- As listas TEXT de video_scripts -----------------------------------------
+// --- As listas TEXT (toStringList) ------------------------------------------
 //
 // `onScreenText`/`bRoll` são colunas TEXT sem default, o serviço declarava
 // `string[]` e a página de detalhe fazia `.length`/`.map` em cima: uma linha com
@@ -375,9 +375,7 @@ tally(
 // e tem de sobreviver a TODAS as formas históricas — daí os checks por forma,
 // e não só ao caminho feliz.
 
-const { toStringList } = await import(
-    '../src/services/video-script.service'
-);
+const { toStringList } = await import('../src/helpers/coerce');
 
 tally(
     'lista: null (a coluna NULL que rebentava a página)',
@@ -593,7 +591,7 @@ if (rowsError) {
         const key = row.targetType ?? '(null)';
         byType.set(key, (byType.get(key) ?? 0) + 1);
     }
-    for (const targetType of ['ARTICLE', 'PIECE', 'VIDEO_SCRIPT']) {
+    for (const targetType of ['ARTICLE', 'PIECE']) {
         note(`${targetType}: ${byType.get(targetType) ?? 0} artefacto(s)`);
     }
     note(`${rows.length} linha(s) no total`);
@@ -861,8 +859,6 @@ const DROPPED_COLUMNS = [
     ['articles', 'assetName'],
     ['content_pieces', 'assetUrl'],
     ['content_pieces', 'assetName'],
-    ['video_scripts', 'assetUrl'],
-    ['video_scripts', 'assetName'],
 ] as const;
 
 for (const [table, column] of DROPPED_COLUMNS) {

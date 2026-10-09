@@ -6,6 +6,7 @@ export {
     type UserInfo,
 } from './user';
 export {
-    CONTENT_FORMAT_EMOJIS,
+    ALL_CONTENT_FORMATS,
     getFormatEmoji,
+    getFormatLabel,
 } from './content-format';

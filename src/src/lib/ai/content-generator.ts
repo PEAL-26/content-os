@@ -10,7 +10,7 @@ import pLimit from 'p-limit';
 import {
     buildContext,
     buildPortablePromptsForPiece,
-    buildSystemPromptForFormat,
+    buildSystemPromptForType,
     parseGeneratedContent,
     type ParsedGeneratedPiece,
 } from './content-prompts';
@@ -69,7 +69,7 @@ async function generateSinglePiece(
     const systemPrompt = await resolveSystemPrompt({
         workspaceId: workspace.id,
         contentType: format,
-        buildDefault: () => buildSystemPromptForFormat(format, params),
+        buildDefault: () => buildSystemPromptForType(format, params),
     });
     const fullSystem = additionalInstructions?.trim()
         ? `${systemPrompt}\n\n## Instruções Adicionais\n${additionalInstructions.trim()}`

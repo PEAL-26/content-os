@@ -12,7 +12,7 @@ import { useEffect, useRef } from 'react';
  */
 
 interface ContentPromptsPanelProps {
-    targetType: 'PIECE' | 'VIDEO_SCRIPT';
+    targetType: 'PIECE';
     targetId: string;
     /** Peça em foco — habilita "Gerar peça" / "Gerar este slide". */
     piece?: {
@@ -20,14 +20,16 @@ interface ContentPromptsPanelProps {
         format: string;
         body: string;
         slideCount?: number | null;
+        /** O canal decide as regras que o prompt guardado tem de respeitar. */
+        channelId: string | null;
     };
     /** Reescreve o prompt da peça com IA. */
     onRewritePrompt?: () => void;
     isRewritingPrompt?: boolean;
     /**
      * Força a releitura dos prompts, como no `ArtefactsPanel`: o painel não
-     * segue todos os jobs (num VIDEO_SCRIPT não há job só de prompt), por isso
-     * quem chamou passa aqui o momento em que o prompt mudou.
+     * segue todos os jobs (um `MEDIA_PROMPT` não tem prompt de conteúdo), por
+     * isso quem chamou passa aqui o momento em que o prompt mudou.
      */
     reloadKey?: number;
 }
@@ -57,9 +59,8 @@ export function ContentPromptsPanel({
      * Relê os prompts quando a página incrementa `reloadKey` — o mesmo
      * esquema do `ArtefactsPanel`. O primeiro render é de propósito ignorado:
      * a leitura inicial já é feita pelo `usePiecePrompts`, e repetir aqui
-     * duplicava o pedido. O `usePiecePrompts` não segue o job VIDEO_SCRIPT (só
-     * o CONTENT_PROMPT das peças), por isso este empurrão é o que faz o prompt
-     * novo aparecer.
+     * duplicava o pedido. Como o hook já segue o CONTENT_PROMPT das peças,
+     * este empurrão cobre sobretudo alterações feitas noutro sítio.
      */
     const loadedKeyRef = useRef(reloadKey);
     useEffect(() => {
@@ -81,7 +82,7 @@ export function ContentPromptsPanel({
 
     /**
      * Acção de geração associada a um prompt: o 'main' gera a peça, um
-     * 'slide-N'/'tweet-N' regenera só esse item (carrossel e thread).
+     * 'slide-N'/'scene-N' regenera só esse item (carrossel e vídeo).
      */
     function generateActionFor(itemKey: string): {
         onGenerate?: () => void;
@@ -103,7 +104,9 @@ export function ContentPromptsPanel({
         const order = parseItemKeyOrder(itemKey);
         if (
             order === null ||
-            (piece.format !== 'CAROUSEL' && piece.format !== 'THREAD')
+            (piece.format !== 'CAROUSEL' &&
+                piece.format !== 'SHORT_VIDEO' &&
+                piece.format !== 'VIDEO')
         ) {
             return {};
         }

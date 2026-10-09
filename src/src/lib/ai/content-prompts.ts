@@ -1,34 +1,37 @@
 import type {
     Article,
     ContentFormat,
+    ContentScene,
     ContentSlide,
     Product,
     Workspace,
 } from '@/types/database';
 import type { PillarConfig } from '@/types/pillar';
-import { parseItemKeyOrder } from './generation-job-types.js';
-import type { GeneratedVideoScript, PortablePromptItem } from './types.js';
+import type { PortablePromptItem } from './types.js';
 
 // =============================================================================
-// Prompts de conteúdo — divididos em system (função + regras + formato) e user
-// (contexto da geração). O system de cada formato é o default configurável em
-// ai_system_prompts (contentType = formato); o user é sempre construído aqui.
-// Também constroem os "prompts portáteis" (por item) guardados em
-// content_generation_prompts.
+// Prompts de conteúdo — system (função + envelope) e user (contexto).
+//
+// ⚠️ REGRA INVARIANTE: nenhum prompt de sistema de TIPO pode Mentionar uma
+// plataforma. O canal entra DEPOIS, no bloco de plataforma
+// (`lib/platform-rules/platform-block.ts`), que não é editável. Era aqui que o
+// bug nascia: o formato escolhia o template e a plataforma estava hardcoded na
+// prosa, pelo que escolher LinkedIn e depois Instagram gerava LinkedIn.
 // =============================================================================
 
-interface ContentPromptParams {
+export interface ContentPromptParams {
     article: Article;
     workspace: Workspace;
     product?: Product;
     pillar?: PillarConfig;
+    /** Duração alvo dos vídeos. Só usado por SHORT_VIDEO / VIDEO. */
     durationSec?: number;
 }
 
 /**
- * Params mínimos dos builders de system prompt — só o workspace (idioma/tom)
- * é usado no system; o artigo/contexto entra no user prompt. Subconjunto que
- * permite mostrar os defaults no editor de prompts sem um artigo falso.
+ * Params mínimos dos builders de system prompt — só o workspace (idioma/tom).
+ * Subconjunto que permite mostrar os defaults no editor de prompts sem um
+ * artigo falso.
  */
 export interface SystemPromptParams {
     workspace: Workspace;
@@ -36,23 +39,28 @@ export interface SystemPromptParams {
 }
 
 // -----------------------------------------------------------------------------
-// Contexto (user prompt) — partilhado por todos os formatos
+// Contexto (user prompt) — partilhado por todos os tipos
 // -----------------------------------------------------------------------------
 
-export function buildContext(params: ContentPromptParams): string {
+export interface ContextOptions {
+    /**
+     * Tom do canal. Sobrepõe `workspace.voiceTone` quando preenchido — é o que
+     * faz "casual, rápido, directo ao ponto" chegar ao prompt do TikTok.
+     */
+    toneOverride?: string | null;
+}
+
+export function buildContext(
+    params: ContentPromptParams,
+    options: ContextOptions = {}
+): string {
     const { article, workspace, product, pillar } = params;
 
-    const language = workspace.contentLanguage || 'pt';
-    const languageLabel =
-        language === 'pt'
-            ? 'português'
-            : language === 'en'
-              ? 'inglês'
-              : language;
-    const voiceTone = workspace.voiceTone || 'profissional e acessível';
+    const language = languageLabelOf(workspace);
+    const voiceTone = options.toneOverride?.trim() || voiceToneOf(workspace);
 
     let context = `## Contexto\n`;
-    context += `Idioma: ${languageLabel}\n`;
+    context += `Idioma: ${language}\n`;
     context += `Tom de voz: ${voiceTone}\n`;
 
     if (workspace.targetAudience) {
@@ -105,318 +113,226 @@ function voiceToneOf(workspace: Workspace, fallback = 'profissional e acessível
 }
 
 // -----------------------------------------------------------------------------
-// System prompts por formato (defaults configuráveis em ai_system_prompts)
+// ENVELOPE ÚNICO
+//
+// Um só shape para os 5 tipos. `slides` só aparece em CAROUSEL, `scenes` +
+// `durationSec` só em SHORT_VIDEO / VIDEO. Assim há um schema Zod só, um
+// parser só, e as colunas da BD continuam a ter forma estável.
 // -----------------------------------------------------------------------------
+
+export const CONTENT_ENVELOPE_JSON = `\`\`\`json
+{
+  "title": "Título interno de referência",
+  "hookText": "Primeira linha, a que prende atenção (opcional)",
+  "body": "O texto que o utilizador vai publicar",
+  "ctaText": "Chamada à acção (opcional)",
+  "hashtags": ["#exemplo"],
+  "slides": [
+    {"order": 1, "title": "Título do slide", "body": "Corpo do slide"}
+  ],
+  "scenes": [
+    {
+      "order": 1,
+      "kind": "hook",
+      "narration": "O que se diz",
+      "visual": "O que se vê",
+      "onScreenText": "Texto no ecrã (opcional)"
+    }
+  ],
+  "durationSec": 60
+}
+\`\`\``;
+
+/** Blocos do envelope que só existem em CAROUSEL. */
+const SLIDES_BLOCK = `- "slides": obrigatório, mínimo 5 e máximo 10 elementos. O primeiro slide é o gancho; o último tem o CTA.`;
+
+/** Blocos do envelope que só existem em SHORT_VIDEO / VIDEO. */
+const SCENES_BLOCK = `- "scenes": obrigatório. Uma cena por bloco da estrutura (hook → problema → solução → cta), com "order" sequencial e "kind" de entre hook|problem|solution|cta.
+- "visual": descreve o que aparece no ecrã. É daqui que sai o prompt da imagem do vídeo.
+- "onScreenText": texto curto que sobrepõe a imagem.
+- "body": o roteiro completo, em texto corrido, para ler em voz alta.`;
+
+const COMMON_RULES = (language: string, tone: string): string => `## Instruções
+- Escreve em ${language}
+- Usa o tom: ${tone}
+- Responde APENAS com o JSON pedido. Sem texto antes, sem comentários depois, sem cercas fora do bloco de código.`;
+
+// -----------------------------------------------------------------------------
+// System prompts por tipo — SEM plataforma. Os limites (caracteres, hashtags,
+// extensão) vivem no bloco de plataforma, editável pelo utilizador.
+// -----------------------------------------------------------------------------
+
+export function buildPostSystemPrompt(params: SystemPromptParams): string {
+    const language = languageLabelOf(params.workspace);
+    const tone = voiceToneOf(params.workspace, 'profissional e directo');
+
+    return `És um copywriter especialista em conteúdo para redes sociais.
+
+## Tarefa
+Escreve um post de rede social a partir do artigo fornecido. O texto vai ser publicado
+tal e qual, por isso tem de funcionar sozinho, sem contexto exterior.
+
+## Requisitos
+- "body" é o texto de publicação: continua, com gancho na primeira linha.
+- "hookText" repete a primeira linha, para a UI poder mostrar o gancho isolado.
+- "ctaText" só quando o conteúdo justificar um pedido ao leitor.
+- "hashtags": array de strings. A quantidade e se devem ser usados decide o bloco de plataforma.
+
+## Formato do output
+${CONTENT_ENVELOPE_JSON}
+
+${COMMON_RULES(language, tone)}
+- Faz uma afirmação forte logo na primeira linha.
+- Usa quebras de linha em branco para melhorar a leitura em ecrã pequeno.
+- Inclui história, exemplo ou experiência quando o artigo os tiver.`;
+}
 
 export function buildCarouselSystemPrompt(params: SystemPromptParams): string {
     const language = languageLabelOf(params.workspace);
     const tone = voiceToneOf(params.workspace, 'profissional');
 
-    return `És um especialista em conteúdo visual para LinkedIn.
+    return `És um especialista em sequências de slides para redes sociais.
 
 ## Tarefa
-Cria um carrossel de slides otimizado para LinkedIn com base no artigo fornecido.
+Escreve um carrossel de slides a partir do artigo fornecido.
 
 ## Requisitos
-- Mínimo 5 slides, máximo 10 slides
-- Cada slide deve ter um título curto e corpo conciso
-- O primeiro slide deve ser um "gancho" atrativo
-- O último slide deve ter um CTA forte
-- Formato do output deve ser JSON válido:
+${SLIDES_BLOCK}
+- "body": a junção de todos os slides, cada um como "## Título\\nCorpo", separados por linha em branco.
+- Se o canal onde isto vai ser publicado não tiver carrossel nativo, o bloco de plataforma diz-te como adaptar. Obedece a essa instrução e não a esta estrutura de slides se ela entrar em conflito.
 
-\`\`\`json
-{
-  "title": "Título interno do carrossel",
-  "slides": [
-    {"order": 1, "title": "Título do slide 1", "body": "Corpo do slide 1 (máx 150 caracteres)"},
-    {"order": 2, "title": "Título do slide 2", "body": "Corpo do slide 2"},
-    ...
-  ]
-}
-\`\`\`
+## Formato do output
+${CONTENT_ENVELOPE_JSON}
 
-## Instruções
-- Escreve em ${language}
-- Usa o tom: ${tone}
-- Inclui estatísticas ou factos do artigo quando possível
-- Faz referência ao produto de forma natural se aplicável
-`;
+${COMMON_RULES(language, tone)}
+- Cada slide cabe num ecrã: título curto, corpo conciso.
+- Usa estatísticas ou factos concretos do artigo.`;
 }
 
-export function buildLinkedInPostSystemPrompt(params: SystemPromptParams): string {
+export function buildImageSystemPrompt(params: SystemPromptParams): string {
     const language = languageLabelOf(params.workspace);
-    const tone = voiceToneOf(params.workspace, 'profissional e directo');
+    const tone = voiceToneOf(params.workspace, 'acessível');
 
-    return `És um copywriter especialista em LinkedIn.
-
-## Tarefa
-Cria um post opinativo para LinkedIn baseado no artigo.
-
-## Requisitos
-- 150-300 palavras
-- Começa com um gancho forte (primeira linha que prende atenção)
-- Tom profissional mas com opinião pessoal
-- Inclui 2-3 hashtags relevantes
-- Termina com uma pergunta ou CTA para gerar engagement
-- Formato do output deve ser JSON válido:
-
-\`\`\`json
-{
-  "title": "Título interno do post",
-  "body": "Texto completo do post...",
-  "hashtags": ["#hashtag1", "#hashtag2", "#hashtag3"]
-}
-\`\`\`
-
-## Instruções
-- Escreve em ${language}
-- Usa o tom: ${tone}
-- Faz uma afirmação forte no início
-- Usa quebras de linha para melhorar legibilidade
-- Inclui história pessoal ou experiência quando relevante
-`;
-}
-
-export function buildInstagramPostSystemPrompt(params: SystemPromptParams): string {
-    const language = languageLabelOf(params.workspace);
-
-    return `És um copywriter especialista em Instagram.
+    return `És um especialista em conteúdo visual para redes sociais.
 
 ## Tarefa
-Cria um post curto e visual para Instagram baseado no artigo.
+Escreve a legenda que acompanha uma imagem, a partir do artigo fornecido.
 
 ## Requisitos
-- 50-150 palavras
-- Linguagem casual e acessível
-- Inclui 5-8 hashtags no final
-- Formato do output deve ser JSON válido:
+- "body" é a legenda. Curta, com ritmo, e legível sem o contexto do artigo.
+- A imagem em si não a inventas: mais adiante um passo separado escreve o prompt visual. Aqui só entregas o texto.
 
-\`\`\`json
-{
-  "title": "Título interno do post",
-  "body": "Texto do post...",
-  "hashtags": ["#hashtag1", "#hashtag2", "#hashtag3", "#hashtag4", "#hashtag5", "#hashtag6", "#hashtag7", "#hashtag8"]
-}
-\`\`\`
+## Formato do output
+${CONTENT_ENVELOPE_JSON}
 
-## Instruções
-- Escreve em ${language}
-- Tom: casual e conversacional
-- Usa emojis estrategicamente
-- Foca num único ponto principal
-- Considera o que funcionaria visualmente como caption
-`;
+${COMMON_RULES(language, tone)}
+- Foca num único ponto principal.
+- Usa emojis com moderação e apenas onde ajudam.`;
 }
 
 export function buildShortVideoSystemPrompt(params: SystemPromptParams): string {
+    const durationSec = params.durationSec || 30;
     const language = languageLabelOf(params.workspace);
+    const tone = voiceToneOf(params.workspace, 'casual e directo');
 
-    return `És um especialista em vídeos curtos (TikTok/Reels).
+    return `És um especialista em vídeos curtos para redes sociais.
 
 ## Tarefa
-Cria um gancho e CTA para um vídeo curto (TikTok/Reels) baseado no artigo.
+Escreve o roteiro de um vídeo curto (cerca de ${durationSec} segundos) a partir do artigo.
+
+## Estrutura
+1. **Hook (3-5s)**: frase que faz o espectador ficar. Pergunta provocadora, dado surpreendente ou afirmação controversa.
+2. **Problema (5-10s)**: a dor que o artigo endereça.
+3. **Solução (restante)**: os pontos principais, conversacional.
+4. **CTA (5-10s)**: pedido claro.
 
 ## Requisitos
-- Hook: Primeiras 3-5 segundos (texto para aparecer no ecrã + narração)
-- CTA: Call to action final (2-3 segundos)
-- Formato do output deve ser JSON válido:
+${SCENES_BLOCK}
+- "durationSec": ${durationSec}
 
-\`\`\`json
-{
-  "title": "Título interno do vídeo",
-  "hookText": "Texto do gancho (aparece no ecrã) - máx 15 palavras",
-  "ctaText": "Texto do call to action - máx 20 palavras"
-}
-\`\`\`
+## Formato do output
+${CONTENT_ENVELOPE_JSON}
 
-## Instruções
-- Escreve em ${language}
-- O hook deve ser surpreendente, provocador ou utilitário
-- O CTA deve ser claro e direccionado
-- Considera que o hook aparece antes do utilizador decidir se fica a ver
-`;
+${COMMON_RULES(language, tone)}
+- Escreve para ser ouvido, não lido: frases curtas.
+- "onScreenText" complementa o que se diz; nunca repete.`;
 }
 
-export function buildCtaPostSystemPrompt(params: SystemPromptParams): string {
+export function buildVideoSystemPrompt(params: SystemPromptParams): string {
+    const durationSec = params.durationSec || 300;
     const language = languageLabelOf(params.workspace);
-    const tone = voiceToneOf(params.workspace, 'directo e convincente');
+    const tone = voiceToneOf(params.workspace, 'elaborado e didático');
 
-    return `És um copywriter especialista em conversão no LinkedIn.
+    return `És um especialista em vídeos longos para redes sociais.
 
 ## Tarefa
-Cria um post directo com call-to-action forte para LinkedIn, baseado no artigo.
+Escreve o roteiro de um vídeo longo (cerca de ${durationSec} segundos) a partir do artigo.
+
+## Estrutura
+1. **Hook**: o que impede o espectador de sair nos primeiros segundos.
+2. **Problema**: o problema, com exemplos concretos.
+3. **Solução**: desenvolvimento dos pontos principais do artigo, com contexto.
+4. **CTA**: pedido claro.
 
 ## Requisitos
-- 80-150 palavras
-- Foco na transformação/resultado
-- Inclui link para landing page do produto
-- CTA claro e urgente (mas não agressivo)
-- Formato do output deve ser JSON válido:
+${SCENES_BLOCK}
+- "durationSec": ${durationSec}
 
-\`\`\`json
-{
-  "title": "Título interno",
-  "body": "Texto do post com CTA...",
-  "ctaText": "Texto do botão/CTA"
-}
-\`\`\`
+## Formato do output
+${CONTENT_ENVELOPE_JSON}
 
-## Instruções
-- Escreve em ${language}
-- Tom: ${tone}
-- Foca nos benefícios, não nas features
-- Cria urgência sem ser manipulativo
-- O link deve aparecer como placeholder: [LINK]
-`;
-}
-
-export function buildThreadSystemPrompt(params: SystemPromptParams): string {
-    const language = languageLabelOf(params.workspace);
-
-    return `És um especialista em storytelling no X/Twitter.
-
-## Tarefa
-Cria uma thread (série de posts) para X/Twitter baseada no artigo.
-
-## Requisitos
-- 5-8 tweets
-- Cada tweet máx 280 caracteres
-- Primeiro tweet é o "gancho" (thread starter)
-- Último tweet tem CTA
-- Formato do output deve ser JSON válido:
-
-\`\`\`json
-{
-  "title": "Título interno da thread",
-  "tweets": [
-    {"order": 1, "text": "Tweet 1 (gancho)..."},
-    {"order": 2, "text": "Tweet 2..."},
-    {"order": 3, "text": "Tweet 3..."},
-    ...
-    {"order": 8, "text": "Tweet final com CTA..."}
-  ]
-}
-\`\`\`
-
-## Instruções
-- Escreve em ${language}
-- Tom: conversacional mas informativo
-- Cada tweet deve funcionar isoladamente mas fazer sentido na sequência
-- Usa numeração ou marcadores (1/, 2/, etc.) para clareza
-- Último tweet: pergunta para engagement ou link
-`;
-}
-
-export function buildVideoScriptSystemPrompt(params: SystemPromptParams): string {
-    const durationSec = params.durationSec || 60;
-    const language = languageLabelOf(params.workspace);
-
-    return `És um roteirista de vídeos curtos para redes sociais.
-
-## Tarefa
-Cria um roteiro de vídeo curto baseado no artigo.
-
-## Estrutura do Roteiro
-1. **Hook (3 segundos)**: Frase impactante que faz o espectador ficar a ver. Pode ser uma pergunta provocadora, dado surpreendente, ou afirmação controversa.
-2. **Problema (5-10 segundos)**: Introduz o problema ou dor que o artigo resolve. Faz o espetador identificar-se.
-3. **Solução (30-40 segundos)**: Desenvolvimento dos pontos principais do artigo. Linguagem conversacional, como se estivesses a falar com um amigo.
-4. **CTA (5-10 segundos)**: Call to action final claro.
-
-## Requisitos Adicionais
-- **onScreenText**: Sugestões de texto a aparecer no ecrã (máximo 5). São curtos, complementam o que dizes.
-- **bRoll**: Sugestões de imagens/vídeos de fundo para cada secção (máximo 5). Descrições de stock footage ou screencasts.
-
-## Output
-O output DEVE ser JSON válido:
-
-\`\`\`json
-{
-  "title": "Título cativante para o vídeo (máx 60 caracteres)",
-  "hook": "Texto do gancho - frase de impacto (máx 15 palavras)",
-  "problem": "Descrição do problema ou contexto (5-10 segundos de fala)",
-  "solution": "Desenvolvimento da solução com pontos principais (${Math.round(durationSec * 0.6)} segundos de fala aproximadamente)",
-  "cta": "Call to action final claro (máx 20 palavras)",
-  "fullScript": "Roteiro completo para leitura em voz alta, com indicações de pausa (ex: [PAUSA]), ênfase (ex: *palavra*) e tom (ex: (entusiasmado)). Formato para ser lido diretamente.",
-  "durationSec": ${durationSec},
-  "onScreenText": ["Texto 1", "Texto 2", "Texto 3"],
-  "bRoll": ["Descrição visual 1", "Descrição visual 2"]
-}
-\`\`\`
-
-## Regras de Escrita
-- Escreve em ${language}
-- Linguagem natural e conversacional
-- O fullScript deve ter aproximadamente ${Math.round(durationSec * 2.5)} palavras (150 palavras/minuto)
-- Usa *palavra* para indicar ênfase
-- Usa [PAUSA] para indicar pausas dramáticas
-- O hook deve surpreender ou criar curiosidade
-- O CTA deve ser específico e acionável
-`;
+${COMMON_RULES(language, tone)}
+- Pode ser mais desenvolvido que o vídeo curto: contexto e exemplos são bem-vindos.`;
 }
 
 // -----------------------------------------------------------------------------
-// Resolução do system prompt padrão de um formato (default em código)
+// Resolução do system prompt padrão de um tipo (default em código)
 // -----------------------------------------------------------------------------
 
 export const CONTENT_TYPE_LABELS: Record<string, string> = {
     article: 'Artigo',
     // Metadados de um artigo existente (job ARTICLE_METADATA). Não é um
-    // ContentFormat — é resolvido por `default-system-prompts.ts`, que tem de o
-    // tratar ANTES do fallthrough para `buildSystemPromptForFormat` (o `default:`
-    // dessa função devolve o prompt de LinkedIn).
+    // ContentFormat — `default-system-prompts.ts` tem de o tratar ANTES do
+    // fallthrough para `buildSystemPromptForType`.
     article_metadata: 'Metadados do artigo',
-    CAROUSEL: 'Carrossel (LinkedIn)',
-    LINKEDIN_POST: 'Post LinkedIn',
-    IMAGE: 'Post Instagram',
-    SHORT_VIDEO: 'Vídeo curto (TikTok/Reels)',
-    CTA_POST: 'Post com CTA',
-    THREAD: 'Thread (X/Twitter)',
-    VIDEO_SCRIPT: 'Roteiro de vídeo',
+    POST: 'Post',
+    CAROUSEL: 'Carrossel',
+    IMAGE: 'Image',
+    SHORT_VIDEO: 'Short Video',
+    VIDEO: 'Vídeo',
 };
 
-export function buildSystemPromptForFormat(
-    format: ContentFormat,
+export function buildSystemPromptForType(
+    type: ContentFormat,
     params: SystemPromptParams
 ): string {
-    switch (format) {
+    switch (type) {
+        case 'POST':
+            return buildPostSystemPrompt(params);
         case 'CAROUSEL':
             return buildCarouselSystemPrompt(params);
-        case 'LINKEDIN_POST':
-            return buildLinkedInPostSystemPrompt(params);
         case 'IMAGE':
-            return buildInstagramPostSystemPrompt(params);
+            return buildImageSystemPrompt(params);
         case 'SHORT_VIDEO':
             return buildShortVideoSystemPrompt(params);
-        case 'CTA_POST':
-            return buildCtaPostSystemPrompt(params);
-        case 'THREAD':
-            return buildThreadSystemPrompt(params);
-        case 'VIDEO_SCRIPT':
-            return buildVideoScriptSystemPrompt(params);
+        case 'VIDEO':
+            return buildVideoSystemPrompt(params);
         default:
-            return buildLinkedInPostSystemPrompt(params);
+            return buildPostSystemPrompt(params);
     }
 }
 
-// -----------------------------------------------------------------------------
-// Prompt completo (system + user) — compatibilidade/auditoria
-// -----------------------------------------------------------------------------
-
-export function buildPromptForFormat(
-    format: ContentFormat,
-    params: ContentPromptParams
+export function buildPromptForType(
+    type: ContentFormat,
+    params: ContentPromptParams,
+    options: ContextOptions = {}
 ): string {
-    return `${buildSystemPromptForFormat(format, params)}\n\n${buildContext(params)}`;
-}
-
-export function buildVideoScriptPrompt(params: ContentPromptParams): string {
-    return `${buildVideoScriptSystemPrompt(params)}\n\n${buildContext(params)}`;
+    return `${buildSystemPromptForType(type, params)}\n\n${buildContext(params, options)}`;
 }
 
 // -----------------------------------------------------------------------------
-// Prompts portáteis (final, self-contained) por item — guardados em
-// content_generation_prompts. Recriam exatamente o item gerado: system +
-// contexto + foco no item.
+// Prompts portáteis (finais, self-contained) por item — guardados em
+// content_generation_prompts. Recriam exactamente o item gerado.
 // -----------------------------------------------------------------------------
 
 function buildPortablePrompt(
@@ -424,13 +340,14 @@ function buildPortablePrompt(
     systemPrompt: string,
     itemKey: string,
     itemTitle: string | null,
-    itemText: string
+    itemText: string,
+    options: ContextOptions = {}
 ): string {
     const label = itemTitle ? `${itemKey} — ${itemTitle}` : itemKey;
 
     return `${systemPrompt}
 
-${buildContext(params)}
+${buildContext(params, options)}
 
 ## Item específico a gerar (${label.replace(/\|/g, '')})
 ${itemText.trim()}
@@ -440,12 +357,13 @@ descritos acima, sem incluir nenhum outro item.
 `;
 }
 
-/** Prompt portátil de um item de carrossel (slide). */
-export function buildCarouselItemPortablePrompt(
+/** Prompt portátil de um slide de carrossel. */
+export function buildSlideItemPortablePrompt(
     params: ContentPromptParams,
     slide: ContentSlide,
     index: number,
-    systemOverride?: string
+    systemOverride?: string,
+    options: ContextOptions = {}
 ): string {
     const body = slide.body || '';
     const title = `Slide ${slide.order ?? index + 1} (carrossel)`;
@@ -454,48 +372,55 @@ export function buildCarouselItemPortablePrompt(
         systemOverride ?? buildCarouselSystemPrompt(params),
         `slide-${slide.order ?? index + 1}`,
         title,
-        slide.title ? `Título: ${slide.title}\n\n${body}` : body
+        slide.title ? `Título: ${slide.title}\n\n${body}` : body,
+        options
     );
 }
 
-/** Prompt portátil de um tweet de thread. */
-export function buildThreadItemPortablePrompt(
+/** Prompt portátil de uma cena de vídeo. */
+export function buildSceneItemPortablePrompt(
     params: ContentPromptParams,
-    tweet: { order: number; text: string },
-    systemOverride?: string
+    scene: ContentScene,
+    systemOverride?: string,
+    options: ContextOptions = {}
 ): string {
+    const parts = [
+        `Narração: ${scene.narration}`,
+        scene.visual ? `Visual: ${scene.visual}` : '',
+        scene.onScreenText ? `Texto no ecrã: ${scene.onScreenText}` : '',
+    ].filter(Boolean);
+
     return buildPortablePrompt(
         params,
-        systemOverride ?? buildThreadSystemPrompt(params),
-        `tweet-${tweet.order}`,
-        null,
-        tweet.text
+        systemOverride ?? buildVideoSystemPrompt(params),
+        `scene-${scene.order}`,
+        `Cena ${scene.order} (${scene.kind})`,
+        parts.join('\n'),
+        options
     );
 }
 
-/** Prompt portátil de uma peça de item único (ou video script). */
+/** Prompt portátil de uma peça de item único. */
 export function buildSingleItemPortablePrompt(
-    format: ContentFormat,
+    type: ContentFormat,
     params: ContentPromptParams,
     title: string | null,
     body: string,
-    systemOverride?: string
+    systemOverride?: string,
+    options: ContextOptions = {}
 ): string {
     return buildPortablePrompt(
         params,
-        systemOverride ?? buildSystemPromptForFormat(format, params),
+        systemOverride ?? buildSystemPromptForType(type, params),
         'main',
         title,
-        body
+        body,
+        options
     );
 }
 
 // -----------------------------------------------------------------------------
 // Parse de um ÚNICO item (regeneração parcial: "Gerar este slide")
-//
-// O system prompt do formato pede sempre o JSON da peça completa, por isso a
-// resposta a "gera só o slide 3" pode vir em três formatos diferentes. Aceitamos
-// os três e devolvemos sempre o mesmo shape ({ title, body }).
 // -----------------------------------------------------------------------------
 
 export interface ParsedSingleItem {
@@ -506,13 +431,12 @@ export interface ParsedSingleItem {
 export function parseSingleItemResponse(text: string): ParsedSingleItem | null {
     if (!text) return null;
 
-    // 1) JSON (com a peça completa ou só o item).
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
         try {
             const parsed = JSON.parse(jsonMatch[0]);
 
-            // a) JSON de carrossel: { title, slides: [...] } → primeiro slide.
+            // a) Carrossel: { title, slides: [...] } → primeiro slide.
             if (Array.isArray(parsed.slides) && parsed.slides.length > 0) {
                 const slide = parsed.slides[0];
                 const body = String(slide?.body ?? '').trim();
@@ -526,9 +450,10 @@ export function parseSingleItemResponse(text: string): ParsedSingleItem | null {
                 }
             }
 
-            // b) JSON de thread: { tweets: [...] } → primeiro tweet.
-            if (Array.isArray(parsed.tweets) && parsed.tweets.length > 0) {
-                const body = String(parsed.tweets[0]?.text ?? '').trim();
+            // b) Vídeo: { scenes: [...] } → primeira cena.
+            if (Array.isArray(parsed.scenes) && parsed.scenes.length > 0) {
+                const scene = parsed.scenes[0];
+                const body = String(scene?.narration ?? '').trim();
                 if (body) return { title: null, body };
             }
 
@@ -545,7 +470,6 @@ export function parseSingleItemResponse(text: string): ParsedSingleItem | null {
         }
     }
 
-    // 2) Texto simples: o slide/tweet em si, sem JSON.
     const plain = stripMarkdownTitle(text.trim());
     if (plain.length > 0) {
         return { title: null, body: plain };
@@ -562,294 +486,120 @@ function stripMarkdownTitle(text: string): string {
 }
 
 /**
- * Aplica o item regenerado à peça: actualiza só o slide (ou tweet) indicado,
+ * Aplica o item regenerado à peça: actualiza só o slide (ou cena) indicado,
  * mantendo os restantes intactos. Devolve os campos a persistir.
  */
 export function applySingleItemToPiece(
-    format: ContentFormat,
-    piece: { body: string; slides: ContentSlide[] | null },
+    type: ContentFormat,
+    piece: { body: string; slides: ContentSlide[] | null; scenes?: ContentScene[] | null },
     itemKey: string,
     item: ParsedSingleItem
-): { body: string; slides: ContentSlide[] | null; slideCount: number | null } {
-    const orderMatch = /^(?:slide|tweet)-(\d+)$/.exec(itemKey);
+): {
+    body: string;
+    slides: ContentSlide[] | null;
+    scenes: ContentScene[] | null;
+    slideCount: number | null;
+} {
+    const orderMatch = /^(?:slide|scene|tweet)-(\d+)$/.exec(itemKey);
     const order = orderMatch ? Number(orderMatch[1]) : null;
+    const unchanged = {
+        ...piece,
+        scenes: piece.scenes ?? null,
+        slideCount: piece.slides?.length ?? null,
+    };
 
-    if (format === 'CAROUSEL' && order !== null) {
+    if (type === 'CAROUSEL' && order !== null) {
         const slides = piece.slides ?? [];
-        if (slides.length === 0) return { ...piece, slideCount: null };
+        if (slides.length === 0) return unchanged;
 
         const index = slides.findIndex(
             (s, i) => (s.order ?? 0) === order || i === order - 1
         );
-        if (index === -1) return { ...piece, slideCount: slides.length };
+        if (index === -1) return unchanged;
 
         const next = slides.map((slide, i) =>
             i === index
-                ? {
-                      order: slide.order,
-                      title: item.title ?? slide.title,
-                      body: item.body,
-                  }
+                ? { order: slide.order, title: item.title ?? slide.title, body: item.body }
                 : slide
         );
 
         return {
             slides: next,
             body: next.map((s) => `## ${s.title}\n${s.body}`).join('\n\n'),
+            scenes: null,
             slideCount: next.length,
         };
     }
 
-    if (format === 'THREAD' && order !== null) {
-        const tweets = extractThreadTweets(piece.body);
-        if (tweets.length === 0) {
-            return { ...piece, slideCount: piece.slides?.length ?? null };
-        }
+    if ((type === 'VIDEO' || type === 'SHORT_VIDEO') && order !== null) {
+        const scenes = piece.scenes ?? [];
+        if (scenes.length === 0) return unchanged;
 
-        const index = tweets.findIndex((t) => t.order === order);
-        if (index === -1) {
-            return { ...piece, slideCount: piece.slides?.length ?? null };
-        }
+        const index = scenes.findIndex((s, i) => (s.order ?? 0) === order || i === order - 1);
+        if (index === -1) return unchanged;
 
-        const next = tweets.map((tweet, i) =>
-            i === index ? { order: tweet.order, text: item.body } : tweet
+        const next = scenes.map((scene, i) =>
+            i === index
+                ? { ...scene, narration: item.body, visual: null, onScreenText: null }
+                : scene
         );
 
         return {
-            slides: piece.slides,
-            body: next.map((t) => t.text).join('\n\n'),
-            slideCount: piece.slides?.length ?? null,
+            slides: null,
+            scenes: next,
+            body: next.map((s) => s.narration).join('\n\n'),
+            slideCount: null,
         };
     }
 
-    return { ...piece, slideCount: piece.slides?.length ?? null };
+    return unchanged;
 }
 
 /** Prompt portátil do item regenerado (reconstruído a partir do novo texto). */
 export function buildItemPortablePrompt(
-    format: ContentFormat,
+    type: ContentFormat,
     params: ContentPromptParams,
     itemKey: string,
     itemText: string,
-    systemOverride?: string
+    systemOverride?: string,
+    options: ContextOptions = {}
 ): string {
-    const order = parseItemKeyOrder(itemKey) ?? 1;
+    const order = /-(\d+)$/.exec(itemKey)?.[1];
+    const n = order ? Number(order) : 1;
 
-    if (format === 'CAROUSEL') {
-        return buildCarouselItemPortablePrompt(
+    if (type === 'CAROUSEL') {
+        return buildSlideItemPortablePrompt(
             params,
-            { order, title: '', body: itemText },
-            order - 1,
-            systemOverride
+            { order: n, title: '', body: itemText },
+            n - 1,
+            systemOverride,
+            options
         );
     }
 
-    if (format === 'THREAD') {
-        return buildThreadItemPortablePrompt(
+    if (type === 'VIDEO' || type === 'SHORT_VIDEO') {
+        return buildSceneItemPortablePrompt(
             params,
-            { order, text: itemText },
-            systemOverride
+            { order: n, kind: 'solution', narration: itemText },
+            systemOverride,
+            options
         );
     }
 
     return buildSingleItemPortablePrompt(
-        format,
+        type,
         params,
         null,
         itemText,
-        systemOverride
+        systemOverride,
+        options
     );
 }
 
 // -----------------------------------------------------------------------------
-// Parsers (inalterados)
-// -----------------------------------------------------------------------------
-
-export function parseCarouselResponse(text: string): {
-    title: string | null;
-    slides: ContentSlide[];
-} | null {
-    try {
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) return null;
-
-        const parsed = JSON.parse(jsonMatch[0]);
-        const slides = parsed.slides || [];
-
-        return {
-            title: parsed.title || null,
-            slides: slides.map(
-                (
-                    s: { order?: number; title: string; body: string },
-                    i: number
-                ) => ({
-                    order: s.order || i + 1,
-                    title: s.title || '',
-                    body: s.body || '',
-                })
-            ),
-        };
-    } catch {
-        return null;
-    }
-}
-
-export function parseLinkedInPostResponse(text: string): {
-    title: string | null;
-    body: string;
-    hashtags: string[];
-} | null {
-    try {
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) return null;
-
-        const parsed = JSON.parse(jsonMatch[0]);
-
-        return {
-            title: parsed.title || null,
-            body: parsed.body || '',
-            hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags : [],
-        };
-    } catch {
-        return null;
-    }
-}
-
-export function parseInstagramPostResponse(text: string): {
-    title: string | null;
-    body: string;
-    hashtags: string[];
-} | null {
-    return parseLinkedInPostResponse(text);
-}
-
-export function parseShortVideoResponse(text: string): {
-    title: string | null;
-    hookText: string | null;
-    ctaText: string | null;
-} | null {
-    try {
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) return null;
-
-        const parsed = JSON.parse(jsonMatch[0]);
-
-        return {
-            title: parsed.title || null,
-            hookText: parsed.hookText || null,
-            ctaText: parsed.ctaText || null,
-        };
-    } catch {
-        return null;
-    }
-}
-
-export function parseCtaPostResponse(text: string): {
-    title: string | null;
-    body: string;
-    ctaText: string | null;
-} | null {
-    try {
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) return null;
-
-        const parsed = JSON.parse(jsonMatch[0]);
-
-        return {
-            title: parsed.title || null,
-            body: parsed.body || '',
-            ctaText: parsed.ctaText || null,
-        };
-    } catch {
-        return null;
-    }
-}
-
-export function parseThreadResponse(text: string): {
-    title: string | null;
-    tweets: Array<{ order: number; text: string }>;
-} | null {
-    try {
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) return null;
-
-        const parsed = JSON.parse(jsonMatch[0]);
-        const tweets = parsed.tweets || [];
-
-        return {
-            title: parsed.title || null,
-            tweets: tweets.map(
-                (t: { order?: number; text: string }, i: number) => ({
-                    order: t.order || i + 1,
-                    text: t.text || '',
-                })
-            ),
-        };
-    } catch {
-        return null;
-    }
-}
-
-export interface ParsedVideoScript {
-    title: string | null;
-    hook: string | null;
-    problem: string | null;
-    solution: string | null;
-    cta: string | null;
-    fullScript: string | null;
-    durationSec: number;
-    onScreenText: string[];
-    bRoll: string[];
-}
-
-export function parseVideoScriptResponse(text: string): ParsedVideoScript | null {
-    try {
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) return null;
-
-        const parsed = JSON.parse(jsonMatch[0]);
-
-        return {
-            title: parsed.title || null,
-            hook: parsed.hook || null,
-            problem: parsed.problem || null,
-            solution: parsed.solution || null,
-            cta: parsed.cta || null,
-            fullScript: parsed.fullScript || null,
-            durationSec: parsed.durationSec || 60,
-            onScreenText: Array.isArray(parsed.onScreenText)
-                ? parsed.onScreenText
-                : [],
-            bRoll: Array.isArray(parsed.bRoll)
-                ? parsed.bRoll
-                : [],
-        };
-    } catch {
-        return null;
-    }
-}
-
-/** Converte a resposta parsaada num roteiro pronto a persistir. */
-export function convertParsedToScript(
-    parsed: ParsedVideoScript,
-    requestedDuration: number
-): GeneratedVideoScript {
-    return {
-        title: parsed.title || 'Sem título',
-        hook: parsed.hook || '',
-        problem: parsed.problem,
-        solution: parsed.solution,
-        cta: parsed.cta || '',
-        fullScript: parsed.fullScript,
-        durationSec: parsed.durationSec || requestedDuration,
-        onScreenText: parsed.onScreenText,
-        bRoll: parsed.bRoll,
-    };
-}
-
-// -----------------------------------------------------------------------------
-// Peças geradas — mapeamento uniforme (por formato) da resposta JSON para o
-// shape persistível de uma peça de conteúdo. Puro (partilhado client/server).
+// Parse do envelope → shape persistível de uma peça
+// Puro, partilhado client/server. Um parser para os 5 tipos: o que distingue um
+// tipo do outro é quais os blocos opcionais que vêm preenchidos.
 // -----------------------------------------------------------------------------
 
 export interface ParsedGeneratedPiece {
@@ -861,153 +611,116 @@ export interface ParsedGeneratedPiece {
     hashtags: string[];
     slides: ContentSlide[] | null;
     slideCount: number | null;
+    scenes: ContentScene[] | null;
+    durationSec: number | null;
 }
 
-/** Extrai os tweets individuais a partir do body (separados por linha em branco). */
-export function extractThreadTweets(
-    body: string
-): Array<{ order: number; text: string }> {
-    return body
-        .split(/\n\s*\n/)
-        .map((text) => text.trim())
-        .filter(Boolean)
-        .map((text, i) => ({ order: i + 1, text }));
+/** Extrai `json`, tolerando cercas ```json e lixo à volta. */
+function extractJson(text: string): unknown | null {
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    try {
+        return JSON.parse(match[0]);
+    } catch {
+        return null;
+    }
+}
+
+function toHashtags(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    return value.map((tag) => String(tag).trim()).filter(Boolean);
 }
 
 export function parseGeneratedContent(
     format: ContentFormat,
     text: string
 ): ParsedGeneratedPiece | null {
-    switch (format) {
-        case 'CAROUSEL': {
-            const parsed = parseCarouselResponse(text);
-            if (!parsed) return null;
+    const parsed = extractJson(text);
+    if (!parsed || typeof parsed !== 'object') return null;
+    const raw = parsed as Record<string, unknown>;
 
-            const slides = parsed.slides || [];
-            const body = slides
-                .map((s) => `## ${s.title}\n${s.body}`)
-                .join('\n\n');
+    const title = typeof raw.title === 'string' && raw.title.trim() ? raw.title.trim() : null;
+    const rawBody = typeof raw.body === 'string' ? raw.body.trim() : '';
 
-            return {
-                format,
-                title: parsed.title,
-                body,
-                slides,
-                slideCount: slides.length,
-                hookText: slides[0]?.title || null,
-                ctaText: slides[slides.length - 1]?.body || null,
-                hashtags: [],
-            };
-        }
+    const slides = Array.isArray(raw.slides)
+        ? raw.slides.map((s, i) => {
+              const slide = (s ?? {}) as Record<string, unknown>;
+              return {
+                  order: typeof slide.order === 'number' ? slide.order : i + 1,
+                  title: typeof slide.title === 'string' ? slide.title : '',
+                  body: typeof slide.body === 'string' ? slide.body : '',
+              };
+          })
+        : null;
 
-        case 'LINKEDIN_POST': {
-            const parsed = parseLinkedInPostResponse(text);
-            if (!parsed) return null;
+    const scenes = Array.isArray(raw.scenes)
+        ? raw.scenes.map((s, i) => {
+              const scene = (s ?? {}) as Record<string, unknown>;
+              return {
+                  order: typeof scene.order === 'number' ? scene.order : i + 1,
+                  kind: typeof scene.kind === 'string' ? scene.kind : 'solution',
+                  narration: typeof scene.narration === 'string' ? scene.narration : '',
+                  visual: typeof scene.visual === 'string' ? scene.visual : null,
+                  onScreenText:
+                      typeof scene.onScreenText === 'string' ? scene.onScreenText : null,
+              };
+          })
+        : null;
 
-            return {
-                format,
-                title: parsed.title,
-                body: parsed.body,
-                hashtags: parsed.hashtags,
-                hookText: parsed.body.split('\n')[0] || null,
-                ctaText: null,
-                slides: null,
-                slideCount: null,
-            };
-        }
+    const hashtags = toHashtags(raw.hashtags);
+    const durationSec =
+        typeof raw.durationSec === 'number' && raw.durationSec > 0 ? raw.durationSec : null;
 
-        case 'IMAGE': {
-            const parsed = parseInstagramPostResponse(text);
-            if (!parsed) return null;
+    // O corpo pode vir pronto, ou ter de ser montado a partir dos blocos.
+    const body =
+        rawBody ||
+        (slides
+            ? slides.map((s) => `## ${s.title}\n${s.body}`).join('\n\n')
+            : scenes
+              ? scenes.map((s) => s.narration).join('\n\n')
+              : '');
 
-            return {
-                format,
-                title: parsed.title,
-                body: parsed.body,
-                hashtags: parsed.hashtags,
-                hookText: parsed.body.split('\n')[0] || null,
-                ctaText: null,
-                slides: null,
-                slideCount: null,
-            };
-        }
-
-        case 'SHORT_VIDEO': {
-            const parsed = parseShortVideoResponse(text);
-            if (!parsed) return null;
-
-            return {
-                format,
-                title: parsed.title,
-                body: `Hook: ${parsed.hookText || ''}\n\nCTA: ${parsed.ctaText || ''}`,
-                hookText: parsed.hookText,
-                ctaText: parsed.ctaText,
-                hashtags: [],
-                slides: null,
-                slideCount: null,
-            };
-        }
-
-        case 'CTA_POST': {
-            const parsed = parseCtaPostResponse(text);
-            if (!parsed) return null;
-
-            return {
-                format,
-                title: parsed.title,
-                body: parsed.body,
-                ctaText: parsed.ctaText,
-                hashtags: [],
-                hookText: parsed.body.split('\n')[0] || null,
-                slides: null,
-                slideCount: null,
-            };
-        }
-
-        case 'THREAD': {
-            const parsed = parseThreadResponse(text);
-            if (!parsed) return null;
-
-            const tweets = parsed.tweets || [];
-            const body = tweets.map((t) => t.text).join('\n\n');
-
-            return {
-                format,
-                title: parsed.title,
-                body,
-                hashtags: [],
-                hookText: tweets[0]?.text || null,
-                ctaText: tweets[tweets.length - 1]?.text || null,
-                slides: null,
-                slideCount: null,
-            };
-        }
-
-        case 'VIDEO_SCRIPT': {
-            const parsed = parseVideoScriptResponse(text);
-            if (!parsed) return null;
-
-            const body = `## Hook\n${parsed.hook || ''}\n\n## Problema\n${parsed.problem || ''}\n\n## Solução\n${parsed.solution || ''}\n\n## CTA\n${parsed.cta || ''}`;
-
-            return {
-                format,
-                title: parsed.title,
-                body,
-                hookText: parsed.hook,
-                ctaText: parsed.cta,
-                hashtags: [],
-                slides: null,
-                slideCount: null,
-            };
-        }
-
-        default:
-            return null;
+    if (!body && (!slides || slides.length === 0) && (!scenes || scenes.length === 0)) {
+        return null;
     }
+
+    return {
+        format,
+        title,
+        body,
+        hookText: pickString(raw.hookText) ?? firstNonEmptyLine(body),
+        ctaText: pickString(raw.ctaText) ?? lastItemBody(slides, scenes),
+        hashtags,
+        slides,
+        slideCount: slides ? slides.length : null,
+        scenes,
+        durationSec,
+    };
+}
+
+function pickString(value: unknown): string | null {
+    return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function firstNonEmptyLine(body: string): string | null {
+    return body.split('\n').find((line) => line.trim())?.trim() ?? null;
+}
+
+function lastItemBody(
+    slides: ContentSlide[] | null,
+    scenes: ContentScene[] | null
+): string | null {
+    if (slides && slides.length > 0) {
+        return pickString(slides[slides.length - 1]?.body);
+    }
+    if (scenes && scenes.length > 0) {
+        return pickString(scenes[scenes.length - 1]?.narration);
+    }
+    return null;
 }
 
 /**
- * Prompts finais portáteis de uma peça gerada — por item (slide, tweet) ou
+ * Prompts finais portáteis de uma peça gerada — por item (slide, cena) ou
  * item único, para registo em content_generation_prompts. Puro (partilhado).
  */
 export interface PortablePromptsForPieceParams {
@@ -1018,47 +731,48 @@ export interface PortablePromptsForPieceParams {
 }
 
 export function buildPortablePromptsForPiece(
-    format: ContentFormat,
+    type: ContentFormat,
     params: PortablePromptsForPieceParams,
     piece: ParsedGeneratedPiece,
-    systemOverride?: string
+    systemOverride?: string,
+    options: ContextOptions = {}
 ): PortablePromptItem[] {
-    switch (format) {
-        case 'CAROUSEL':
-            return (piece.slides ?? []).map((slide) => ({
-                itemKey: `slide-${slide.order}`,
-                prompt: buildCarouselItemPortablePrompt(
-                    params,
-                    slide,
-                    slide.order - 1,
-                    systemOverride
-                ),
-            }));
-
-        case 'THREAD': {
-            const tweets = extractThreadTweets(piece.body);
-            return tweets.map((tweet) => ({
-                itemKey: `tweet-${tweet.order}`,
-                prompt: buildThreadItemPortablePrompt(
-                    params,
-                    tweet,
-                    systemOverride
-                ),
-            }));
-        }
-
-        default:
-            return [
-                {
-                    itemKey: 'main',
-                    prompt: buildSingleItemPortablePrompt(
-                        format,
-                        params,
-                        piece.title,
-                        piece.body,
-                        systemOverride
-                    ),
-                },
-            ];
+    if (type === 'CAROUSEL' && piece.slides) {
+        return piece.slides.map((slide) => ({
+            itemKey: `slide-${slide.order}`,
+            prompt: buildSlideItemPortablePrompt(
+                params,
+                slide,
+                slide.order - 1,
+                systemOverride,
+                options
+            ),
+        }));
     }
+
+    if ((type === 'VIDEO' || type === 'SHORT_VIDEO') && piece.scenes) {
+        return piece.scenes.map((scene) => ({
+            itemKey: `scene-${scene.order}`,
+            prompt: buildSceneItemPortablePrompt(
+                params,
+                scene,
+                systemOverride,
+                options
+            ),
+        }));
+    }
+
+    return [
+        {
+            itemKey: 'main',
+            prompt: buildSingleItemPortablePrompt(
+                type,
+                params,
+                piece.title,
+                piece.body,
+                systemOverride,
+                options
+            ),
+        },
+    ];
 }

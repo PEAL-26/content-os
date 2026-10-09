@@ -1,20 +1,29 @@
 import { supabase } from '@/lib/supabase';
 import { v4 as uuidv4 } from 'uuid';
-import type { ContentPublication, PublicationTargetType } from '@/types/database';
+import type {
+    ContentPublication,
+    PublicationTargetType,
+    SocialChannel,
+} from '@/types/database';
 
 // =============================================================================
-// CONTENT PUBLICATIONS (multi-plataforma, polimórfico ARTICLE|PIECE|VIDEO_SCRIPT)
+// CONTENT PUBLICATIONS (multi-plataforma, polimórfico ARTICLE|PIECE)
 // O upload de artefactos e o registo em content_assets vivem em
 // content-asset.service.ts (o wrapper `uploadAsset` que cá existia foi
 // removido: o planeador importa `uploadAssetFile` diretamente).
 // =============================================================================
 
-export type PublicationPlatform = string; // 'LINKEDIN' | 'INSTAGRAM' | 'outros' | ...
+/**
+ * A plataforma deixou de ser texto livre (Decisão 34): a coluna é o enum
+ * `SocialChannel`. Aceitar `string` aqui era o que permitia gravar
+ * `'outros'`/`'X_TWITTER'` e rebentar o insert em runtime.
+ */
+export type PublicationPlatform = SocialChannel;
 
 export interface CreatePublicationInput {
     targetType: PublicationTargetType;
     targetId: string;
-    platform: string;
+    platform: SocialChannel;
     url: string;
     publishedAt?: string;
 }

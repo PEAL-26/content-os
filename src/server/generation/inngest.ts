@@ -72,12 +72,58 @@ export const generationFunction = inngest.createFunction(
 );
 
 /**
+ * EVENTO DE MEDIA — separado do de texto, e com um timeout maior.
+ *
+ * ⚠️ R3 do plano: `veo-3` faz polling durante vários minutos, e um short de 30s
+ * pode passar dos 15 min do `generationFunction`. Com o timeout partilhado, um
+ * vídeo acabava em FAILED com o ficheiro já gerado e pago.
+ *
+ * Por isso há um evento e uma função próprios:
+ *   · `timeouts.start: 25m` dá espaço ao polling do Veo;
+ *   · `concurrency: 1` — as chamadas de media são pagas (~$0,75/seg de vídeo) e
+ *     não devem correr em paralelo.
+ *
+ * `MEDIA_PROMPT` também passa por aqui apesar de ser só texto: fica isolado do
+ * `concurrency: 2`, que está calibrado para o plano free do provider de texto.
+ */
+export const MEDIA_EVENT = 'contentos/media.requested';
+
+/** Envia o evento que dispara um job de media. */
+export function sendMediaRequested(jobId: string): Promise<unknown> {
+    return inngest.send({
+        name: MEDIA_EVENT,
+        data: { jobId },
+    });
+}
+
+export const mediaFunction = inngest.createFunction(
+    {
+        id: 'contentos-media-v1',
+        name: 'Media IA (prompts de media, imagem, áudio, vídeo)',
+        retries: 1,
+        concurrency: 1,
+        timeouts: { start: '25m' },
+        triggers: [{ event: MEDIA_EVENT }],
+    },
+    async ({ event, runId }) => {
+        const jobId = (event.data as { jobId?: unknown }).jobId as
+            | string
+            | undefined;
+        if (!jobId) {
+            throw new Error('Evento de media sem jobId.');
+        }
+        await runGenerationJob(jobId, runId);
+        return { ok: true, jobId };
+    }
+);
+
+/**
  * Handler HTTP pronto a servir em `/api/inngest` (RequestListener).
  * O `serve` decide os intents (register/sync/send) e executa as funções.
  */
 export const inngestHandler = serve({
     client: inngest,
-    functions: [generationFunction],
+    functions: [generationFunction, mediaFunction],
 });
 
 // -----------------------------------------------------------------------------

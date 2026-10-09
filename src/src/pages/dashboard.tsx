@@ -7,7 +7,7 @@ import { useDashboard } from '@/hooks/use-dashboard';
 import { useWorkspace } from '@/hooks/use-workspace';
 import { getUserDisplayName } from '@/helpers/user';
 import { workspacePath } from '@/lib/workspace-paths';
-import { CONTENT_FORMAT_EMOJIS } from '@/helpers/content-format';
+import { getFormatEmoji } from '@/helpers/content-format';
 import {
     Calendar,
     CheckCircle,
@@ -193,7 +193,7 @@ export function DashboardPage() {
                                         className="flex items-center gap-3 rounded-lg border border-gray-200 p-3 transition-colors hover:bg-gray-50"
                                     >
                                         <span className="text-xl">
-                                            {CONTENT_FORMAT_EMOJIS[piece.format] || '📄'}
+                                            {getFormatEmoji(piece.format)}
                                         </span>
                                         <div className="min-w-0 flex-1">
                                             <p className="truncate text-sm font-medium text-gray-900">

@@ -30,8 +30,9 @@ export interface UsePiecePromptsResult {
         id: string;
         format: string;
         body: string;
+        channelId: string | null;
     }) => Promise<void>;
-    /** Regenera um item (slide-N / tweet-N) a partir do prompt desse item. */
+    /** Regenera um item (slide-N / scene-N) a partir do prompt desse item. */
     generateItem: (pieceId: string, itemKey: string) => Promise<void>;
     /** True enquanto há um pedido em curso ou um job de prompt/item activo. */
     isBusy: boolean;
@@ -44,7 +45,7 @@ export interface UsePiecePromptsResult {
 }
 
 export function usePiecePrompts(
-    targetType: 'PIECE' | 'VIDEO_SCRIPT',
+    targetType: 'PIECE',
     targetId: string
 ): UsePiecePromptsResult {
     const { currentWorkspace } = useWorkspaceStore();
@@ -82,6 +83,9 @@ export function usePiecePrompts(
         } finally {
             setIsLoading(false);
         }
+        // `targetType` é um literal único ('PIECE') desde a fusão de
+        // `video_scripts`, mas fica na lista para o hook não partir se voltar a
+        // ganhar variantes.
     }, [targetType, targetId]);
 
     useEffect(() => {
@@ -91,7 +95,7 @@ export function usePiecePrompts(
     // O job CONTENT_PROMPT é escrito por articleId, não por peça: resolvemo-lo
     // para poder seguir a escrita do prompt em tempo real.
     useEffect(() => {
-        if (targetType !== 'PIECE' || !targetId) {
+        if (!targetId) {
             setArticleId(null);
             return;
         }
@@ -106,15 +110,15 @@ export function usePiecePrompts(
         return () => {
             disposed = true;
         };
-    }, [targetType, targetId]);
+    }, [targetId]);
 
     const promptJob = useGenerationJob(
-        targetType === 'PIECE' && articleId
+        articleId
             ? { kind: 'target', jobType: 'CONTENT_PROMPT', targetId: articleId }
             : null
     );
     const itemJob = useGenerationJob(
-        targetType === 'PIECE' && targetId
+        targetId
             ? { kind: 'target', jobType: 'CONTENT_ITEM', targetId }
             : null
     );
@@ -164,7 +168,12 @@ export function usePiecePrompts(
     const inFlight = useRef(false);
 
     const generatePiece = useCallback(
-        async (piece: { id: string; format: string; body: string }) => {
+        async (piece: {
+            id: string;
+            format: string;
+            body: string;
+            channelId: string | null;
+        }) => {
             if (!currentWorkspace || inFlight.current) return;
             inFlight.current = true;
             setIsGenerating(true);
@@ -182,6 +191,9 @@ export function usePiecePrompts(
                     params: {
                         articleId: id,
                         formats: [piece.format],
+                        // O canal da própria peça: o prompt guardado foi escrito
+                        // com as regras desta plataforma e tem de as manter.
+                        channelIds: piece.channelId ? [piece.channelId] : [],
                         useStoredPrompt: true,
                     },
                     targets: [

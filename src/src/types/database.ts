@@ -18,6 +18,8 @@ export interface Workspace {
     articlesPerWeek: number;
     defaultAIProviderId?: string | null;
     defaultAIModel?: string | null;
+    /** Modelo por modalidade de media: `{ image?, audio?, video? }` com modelCode. */
+    artifactModels?: { image?: string; audio?: string; video?: string } | null;
 }
 
 export interface WorkspaceMember {
@@ -69,8 +71,16 @@ export interface ChannelConfig {
     isActive: boolean;
     handle: string | null;
     isPrimary: boolean;
+    /** Tom deste canal. Sobrepõe o `voiceTone` do workspace quando preenchido. */
     defaultTone: string | null;
+    /**
+     * Instruções internas deste canal — são enviadas ao modelo em cada
+     * geração para este canal. Antes eram "notas para a equipa" e nunca eram
+     * lidas por nenhum prompt builder.
+     */
     notes: string | null;
+    /** Overrides das regras de plataforma (campo-a-campo sobre os defaults). */
+    rules: unknown;
     createdAt: string;
 }
 
@@ -175,14 +185,7 @@ export interface ArticleWithRelations extends Article {
     };
 }
 
-export type ContentFormat =
-    | 'CAROUSEL'
-    | 'SHORT_VIDEO'
-    | 'LINKEDIN_POST'
-    | 'IMAGE'
-    | 'THREAD'
-    | 'CTA_POST'
-    | 'VIDEO_SCRIPT';
+export type ContentFormat = 'POST' | 'CAROUSEL' | 'IMAGE' | 'SHORT_VIDEO' | 'VIDEO';
 
 export type ContentPieceStatus =
     | 'PROMPT_READY'
@@ -197,34 +200,35 @@ export type ContentPillar =
     | 'P3_CONVERSION'
     | 'P4_AUTHORITY';
 
+// Os rótulos são de TIPO, nunca de plataforma. O nome da plataforma entra no
+// prompt no bloco fixo de plataforma, depois do prompt de sistema editável.
 export const CONTENT_FORMAT_LABELS: Record<ContentFormat, string> = {
+    POST: 'Post',
     CAROUSEL: 'Carrossel',
-    SHORT_VIDEO: 'Short Video',
-    LINKEDIN_POST: 'Post LinkedIn',
     IMAGE: 'Image',
-    THREAD: 'Thread',
-    CTA_POST: 'CTA Post',
-    VIDEO_SCRIPT: 'Roteiro Vídeo',
+    SHORT_VIDEO: 'Short Video',
+    VIDEO: 'Vídeo',
 };
 
 export const CONTENT_FORMAT_ICONS: Record<ContentFormat, string> = {
+    POST: '💬',
     CAROUSEL: '📱',
-    SHORT_VIDEO: '🎬',
-    LINKEDIN_POST: '💼',
     IMAGE: '📸',
-    THREAD: '🧵',
-    CTA_POST: '🔗',
-    VIDEO_SCRIPT: '📝',
+    SHORT_VIDEO: '🎬',
+    VIDEO: '🎥',
 };
 
+/**
+ * Canal pré-sugerido por tipo. Só usado como valor inicial do picker — a
+ * ordenação fina faz-se por `platform-rules.sortTypesByFit`, que conhece as
+ * capacidades reais de cada plataforma.
+ */
 export const CONTENT_FORMAT_DEFAULTS: Record<ContentFormat, SocialChannel> = {
-    CAROUSEL: 'LINKEDIN',
-    SHORT_VIDEO: 'TIKTOK',
-    LINKEDIN_POST: 'LINKEDIN',
+    POST: 'LINKEDIN',
+    CAROUSEL: 'INSTAGRAM',
     IMAGE: 'INSTAGRAM',
-    THREAD: 'TWITTER',
-    CTA_POST: 'LINKEDIN',
-    VIDEO_SCRIPT: 'TIKTOK',
+    SHORT_VIDEO: 'TIKTOK',
+    VIDEO: 'YOUTUBE',
 };
 
 export const CONTENT_PIECE_STATUS_LABELS: Record<ContentPieceStatus, string> = {
@@ -269,6 +273,9 @@ export interface ContentPiece {
     hashtags: string[];
     slides: ContentSlide[] | null;
     slideCount: number | null;
+    /** Decomposição em cenas — só em SHORT_VIDEO / VIDEO. */
+    scenes: ContentScene[] | null;
+    durationSec: number | null;
     status: ContentPieceStatus;
     publishedAt: string | null;
     aiGenerated: boolean;
@@ -280,6 +287,15 @@ export interface ContentSlide {
     order: number;
     title: string;
     body: string;
+}
+
+/** Uma cena do vídeo. `kind` ajuda a IA a manter o arco narrativo. */
+export interface ContentScene {
+    order: number;
+    kind: 'hook' | 'problem' | 'solution' | 'cta' | string;
+    narration: string;
+    visual?: string | null;
+    onScreenText?: string | null;
 }
 
 export interface ContentPieceWithRelations extends ContentPiece {
@@ -311,16 +327,16 @@ export interface AISystemPrompt {
 }
 
 // =============================================================================
-// CONTENT GENERATION PROMPTS (prompt final portátil por item de peça/roteiro)
+// CONTENT GENERATION PROMPTS (prompt final portátil por item de peça)
 // =============================================================================
 
-export type GenerationPromptTargetType = 'PIECE' | 'VIDEO_SCRIPT';
+export type GenerationPromptTargetType = 'PIECE';
 
 export interface ContentGenerationPrompt {
     id: string;
     targetType: GenerationPromptTargetType;
     targetId: string;
-    itemKey: string | null; // 'main' | 'slide-1' | 'tweet-3' | ...
+    itemKey: string | null; // 'main' | 'slide-1' | 'scene-3' | ...
     prompt: string;
     providerId: string | null;
     modelCode: string | null;
@@ -328,16 +344,74 @@ export interface ContentGenerationPrompt {
 }
 
 // =============================================================================
+// CONTENT MEDIA PROMPTS (prompt genérico e portátil de imagem/áudio/vídeo)
+// =============================================================================
+
+/**
+ * Modalidade de media. É também o valor de `ContentMediaPrompt.modality` e o
+ * que casa com `AIProviderModel.modalities`.
+ */
+export type MediaModality = 'image' | 'audio' | 'video';
+
+export const MEDIA_MODALITIES: MediaModality[] = ['image', 'audio', 'video'];
+
+export const MEDIA_MODALITY_LABELS: Record<MediaModality, string> = {
+    image: 'Imagem',
+    audio: 'Áudio',
+    video: 'Vídeo',
+};
+
+export interface ContentMediaPrompt {
+    id: string;
+    workspaceId: string;
+    targetType: AssetTargetType;
+    targetId: string;
+    modality: MediaModality;
+    /** 'main' | 'slide-N' | 'scene-N' | 'ilustracao-N' */
+    itemKey: string;
+    /** Prompt portátil: só descrição. Nunca plataforma nem dimensões. */
+    prompt: string;
+    negativePrompt: string | null;
+    aspectRatio: string | null;
+    providerId: string | null;
+    modelCode: string | null;
+    createdAt: string;
+    editedAt: string | null;
+}
+
+/** Uma linha de `AIProviderModel.modalities`. */
+export type ModelModality = MediaModality | 'text' | 'embedding' | 'other';
+
+export const MODEL_MODALITIES: ModelModality[] = [
+    'text',
+    'image',
+    'audio',
+    'video',
+    'embedding',
+    'other',
+];
+
+export const MODEL_MODALITY_LABELS: Record<ModelModality, string> = {
+    text: 'Texto',
+    image: 'Imagem',
+    audio: 'Áudio',
+    video: 'Vídeo',
+    embedding: 'Embeddings',
+    other: 'Outro',
+};
+
+// =============================================================================
 // CONTENT PUBLICATIONS (publicações multi-plataforma, polimórfico)
 // =============================================================================
 
-export type PublicationTargetType = 'ARTICLE' | 'PIECE' | 'VIDEO_SCRIPT';
+export type PublicationTargetType = 'ARTICLE' | 'PIECE';
 
 export interface ContentPublication {
     id: string;
     targetType: PublicationTargetType;
     targetId: string;
-    platform: string; // 'LINKEDIN' | 'INSTAGRAM' | 'outros' | ...
+    /** Plataforma real onde foi publicado (enum único, não texto livre). */
+    platform: SocialChannel | null;
     url: string;
     publishedAt: string;
     createdAt: string;
@@ -346,10 +420,28 @@ export interface ContentPublication {
 // =============================================================================
 // CONTENT ASSETS (artefactos, vários por entidade, polimórfico)
 // Substitui as antigas colunas assetUrl/assetName, que só permitiam um
-// artefacto por artigo/peça/roteiro.
+// artefacto por artigo/peça.
 // =============================================================================
 
-export type AssetTargetType = 'ARTICLE' | 'PIECE' | 'VIDEO_SCRIPT';
+export type AssetTargetType = 'ARTICLE' | 'PIECE';
+
+/** Como nasceu o ficheiro. */
+export type AssetSource = 'UPLOAD' | 'GENERATED';
+
+export const ASSET_SOURCE_LABELS: Record<AssetSource, string> = {
+    UPLOAD: 'Carregado',
+    GENERATED: 'Gerado por IA',
+};
+
+/** Só os artefactos gerados usam os estados intermédios. */
+export type AssetStatus = 'PENDING' | 'GENERATING' | 'READY' | 'FAILED';
+
+export const ASSET_STATUS_LABELS: Record<AssetStatus, string> = {
+    PENDING: 'Em fila',
+    GENERATING: 'A gerar',
+    READY: 'Pronto',
+    FAILED: 'Falhou',
+};
 
 export interface ContentAsset {
     id: string;
@@ -361,6 +453,16 @@ export interface ContentAsset {
     name: string | null;
     /** MIME do upload; para links externos, inferido da extensão. */
     mimeType: string | null;
+    source: AssetSource;
+    status: AssetStatus;
+    /** Motivo da falha (só em GENERATED). */
+    error: string | null;
+    /** 'main' | 'slide-2' | 'scene-1' | 'ilustracao-1' */
+    itemKey: string | null;
+    /** Prompt de media que gerou este ficheiro. */
+    mediaPromptId: string | null;
+    providerId: string | null;
+    modelCode: string | null;
     createdAt: string;
 }
 

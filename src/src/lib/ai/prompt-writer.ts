@@ -1,3 +1,4 @@
+import { ALL_CONTENT_FORMATS } from '../../helpers/content-format.js';
 import type { Article, ContentFormat, Product, Workspace } from '@/types/database';
 import type { PillarConfig } from '@/types/pillar';
 
@@ -17,16 +18,12 @@ import type { PillarConfig } from '@/types/pillar';
 /** Prefixo do contentType em `ai_system_prompts` para o escritor de prompts. */
 export const PROMPT_WRITER_PREFIX = 'prompt_';
 
-/** Formatos com escritor de prompt (os que o painel de conteúdo oferece). */
-export const PROMPT_WRITER_FORMATS: ContentFormat[] = [
-    'CAROUSEL',
-    'LINKEDIN_POST',
-    'IMAGE',
-    'SHORT_VIDEO',
-    'CTA_POST',
-    'THREAD',
-    'VIDEO_SCRIPT',
-];
+/**
+ * Tipos com escritor de prompt — o registo único, não uma lista nova.
+ * Antes era uma cópia do enum; hoje uma sexta cópia era exactamente como os
+ * formatos velhos se desalinhavam do resto da app.
+ */
+export const PROMPT_WRITER_FORMATS: ContentFormat[] = [...ALL_CONTENT_FORMATS];
 
 /** contentType do system prompt do escritor para um formato. */
 export function promptWriterContentType(format: ContentFormat): string {
@@ -46,86 +43,72 @@ interface FormatSpec {
     rules: string[];
 }
 
-/** Label por formato (espelha CONTENT_FORMAT_LABELS, sem dependência). */
+/**
+ * Especificação do que a peça final é, POR TIPO — sem nome de plataforma.
+ *
+ * O que a peça vai ser numa plataforma específica (limite de caracteres, número
+ * de hashtags) entra no prompt em runtime pelo bloco de plataforma. Aqui só
+ * fica a ESTRUTURA, que é a mesma em qualquer sítio. É essa separação que
+ * impede um prompt escrito para LinkedIn de vazar para o Instagram.
+ */
 export const PROMPT_WRITER_FORMAT_LABELS: Record<ContentFormat, string> = {
+    POST: 'Post',
     CAROUSEL: 'Carrossel',
-    LINKEDIN_POST: 'Post LinkedIn',
-    IMAGE: 'Post visual de Instagram',
+    IMAGE: 'Post visual',
     SHORT_VIDEO: 'Vídeo curto',
-    CTA_POST: 'Post com CTA',
-    THREAD: 'Thread',
-    VIDEO_SCRIPT: 'Roteiro de vídeo',
+    VIDEO: 'Vídeo',
 };
 
 const FORMAT_SPECS: Record<ContentFormat, FormatSpec> = {
-    CAROUSEL: {
-        label: 'Carrossel de LinkedIn',
+    POST: {
+        label: 'Post de rede social',
         output:
-            'um carrossel de slides (o sistema pede entre 5 e 10 slides, com título e corpo por slide, JSON)',
+            'um post de rede social (o sistema pede "body" como texto de publicação, "hookText", "ctaText" e "hashtags", JSON)',
+        rules: [
+            'Define a tese/opinião central e o gancho da primeira linha',
+            'Define a estrutura (o que se diz em cada parágrafo) e o fecho com pergunta ou CTA',
+            'Indica o ângulo emocional e a imagem mental que deixa',
+        ],
+    },
+    CAROUSEL: {
+        label: 'Carrossel de slides',
+        output:
+            'um carrossel de slides (o sistema pede entre 5 e 10 slides, com "title" e "body" por slide, JSON)',
         rules: [
             'Define slide a slide o que vai em cada um (o slide 1 é o gancho, o último é o CTA)',
-            'Cada slide tem um título curto e um corpo de no máximo ~150 caracteres',
+            'Cada slide tem um título curto e um corpo que caiba num ecrã',
             'Indica a tese/ângulo de cada slide, não o texto final palavra por palavra',
             'Deve incluir um CTA final claro',
         ],
     },
-    LINKEDIN_POST: {
-        label: 'Post de LinkedIn',
-        output:
-            'um post opinativo de LinkedIn (o sistema pede 150-300 palavras com gancho, corpo e 2-3 hashtags, JSON)',
-        rules: [
-            'Define a tese/opinião central e o gancho da primeira linha',
-            'Define a estrutura (o que se diz em cada parágrafo) e o fecho com pergunta ou CTA',
-            'Indica que hashtags (2-3) são esperadas no fim',
-        ],
-    },
     IMAGE: {
-        label: 'Post visual de Instagram',
+        label: 'Post visual com legenda',
         output:
-            'um post de Instagram (o sistema pede 50-150 palavras de caption, tom conversacional, 5-8 hashtags, JSON)',
+            'uma legenda para acompanhar uma imagem (o sistema pede "body" como legenda e "hashtags", JSON; a imagem é gerada noutra etapa)',
         rules: [
             'Foca num único ponto principal: o que é que se vê e o que fica escrito na imagem',
-            'O texto que vai SOBREPOSTO na imagem tem de ser curtíssimo — escreve-o literalmente, few words, máximo ~10 palavras no total',
-            'A caption (50-150 palavras) explica e dá contexto ao que está na imagem',
-            'Indica o visual/conceito da imagem (o que se vê) de forma concreta',
+            'Descreve o visual/conceito da imagem de forma concreta — é isso que vai alimentar o prompt de imagem',
+            'Se houver texto sobreposto na imagem, escreve-o literalmente e mantém curtíssimo',
+            'A legenda dá contexto ao que está na imagem, sem repetir o que lá se lê',
         ],
     },
     SHORT_VIDEO: {
-        label: 'Vídeo curto (TikTok/Reels)',
+        label: 'Vídeo curto',
         output:
-            'um vídeo curto (o sistema pede só o gancho dos primeiros 3-5 segundos e o CTA final, JSON)',
+            'um vídeo curto (o sistema pede "scenes" com narração/visual/texto-no-ecrã e o roteiro em "body", JSON)',
         rules: [
-            'Foca quase tudo no gancho: define o que é dito/mostrado nos primeiros 3 segundos',
-            'O gancho tem de ser dito em no máximo ~15 palavras e o CTA em ~20',
-            'Sugere o visual dos primeiros segundos (o que aparece no ecrã)',
+            'Foca quase tudo no gancho: define o que é dito e mostrado nos primeiros 3 segundos',
+            'Descreve cena a cena (a imagem vem de "visual" em cada cena)',
+            'Indica o tom de leitura e o ritmo',
         ],
     },
-    CTA_POST: {
-        label: 'Post de conversão com CTA',
+    VIDEO: {
+        label: 'Vídeo',
         output:
-            'um post directo com CTA (o sistema pede 80-150 palavras, transformação/resultado e link [LINK], JSON)',
+            'um vídeo (o sistema pede "scenes" com narração/visual/texto-no-ecrã, "durationSec" e o roteiro em "body", JSON)',
         rules: [
-            'Define a transformação prometida e para quem é',
-            'Indica o link como [LINK] (o sistema preenche a landing page)',
-            'O CTA tem de ser explícito e accionável',
-        ],
-    },
-    THREAD: {
-        label: 'Thread de X/Twitter',
-        output:
-            'uma thread (o sistema pede tweets encadeados, JSON, separados por linha em branco no body)',
-        rules: [
-            'Define tweet a tweet o que se diz (o primeiro é o gancho, o último é o CTA)',
-            'Cada tweet tem de caber num post curto — escreve o texto de cada tweet ou o seu limite',
-            'Mantém uma linha narrativa coerente do início ao fim',
-        ],
-    },
-    VIDEO_SCRIPT: {
-        label: 'Roteiro de vídeo',
-        output:
-            'um roteiro de vídeo curto (o sistema pede gancho, problema, solução, CTA e o roteiro completo, JSON)',
-        rules: [
-            'Define o gancho (3 primeiros segundos), o problema, a solução e o CTA final',
+            'Define o gancho, o problema, a solução e o CTA final',
+            'Descreve cena a cena com contexto suficiente para quem filma saber o que fazer',
             'Indica a duração alvo e o tom de leitura',
         ],
     },
@@ -173,6 +156,10 @@ ${productLine}
 1. **O essencial do artigo, já destilado.** O prompt é autónomo: quem o ler tem de conseguir escrever a peça sem ver o artigo. Condensa o artigo nas mensagens que importam para esta peça — não copies o artigo inteiro, nem faças copy-paste de parágrafos inteiros.
 2. **As regras da peça** (as da secção "Regras estruturais" abaixo), adaptadas a este caso.
 3. **O contexto certo**: pilar, produto, tom de voz, público-alvo e Canal — só o que for relevante para esta peça.
+
+## Canal (se for indicado)
+O canal destino entra à parte, num bloco próprio que é juntado ao prompt na altura da geração. **Não repitas as regras do canal aqui** (limites de caracteres, número de hashtags, tom da plataforma, formato): elas chegam em runtime e repeti-las aqui seria escrever as regras duas vezes em sítios diferentes, que é como uma delas acaba errada.
+Diz no prompt que o texto é para uma plataforma de rede social e deixa os limites para o bloco de runtime. Se o canal não suportar nativamente o formato pedido, menciona no prompt que o resultado tem de ser adaptado ao que o canal aceita.
 
 ## Regras estruturais a fixar no prompt (${spec.label})
 ${spec.rules.map((r) => `- ${r}`).join('\n')}

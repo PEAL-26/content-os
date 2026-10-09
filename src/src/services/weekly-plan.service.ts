@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { contentPieceService } from './content-piece.service';
 import { articleService } from './article.service';
 import { assetService, uploadAssetFile } from './content-asset.service';
+import { toPublicationPlatform } from './publication-platforms';
 import { getDayOfWeekNumber } from '@/lib/date-utils';
 
 export interface WeeklyPlanData {
@@ -520,7 +521,10 @@ export const weeklyPlanService = {
                     id: uuidv4(),
                     targetType,
                     targetId,
-                    platform: data.platform || 'outros',
+                    // `'outros'` já não existe: `platform` é o enum `SocialChannel`
+                    // (Decisão 34), e escrever um valor fora dele rebentava o
+                    // insert. `toPublicationPlatform` valida e cai no default.
+                    platform: toPublicationPlatform(data.platform),
                     url: data.publishedUrl ?? assetUrl ?? '',
                     publishedAt: data.publishedAt.toISOString(),
                     createdAt: new Date().toISOString(),

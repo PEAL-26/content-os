@@ -8,7 +8,7 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 
 // =============================================================================
-// CONTENT ASSETS (artefactos — vários por ARTICLE|PIECE|VIDEO_SCRIPT)
+// CONTENT ASSETS (artefactos — vários por ARTICLE|PIECE)
 // Espelha content_publications: tabela polimórfica sem FK, escrevida pelo
 // cliente via supabase-js.
 // =============================================================================

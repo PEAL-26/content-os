@@ -9,6 +9,7 @@ import type {
 } from '@/types/database';
 import { v4 as uuidv4 } from 'uuid';
 import { deleteAssetsForTarget } from '@/services/content-asset.service';
+import { deleteMediaPromptsForTarget } from '@/services/media-prompt.service';
 import { saveGenerationPrompts, type PortablePromptItem } from '@/services/ai-prompt.service';
 
 export interface CreateContentPieceInput {
@@ -287,6 +288,9 @@ export const contentPieceService = {
         const workspaceId = data?.[0]?.workspaceId;
         if (workspaceId) {
             await deleteAssetsForTarget(workspaceId, 'PIECE', id);
+            // `content_media_prompts` não tem FK: o cascade é explícito, senão
+            // os prompts ficavam órfãos de uma peça que já não existe.
+            await deleteMediaPromptsForTarget(workspaceId, 'PIECE', id);
         }
     },
 

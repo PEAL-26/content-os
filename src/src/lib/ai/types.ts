@@ -1,4 +1,4 @@
-import type { Product, SocialChannel, Workspace } from '@/types/database';
+import type { Product, Workspace } from '@/types/database';
 import type { PillarConfig } from '@/types/pillar';
 
 // =============================================================================
@@ -15,6 +15,15 @@ export interface AIProviderModelLike {
     modelCode: string;
     /** Configuração padrão do modelo (temperature, max_tokens, ...). */
     config?: AIProviderConfigOptions | null;
+    /**
+     * Que tipos de dados este modelo produz: `['text']`, `['image']`, …
+     *
+     * É a chave de tudo o que decide "qual modelo gera este artefacto" — um
+     * modelo de imagem não entra na resolução de um `MEDIA_ARTIFACT` de áudio
+     * mesmo que o provider saiba fazer os dois. Vazio = desconhecido (a UI
+     * desactiva o botão e mostra "sem modelo definido").
+     */
+    modalities?: string[];
     isActive: boolean;
     createdAt: string;
 }
@@ -135,41 +144,8 @@ export type GenerateArticleResult =
       }
     | { success: false; error: string; code: AIProviderResult['code'] };
 
-export interface GeneratedVideoScript {
-    title: string;
-    hook: string;
-    problem: string | null;
-    solution: string | null;
-    cta: string;
-    fullScript: string | null;
-    durationSec: number;
-    onScreenText: string[];
-    bRoll: string[];
-    provider?: AIProviderId;
-}
-
-export interface GenerateVideoScriptParams {
-    article: Article;
-    targetChannel: SocialChannel;
-    durationSec: number;
-    workspace: Workspace;
-}
-
-export type GenerateVideoScriptResult =
-    | {
-          success: true;
-          script: GeneratedVideoScript;
-          provider: AIProviderId;
-          prompt: string;
-          /** Prompt final portátil por item (para content_generation_prompts). */
-          portablePrompts?: PortablePromptItem[];
-      }
-    | { success: false; error: string; code: AIProviderResult['code'] };
-
 /** Prompt final portátil — título/índice para registo em content_generation_prompts. */
 export interface PortablePromptItem {
     itemKey: string;
     prompt: string;
 }
-
-type Article = import('@/types/database').Article;

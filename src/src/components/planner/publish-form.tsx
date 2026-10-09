@@ -1,19 +1,22 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Check, ExternalLink, Calendar, Upload } from 'lucide-react';
+import {
+    DEFAULT_PUBLICATION_PLATFORM,
+    PUBLICATION_PLATFORMS,
+    toPublicationPlatform,
+} from '@/services/publication-platforms';
+import type { SocialChannel } from '@/types/database';
 
-const PLATFORM_OPTIONS = [
-    { value: 'LINKEDIN', label: 'LinkedIn' },
-    { value: 'INSTAGRAM', label: 'Instagram' },
-    { value: 'TIKTOK', label: 'TikTok' },
-    { value: 'YOUTUBE', label: 'YouTube' },
-    { value: 'X_TWITTER', label: 'X (Twitter)' },
-    { value: 'FACEBOOK', label: 'Facebook' },
-    { value: 'outros', label: 'Outros' },
-];
+const PLATFORM_OPTIONS = PUBLICATION_PLATFORMS;
 
 export interface PublishData {
-    platform: string;
+    /**
+     * O enum `SocialChannel`, não `string`: a coluna `platform` deixou de ser
+     * texto livre (Decisão 34) e um `string` aqui deixava passar um valor fora
+     * do enum até ao insert.
+     */
+    platform: SocialChannel;
     publishedUrl?: string;
     publishedAt: Date;
     /** Ficheiro do artefacto publicado (upload para Storage feito pelo chamador). */
@@ -46,7 +49,8 @@ export function PublishForm({
     initialDate,
 }: PublishFormProps) {
     const base = initialDate ?? new Date();
-    const [platform, setPlatform] = useState('LINKEDIN');
+    const [platform, setPlatform] =
+        useState<SocialChannel>(DEFAULT_PUBLICATION_PLATFORM);
     const [publishedUrl, setPublishedUrl] = useState('');
     const [publishedDate, setPublishedDate] = useState(
         base.toISOString().split('T')[0]
@@ -74,7 +78,9 @@ export function PublishForm({
                 </label>
                 <select
                     value={platform}
-                    onChange={(e) => setPlatform(e.target.value)}
+                    onChange={(e) =>
+                            setPlatform(toPublicationPlatform(e.target.value))
+                        }
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 >
                     {PLATFORM_OPTIONS.map((opt) => (

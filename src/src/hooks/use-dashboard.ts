@@ -3,6 +3,7 @@ import { articleService } from '@/services/article.service';
 import { contentPieceService } from '@/services/content-piece.service';
 import { pillarService } from '@/services/pillar.service';
 import { weeklyPlanService } from '@/services/weekly-plan.service';
+import { DEFAULT_PUBLICATION_PLATFORM } from '@/services/publication-platforms';
 import { useWorkspaceStore } from '@/stores/workspace-store';
 import { usePlanningConfig } from '@/hooks/use-planning-config';
 import type {
@@ -176,7 +177,9 @@ export function useDashboard() {
         async (itemId: string) => {
             try {
                 await weeklyPlanService.markAsPublished(itemId, {
-                    platform: 'outros',
+                    // Marca o canal principal do workspace como destino, e
+                    // não um `'outros'` que deixou de existir no enum.
+                    platform: DEFAULT_PUBLICATION_PLATFORM,
                     publishedAt: new Date(),
                 });
                 setWeekItems((prev) =>

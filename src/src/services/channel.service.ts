@@ -13,7 +13,13 @@ export interface UpdateChannelInput {
     handle?: string | null;
     isPrimary?: boolean;
     defaultTone?: string | null;
+    /** Instruções que a IA recebe em cada geração deste canal. */
     notes?: string | null;
+    /**
+     * Overrides das regras de plataforma. `null` limpa tudo e volta aos
+     * defaults de código (ver `lib/platform-rules`).
+     */
+    rules?: Record<string, unknown> | null;
 }
 
 export const channelService = {
@@ -129,6 +135,10 @@ export const channelService = {
                 handle: null,
                 defaultTone: null,
                 notes: null,
+                // `null` = herdar os defaults de código. A regra vive em
+                // `lib/platform-rules`, não na BD — por isso um canal novo
+                // nasce já com as regras correctas da plataforma.
+                rules: null,
             })
             .select()
             .single();

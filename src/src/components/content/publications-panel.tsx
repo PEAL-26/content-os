@@ -1,17 +1,14 @@
 import { isSafeExternalUrl } from '@/services/content-asset.service';
 import { publicationService } from '@/services/publication.service';
-import type { PublicationTargetType } from '@/types/database';
+import {
+    DEFAULT_PUBLICATION_PLATFORM,
+    PUBLICATION_PLATFORMS,
+    toPublicationPlatform,
+} from '@/services/publication-platforms';
+import type { PublicationTargetType, SocialChannel } from '@/types/database';
 import { useCallback, useEffect, useState } from 'react';
 
-const PLATFORM_OPTIONS = [
-    { value: 'LINKEDIN', label: 'LinkedIn' },
-    { value: 'INSTAGRAM', label: 'Instagram' },
-    { value: 'TIKTOK', label: 'TikTok' },
-    { value: 'YOUTUBE', label: 'YouTube' },
-    { value: 'X_TWITTER', label: 'X (Twitter)' },
-    { value: 'FACEBOOK', label: 'Facebook' },
-    { value: 'outros', label: 'Outros' },
-];
+const PLATFORM_OPTIONS = PUBLICATION_PLATFORMS;
 
 interface PublicationsPanelProps {
     targetType: PublicationTargetType;
@@ -47,7 +44,10 @@ export function PublicationsPanel({
     const [publications, setPublications] = useState<
         Awaited<ReturnType<typeof publicationService.getPublications>>
     >([]);
-    const [platform, setPlatform] = useState('LINKEDIN');
+    // Tipado como `SocialChannel` (e não `string`) porque é o que a coluna
+    // espera — um `string` permitia gravar um valor fora do enum.
+    const [platform, setPlatform] =
+        useState<SocialChannel>(DEFAULT_PUBLICATION_PLATFORM);
     const [url, setUrl] = useState('');
     const [isBusy, setIsBusy] = useState(false);
     const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(
@@ -209,7 +209,9 @@ export function PublicationsPanel({
             <div className="flex gap-2">
                 <select
                     value={platform}
-                    onChange={(e) => setPlatform(e.target.value)}
+                    onChange={(e) =>
+                            setPlatform(toPublicationPlatform(e.target.value))
+                        }
                     className="shrink-0 rounded-md border border-gray-300 bg-white px-2 py-1.5 text-xs focus:border-blue-500 focus:outline-none"
                 >
                     {PLATFORM_OPTIONS.map((o) => (

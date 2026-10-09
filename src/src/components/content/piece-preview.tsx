@@ -1,3 +1,4 @@
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import {
     CONTENT_FORMAT_ICONS,
     type ContentPieceWithRelations,
@@ -5,22 +6,27 @@ import {
 import { useState } from 'react';
 
 // =============================================================================
-// PRÉ-VISUALIZAÇÕES POR FORMATO
+// PRÉ-VISUALIZAÇÕES POR TIPO DE CONTEÚDO
 //
 // Estas peças mostravam-se dentro do ContentPieceCard, onde o texto é cortado
-// (line-clamp, "primeiros 3 tweets", secções de 80 caracteres) porque o card é
-// pequeno. Na página de detalhe o objectivo é oposto — ver o conteúdo todo.
+// (line-clamp, secções de 80 caracteres) porque o card é pequeno. Na página de
+// detalhe o objectivo é oposto — ver o conteúdo todo.
 //
 // A prop `compact` mantém os dois comportamentos:
 //   compact=true  → card (corta o texto)
 //   compact=false → página de detalhe (mostra tudo)
+//
+// Os componentes são genéricos de propósito: `POST` não é "preview de LinkedIn"
+// (seria o mesmo bug que motivou a troca de tipos) e `IMAGE` não é "preview de
+// Instagram". O que se vê é o formato, não a plataforma.
 // =============================================================================
 
 interface PreviewProps {
     compact?: boolean;
 }
 
-export function LinkedInPreview({
+/** `POST` — texto corrido com hashtags no fim. */
+export function PostPreview({
     body,
     hashtags,
     compact = true,
@@ -46,7 +52,8 @@ export function LinkedInPreview({
     );
 }
 
-export function InstagramPreview({
+/** `IMAGE` — moldura de imagem com a legenda por baixo. */
+export function ImagePreview({
     body,
     hashtags,
     compact = true,
@@ -55,8 +62,8 @@ export function InstagramPreview({
     hashtags: string[];
 } & PreviewProps) {
     return (
-        <div className="rounded-lg border border-pink-100 bg-white">
-            <div className="flex h-32 items-center justify-center bg-gradient-to-br from-pink-50 to-purple-50">
+        <div className="rounded-lg border border-purple-100 bg-white">
+            <div className="flex h-32 items-center justify-center bg-gradient-to-br from-purple-50 to-gray-100">
                 <span className="text-4xl">{CONTENT_FORMAT_ICONS.IMAGE}</span>
             </div>
             <div className="p-3">
@@ -65,10 +72,10 @@ export function InstagramPreview({
                         compact ? 'line-clamp-2' : ''
                     }`}
                 >
-                    {body || 'Sem caption'}
+                    {body || 'Sem legenda'}
                 </p>
                 {hashtags.length > 0 && (
-                    <p className="mt-1 text-xs text-pink-600">
+                    <p className="mt-1 text-xs text-purple-600">
                         {compact
                             ? hashtags
                                   .slice(0, 3)
@@ -83,6 +90,7 @@ export function InstagramPreview({
     );
 }
 
+/** `CAROUSEL` — navega slide a slide. */
 export function CarouselPreview({
     slides,
     slideCount,
@@ -128,42 +136,14 @@ export function CarouselPreview({
                             className="absolute top-1/2 left-2 -translate-y-1/2 rounded-full bg-white/20 p-1 hover:bg-white/30"
                             aria-label="Slide anterior"
                         >
-                            <svg
-                                className="h-4 w-4 text-white"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                            >
-                                <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M15 19l-7-7 7-7"
-                                />
-                            </svg>
+                            <ChevronLeft className="h-4 w-4 text-white" />
                         </button>
                         <button
-                            onClick={() =>
-                                setCurrentSlide((s) =>
-                                    s === total - 1 ? 0 : s + 1
-                                )
-                            }
+                            onClick={() => setCurrentSlide((s) => s + 1)}
                             className="absolute top-1/2 right-2 -translate-y-1/2 rounded-full bg-white/20 p-1 hover:bg-white/30"
                             aria-label="Slide seguinte"
                         >
-                            <svg
-                                className="h-4 w-4 text-white"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                            >
-                                <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M9 5l7 7-7 7"
-                                />
-                            </svg>
+                            <ChevronRight className="h-4 w-4 text-white" />
                         </button>
                     </>
                 )}
@@ -182,33 +162,7 @@ export function CarouselPreview({
     );
 }
 
-export function CTAPreview({
-    body,
-    ctaText,
-    compact = true,
-}: {
-    body: string;
-    ctaText: string | null;
-} & PreviewProps) {
-    return (
-        <div className="rounded-lg border border-green-100 bg-white p-4">
-            <p
-                className={`mb-3 text-sm text-gray-800 ${
-                    compact ? 'line-clamp-3' : 'whitespace-pre-wrap'
-                }`}
-            >
-                {body || 'Sem conteúdo'}
-            </p>
-            <button
-                type="button"
-                className="w-full rounded-md bg-green-600 py-2 text-sm font-medium text-white"
-            >
-                {ctaText || 'Call to Action'}
-            </button>
-        </div>
-    );
-}
-
+/** `SHORT_VIDEO` — gancho em destaque, o resto cortado no card. */
 export function ShortVideoPreview({
     hookText,
     ctaText,
@@ -221,10 +175,10 @@ export function ShortVideoPreview({
         <div className="rounded-lg border border-purple-100 bg-gradient-to-br from-purple-50 to-pink-50 p-4">
             <div className="mb-3 rounded bg-yellow-100 px-2 py-1">
                 <span className="text-xs font-medium text-yellow-800">
-                    HOOK
+                    GANCHO
                 </span>
                 <p className="mt-1 text-sm font-medium text-gray-900">
-                    {hookText || 'Sem hook'}
+                    {hookText || 'Sem gancho'}
                 </p>
             </div>
             {compact && (
@@ -249,41 +203,8 @@ export function ShortVideoPreview({
     );
 }
 
-export function ThreadPreview({
-    body,
-    compact = true,
-}: { body: string } & PreviewProps) {
-    const allTweets = body.split('\n\n').filter(Boolean);
-    const tweets = compact ? allTweets.slice(0, 3) : allTweets;
-
-    return (
-        <div className="space-y-2 rounded-lg border border-gray-200 bg-white p-3">
-            {tweets.length > 0 ? (
-                tweets.map((tweet, i) => (
-                    <div key={i} className="flex gap-2">
-                        <span className="shrink-0 text-xs font-medium text-gray-400">
-                            {i + 1}/
-                        </span>
-                        <p
-                            className={`text-xs text-gray-700 ${
-                                compact ? 'line-clamp-2' : 'whitespace-pre-wrap'
-                            }`}
-                        >
-                            {tweet}
-                        </p>
-                    </div>
-                ))
-            ) : (
-                <p className="text-xs text-gray-400">Sem tweets</p>
-            )}
-            {compact && allTweets.length >= 3 && (
-                <p className="text-xs text-gray-400">+ mais tweets...</p>
-            )}
-        </div>
-    );
-}
-
-export function VideoScriptPreview({
+/** `VIDEO` — o roteiro por secções, com gancho e CTA destacados. */
+export function VideoPreview({
     body,
     compact = true,
 }: { body: string } & PreviewProps) {
@@ -324,7 +245,7 @@ export function VideoScriptPreview({
 }
 
 /**
- * Desenha a peça na pré-visualização do seu formato.
+ * Desenha a peça na pré-visualização do seu tipo.
  *
  * Peça só com prompt (PROMPT_READY sem conteúdo) mostra um aviso a apontar para
  * o prompt, em vez de um preview vazio sem explicação.
@@ -359,9 +280,9 @@ export function PiecePreview({
                     compact={compact}
                 />
             );
-        case 'LINKEDIN_POST':
+        case 'POST':
             return (
-                <LinkedInPreview
+                <PostPreview
                     body={piece.body}
                     hashtags={piece.hashtags}
                     compact={compact}
@@ -369,17 +290,9 @@ export function PiecePreview({
             );
         case 'IMAGE':
             return (
-                <InstagramPreview
+                <ImagePreview
                     body={piece.body}
                     hashtags={piece.hashtags}
-                    compact={compact}
-                />
-            );
-        case 'CTA_POST':
-            return (
-                <CTAPreview
-                    body={piece.body}
-                    ctaText={piece.ctaText}
                     compact={compact}
                 />
             );
@@ -391,10 +304,8 @@ export function PiecePreview({
                     compact={compact}
                 />
             );
-        case 'THREAD':
-            return <ThreadPreview body={piece.body} compact={compact} />;
-        case 'VIDEO_SCRIPT':
-            return <VideoScriptPreview body={piece.body} compact={compact} />;
+        case 'VIDEO':
+            return <VideoPreview body={piece.body} compact={compact} />;
         default:
             return (
                 <div className="rounded-lg border border-gray-200 bg-white p-4">

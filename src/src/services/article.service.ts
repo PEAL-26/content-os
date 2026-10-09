@@ -11,6 +11,7 @@ import type {
 import { generateSlug } from '@/helpers/slug';
 import { v4 as uuidv4 } from 'uuid';
 import { deleteAssetsForTarget } from '@/services/content-asset.service';
+import { deleteMediaPromptsForTarget } from '@/services/media-prompt.service';
 
 export interface GetArticlesFilters {
     status?: ArticleStatus | 'ALL';
@@ -286,6 +287,10 @@ export const articleService = {
         const workspaceId = data?.[0]?.workspaceId;
         if (workspaceId) {
             await deleteAssetsForTarget(workspaceId, 'ARTICLE', id);
+            // `content_media_prompts` também é polimórfica e sem FK — sem este
+            // cascade, os prompts das ilustrações ficavam órfãos de um artigo
+            // apagado.
+            await deleteMediaPromptsForTarget(workspaceId, 'ARTICLE', id);
         }
     },
 

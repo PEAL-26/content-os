@@ -21,12 +21,9 @@ import {
     buildItemPortablePrompt,
     buildPortablePromptsForPiece,
     buildSingleItemPortablePrompt,
-    buildSystemPromptForFormat,
-    buildVideoScriptSystemPrompt,
-    convertParsedToScript,
+    buildSystemPromptForType,
     parseGeneratedContent,
     parseSingleItemResponse,
-    parseVideoScriptResponse,
     type ParsedGeneratedPiece,
 } from '../../src/lib/ai/content-prompts.js';
 import { METADATA_FIELDS } from '../../src/lib/ai/article-metadata.js';
@@ -42,8 +39,12 @@ import {
     generateWithFallback,
     getAvailableProvidersFromStore,
 } from '../../src/lib/ai/provider.js';
-import type { GeneratedVideoScript } from '../../src/lib/ai/types.js';
-import type { ContentFormat } from '../../src/types/database.js';
+import {
+    CHANNEL_LABELS,
+    type ContentFormat,
+    type ContentScene,
+} from '../../src/types/database.js';
+import { buildPlatformBlock, resolveRules } from '../../src/lib/platform-rules/index.js';
 import type { PillarConfig } from '../../src/types/pillar.js';
 import {
     loadGenerationContext,
@@ -63,15 +64,59 @@ import {
     saveGenerationPrompts,
     updateJobItems,
 } from './job-store.js';
+import { parseItemKey } from './enqueue.js';
 import { createServerTransport } from './transport.js';
+import {
+    isMediaModality,
+    regenerateMediaPromptsForItem,
+    runMediaArtifact,
+    runMediaPrompt,
+    type GeneratedMediaItem,
+    type MediaModalityValue,
+} from './media-jobs.js';
+
+/**
+ * Itens de um job de MEDIA, reconstruídos a partir dos params.
+ *
+ * O `items` gravado na BD é o `GenerationJobItem` genérico (para o painel de
+ * jobs), mas o MEDIA precisa de saber o par (modalidade, assunto) — que só os
+ * params têm. O estado guardado é preservado por índice, para um retry não
+ * perder o que já ficou `COMPLETED`.
+ */
+function buildMediaItems(
+    params: MediaPromptJobParams | MediaArtifactJobParams
+): GeneratedMediaItem[] {
+    const placeholder = (modality: MediaModalityValue): GeneratedMediaItem => ({
+        modality,
+        // O `subject` real é derivado do conteúdo dentro do runner; aqui só
+        // precisamos de um item por modalidade para o painel ter onde escrever.
+        subject: { itemKey: 'main', label: modality, text: '' },
+        status: 'QUEUED',
+        error: null,
+        mediaPromptId: null,
+    });
+
+    if ('modalities' in params) {
+        return params.modalities
+            .filter((m): m is MediaModalityValue => isMediaModality(m))
+            .map(placeholder);
+    }
+    return [
+        {
+            ...placeholder('image'),
+            mediaPromptId: params.mediaPromptId,
+        },
+    ];
+}
 import type {
-    ArticleMetadataJobParams,
     ContentItemJobParams,
     ContentPiecesJobParams,
+    ArticleMetadataJobParams,
     GenerationJobItem,
     GenerationJobParams,
+    MediaArtifactJobParams,
+    MediaPromptJobParams,
     NewArticleJobParams,
-    VideoScriptJobParams,
 } from './types.js';
 
 // =============================================================================
@@ -121,11 +166,21 @@ export async function runGenerationJob(
                     items
                 );
                 break;
-            case 'VIDEO_SCRIPT':
-                await runVideoScript(
+            case 'MEDIA_PROMPT':
+                await runMediaPrompt(
                     job,
-                    params as VideoScriptJobParams,
-                    items
+                    params as MediaPromptJobParams,
+                    // O `items` de um job de media é o par (modalidade, assunto),
+                    // não o `GenerationJobItem` genérico — reconstrói-o a partir
+                    // dos params, que são a fonte de verdade.
+                    buildMediaItems(params as MediaPromptJobParams)
+                );
+                break;
+            case 'MEDIA_ARTIFACT':
+                await runMediaArtifact(
+                    job,
+                    params as MediaArtifactJobParams,
+                    buildMediaItems(params as MediaArtifactJobParams)
                 );
                 break;
             case 'CONTENT_PROMPT':
@@ -347,8 +402,70 @@ async function runContentPieces(
         const error =
             runningItems[0]?.error ?? 'Todas as peças falharam a gerar.';
         await markJobFailed(job.id, error, runningItems);
-    } else {
-        await markJobCompleted(job.id, runningItems);
+        return;
+    }
+
+    await markJobCompleted(job.id, runningItems);
+
+    // Prompts de media: correm DEPOIS de as peças existirem, porque a semente
+    // de cada prompt é o próprio conteúdo (slides, cenas, o tema da peça). É
+    // o que faz o requisito "se tiver um modelo" funcionar sem pedir um clique:
+    // o prompt é barato e fica guardado mesmo sem nenhum modelo de media activo.
+    //
+    // Os ARTEFACTOS não correm aqui — precisam de confirmação com o custo
+    // estimado à vista (Decisão 27).
+    await enqueueMediaPromptsForPieces(job, params, runningItems);
+}
+
+/**
+ * Enfileira um `MEDIA_PROMPT` por peça gerada com sucesso.
+ *
+ * Silencioso em caso de falha: o conteúdo textual já está pronto e é o que o
+ * utilizador pediu. Falhar o `CONTENT_PIECES` por causa de um prompt de media
+ * seria perder o trabalho que deu certo.
+ */
+async function enqueueMediaPromptsForPieces(
+    job: JobRow,
+    params: ContentPiecesJobParams,
+    items: GenerationJobItem[]
+): Promise<void> {
+    const modalities = (params.modalities ?? []).filter((m) =>
+        isMediaModality(m)
+    );
+    if (modalities.length === 0) return;
+
+    const completed = items.filter(
+        (item) => (item.status ?? 'QUEUED') === 'COMPLETED'
+    );
+    if (completed.length === 0) return;
+
+    const { enqueueGeneration } = await import('./enqueue.js');
+    const { sendMediaRequested } = await import('./inngest.js');
+
+    for (const item of completed) {
+        try {
+            const created = await enqueueGeneration({
+                workspaceId: job.workspaceId,
+                userId: job.userId,
+                jobType: 'MEDIA_PROMPT',
+                params: {
+                    targetId: item.targetId,
+                    targetType: 'PIECE',
+                    modalities,
+                    overwrite: false,
+                    preferred: params.preferred ?? null,
+                },
+            });
+            // O job nasce aqui mas NINGUÉM o dispara se o evento não for
+            // enviado — e o MEDIA_PROMPT usa o evento de media (timeout e
+            // concorrência próprios), não o de texto.
+            await sendMediaRequested(created.jobId);
+        } catch (error) {
+            console.warn(
+                `[media] não foi possível enfileirar o prompt de media da peça ${item.targetId}:`,
+                error instanceof Error ? error.message : error
+            );
+        }
     }
 }
 
@@ -369,16 +486,45 @@ async function generatePieceInto(
     /** Usa o prompt gravado da peça em vez do contexto automático. */
     useStoredPrompt: boolean
 ): Promise<void> {
+    // O canal manda na prosa da geração. Sem isto, `channelId` era apenas
+    // gravado na BD e nunca chegava ao prompt — que era o bug.
+    const channel = await prisma.channelConfig.findFirst({
+        where: { contentPieces: { some: { id: pieceId } } },
+    });
+
+    
+
+    // Sem canal não há bloco — é possível numa peça criada antes de o canal existir.
+    const platformBlock = channel
+        ? buildPlatformBlock({
+              channel: channel.channel,
+              handle: channel.handle,
+              type: format,
+              rules: resolveRules({
+                  channel: channel.channel,
+                  rules: channel.rules,
+              }),
+              defaultTone: channel.defaultTone,
+              notes: channel.notes,
+          })
+        : null;
+
     const systemPrompt = await resolveSystemPrompt(
         job.workspaceId,
         job.userId,
         format,
-        () => buildSystemPromptForFormat(format, params)
+        () => buildSystemPromptForType(format, params)
     );
     const fullSystem = withAdditionalInstructions(
         systemPrompt,
-        additionalInstructions
+        additionalInstructions,
+        platformBlock ?? undefined
     );
+
+    // O tom do canal sobrepõe o tom do workspace (Decisão 17).
+    const context = buildContext(params, {
+        toneOverride: channel?.defaultTone,
+    });
 
     // O prompt da peça (itemKey 'main') é a mensagem de geração quando existe
     // e o pedido é explícito. Sem ele, cai no contexto automático.
@@ -391,7 +537,7 @@ async function generatePieceInto(
         apiKeys: ctx.apiKeys,
         preferred,
         buildSystem: () => fullSystem,
-        buildPrompt: () => storedPrompt ?? buildContext(params),
+        buildPrompt: () => storedPrompt ?? context,
         parse: (text) => parseGeneratedContent(format, text),
         maxAttempts: 2,
         transport: createServerTransport(PIECE_TIMEOUT_MS),
@@ -438,6 +584,11 @@ await prisma.$transaction([
                         ? (piece.slides as unknown as Prisma.InputJsonArray)
                         : Prisma.DbNull,
                 slideCount: piece.slideCount,
+                scenes:
+                    piece.scenes && piece.scenes.length > 0
+                        ? (piece.scenes as unknown as Prisma.InputJsonArray)
+                        : Prisma.DbNull,
+                durationSec: piece.durationSec,
                 aiGenerated: true,
                 updatedAt: new Date(),
             },
@@ -449,13 +600,18 @@ await prisma.$transaction([
     // que foi de facto enviada (para haver sempre "Gerar peça com este prompt").
     //
     // O 'main' que a peça já traz é descartado antes de voltar a guardar: sem
-    // isto os formatos de item único (LINKEDIN_POST, IMAGE, …) gravavam duas
+    // isto os formatos de item único (POST, IMAGE, …) gravavam duas
     // linhas 'main' e `getGenerationPrompt` devolvia uma delas ao acaso.
+    //
+    // O `toneOverride` propaga o tom do canal para o contexto gravado — sem
+    // isto, o prompt guardado escrevia o tom do workspace e perdia o do canal.
+    const toneOptions = { toneOverride: channel?.defaultTone };
     const portablePrompts = buildPortablePromptsForPiece(
         format,
         params,
         piece,
-        fullSystem
+        fullSystem,
+        toneOptions
     ).filter((p) => p.itemKey !== MAIN_ITEM_KEY);
     if (!storedPrompt) {
         portablePrompts.push({
@@ -465,7 +621,8 @@ await prisma.$transaction([
                 params,
                 piece.title,
                 piece.body,
-                fullSystem
+                fullSystem,
+                toneOptions
             ),
         });
     }
@@ -523,7 +680,17 @@ async function runContentPrompts(
     await Promise.all(
         runningItems.map((item) =>
             limit(async () => {
-                const format = item.format as ContentFormat;
+                // O `format` do item é `<TIPO>@<canalId>` (produto cartesiano),
+                // e o canal tem de vir do PAR — senão um prompt escrito para
+                // LinkedIn acabaria a governar a peça de Instagram.
+                const { format, channelId } = parseItemKey(
+                    item.format
+                );
+                if (!format) {
+                    throw new Error(
+                        `Item com formato inválido: ${item.format}`
+                    );
+                }
                 try {
                     const written = await writePromptForPiece({
                         workspaceId: job.workspaceId,
@@ -534,7 +701,7 @@ async function runContentPrompts(
                         product: product ? toProductClient(product) : undefined,
                         pillar,
                         format,
-                        channelId: params.channelIds?.[format] ?? null,
+                        channelId,
                         additionalInstructions: params.additionalInstructions,
                         preferred,
                     });
@@ -653,13 +820,25 @@ async function writePromptForPiece(args: {
         preferred,
     } = args;
 
-    // Label do canal destino (o prompt deve dizer para onde é a peça).
+    // Canal destino: label legível (o JSDoc de `channelLabel` pede "LinkedIn",
+    // não o enum cru "LINKEDIN") + o bloco de plataforma com as suas regras.
     let channelLabel: string | null = null;
+    let platformBlock: string | null = null;
     if (channelId) {
         const channel = await prisma.channelConfig.findUnique({
             where: { id: channelId },
         });
-        if (channel) channelLabel = channel.channel;
+        if (channel) {
+            channelLabel = CHANNEL_LABELS[channel.channel];
+            platformBlock = buildPlatformBlock({
+                channel: channel.channel,
+                handle: channel.handle,
+                type: format,
+                rules: resolveRules({ channel: channel.channel, rules: channel.rules }),
+                defaultTone: channel.defaultTone,
+                notes: channel.notes,
+            });
+        }
     }
 
     // System do escritor: override workspace > user > default em código.
@@ -671,7 +850,11 @@ async function writePromptForPiece(args: {
     );
     const fullSystem = withAdditionalInstructions(
         systemPrompt,
-        additionalInstructions
+        additionalInstructions,
+        // O bloco de plataforma entra AQUI, e não na prosa do system prompt
+        // editável: é a separação que impede um prompt afinado a uma plataforma
+        // de vazar para outra. Ver `platform-rules/platform-block.ts`.
+        platformBlock ?? undefined
     );
 
     const userPrompt = buildPromptWriterUserPrompt({
@@ -763,18 +946,53 @@ async function runContentItem(
         pillar,
     };
 
+    // O bloco de plataforma e o tom do canal entram AQUI também.
+    //
+    // Sem isto, a primeira geração da peça gravava um prompt com as regras do
+    // canal, mas "Gerar este slide" reescrevia-o SEM elas — e como o prompt
+    // gravado é o que regenera os itens seguintes, a degradação propagava-se.
+    const channel = pieceRow.channelId
+        ? await prisma.channelConfig.findUnique({
+              where: { id: pieceRow.channelId },
+          })
+        : null;
+
+    const platformBlock = channel
+        ? buildPlatformBlock({
+              channel: channel.channel,
+              handle: channel.handle,
+              type: format,
+              rules: resolveRules({
+                  channel: channel.channel,
+                  rules: channel.rules,
+              }),
+              defaultTone: channel.defaultTone,
+              notes: channel.notes,
+          })
+        : null;
+
     const systemPrompt = await resolveSystemPrompt(
         job.workspaceId,
         job.userId,
         format,
-        () => buildSystemPromptForFormat(format, params2)
+        () => buildSystemPromptForType(format, params2)
     );
+
+    const fullSystem = withAdditionalInstructions(
+        systemPrompt,
+        undefined,
+        platformBlock ?? undefined
+    );
+
+    // O tom do canal sobrepõe o do workspace (Decisão 17) na prompt gravada, via
+    // `toneOptions` mais abaixo. Aqui a mensagem é o `itemPrompt` do utilizador,
+    // por isso não há contexto a construir.
 
     const result = await generateWithFallback<{ title: string | null; body: string }>({
         providers: getAvailableProvidersFromStore(ctx.providers, ctx.apiKeys),
         apiKeys: ctx.apiKeys,
         preferred,
-        buildSystem: () => systemPrompt,
+        buildSystem: () => fullSystem,
         // O prompt do item é a mensagem — é o que o utilizador editou.
         buildPrompt: () => itemPrompt,
         parse: (text) => parseSingleItemResponse(text),
@@ -799,10 +1017,11 @@ async function runContentItem(
     const slides = pieceRow.slides
         ? (slidesToClient(pieceRow.slides) ?? null)
         : null;
+    const scenes = (pieceRow.scenes as ContentScene[] | null) ?? null;
 
     const applied = applySingleItemToPiece(
         format,
-        { body: pieceRow.body, slides },
+        { body: pieceRow.body, slides, scenes },
         params.itemKey,
         item
     );
@@ -819,6 +1038,10 @@ async function runContentItem(
                     ? (applied.slides as unknown as Prisma.InputJsonArray)
                     : Prisma.DbNull,
             slideCount: applied.slideCount,
+            scenes:
+                applied.scenes && applied.scenes.length > 0
+                    ? (applied.scenes as unknown as Prisma.InputJsonArray)
+                    : Prisma.DbNull,
             updatedAt: new Date(),
         },
     });
@@ -839,6 +1062,10 @@ async function runContentItem(
 
     // O prompt do item é reconstruído a partir do novo conteúdo (invariante:
     // o prompt guardado reproduz o conteúdo actual). Só este item é tocado.
+    //
+    // Recebe `fullSystem` (com o bloco de plataforma) e `params2` — o contexto
+    // gravado tem de manter as regras do canal, ou a próxima regeneração deste
+    // item perdia-as.
     await saveGenerationPrompts(
         'PIECE',
         pieceRow.id,
@@ -850,13 +1077,31 @@ async function runContentItem(
                     params2,
                     params.itemKey,
                     item.body,
-                    systemPrompt
+                    fullSystem,
+                    { toneOverride: channel?.defaultTone }
                 ),
             },
         ],
         // Preserva o 'main' e os restantes itens da peça.
         await preservedItemKeys('PIECE', pieceRow.id, params.itemKey)
     );
+
+    // O prompt de media desse item também é refeito (Decisão 30): deixá-lo a
+    // descrever o slide antigo — que já não existe — é pior do que não ter
+    // prompt. O ARTEFACTO é regenerado também (Decisão 30: "texto + prompt de
+    // media + imagem"), com uma excepção: quando não há modelo activo para a
+    // modalidade, o `runMediaArtifact` fica em FAILED e o prompt sobrevive.
+    if (params.regenerateMediaPrompt !== false) {
+        await regenerateMediaPromptsForItem({
+            workspaceId: job.workspaceId,
+            targetType: 'PIECE',
+            targetId: pieceRow.id,
+            itemKey: params.itemKey,
+            // Regenerar o artefacto é uma chamada paga: o cliente desliga-o
+            // explicitamente quando o utilizador não pediu.
+            regenerateArtifact: params.regenerateArtifact === true,
+        });
+    }
 
     await markJobCompleted(
         job.id,
@@ -1017,7 +1262,7 @@ async function runArticleMetadata(
 
 /** Todas as chaves de prompt do target excepto a que vai ser substituída. */
 async function preservedItemKeys(
-    targetType: 'PIECE' | 'VIDEO_SCRIPT',
+    targetType: 'PIECE',
     targetId: string,
     replaceItemKey: string
 ): Promise<string[]> {
@@ -1028,124 +1273,6 @@ async function preservedItemKeys(
     return rows
         .map((r) => r.itemKey)
         .filter((k): k is string => !!k);
-}
-
-// -----------------------------------------------------------------------------
-// VIDEO_SCRIPT
-// -----------------------------------------------------------------------------
-
-async function runVideoScript(
-    job: JobRow,
-    params: VideoScriptJobParams,
-    items: GenerationJobItem[]
-): Promise<void> {
-    const ctx = await loadGenerationContext(job.workspaceId, job.userId);
-    const preferred = params.preferred ?? ctx.defaultPreferred;
-
-    const articleRow = await prisma.article.findUnique({
-        where: { id: params.articleId },
-    });
-    if (!articleRow) {
-        throw new Error('Artigo associado não encontrado.');
-    }
-
-    const workspace = ctx.workspace;
-    const article = toArticleClient(articleRow);
-    const pillar = await loadPillar(job.workspaceId, articleRow.pillarId);
-    const durationSec = params.durationSec;
-
-    const systemPrompt = await resolveSystemPrompt(
-        job.workspaceId,
-        job.userId,
-        'VIDEO_SCRIPT',
-        () =>
-            buildVideoScriptSystemPrompt({
-                workspace,
-                durationSec,
-            })
-    );
-    const fullSystem = withAdditionalInstructions(
-        systemPrompt,
-        params.additionalInstructions
-    );
-
-    const result = await generateWithFallback<GeneratedVideoScript>({
-        providers: getAvailableProvidersFromStore(ctx.providers, ctx.apiKeys),
-        apiKeys: ctx.apiKeys,
-        preferred,
-        buildSystem: () => fullSystem,
-        buildPrompt: () =>
-            buildContext({
-                article,
-                workspace,
-                pillar,
-            }),
-        parse: (text) => {
-            const parsed = parseVideoScriptResponse(text);
-            if (!parsed) return null;
-            const script = convertParsedToScript(parsed, durationSec);
-            if (script.title && script.hook && script.cta) return script;
-            return null;
-        },
-        transport: createServerTransport(PIECE_TIMEOUT_MS),
-    });
-
-    if (!result.ok || !result.data) {
-        const error =
-            result.error ??
-            'Não foi possível gerar o roteiro. Tenta novamente.';
-        await markJobFailed(
-            job.id,
-            error,
-            updateItemsForTarget(items, 'VIDEO_SCRIPT', {
-                status: 'FAILED',
-                error,
-            })
-        );
-        return;
-    }
-
-    const script = result.data;
-    const scriptId = job.targetId ?? items[0]?.targetId;
-    if (!scriptId) {
-        throw new Error('Job de roteiro sem targetId.');
-    }
-
-    await prisma.videoScript.update({
-        where: { id: scriptId },
-        data: {
-            title: script.title,
-            hook: script.hook,
-            problem: script.problem,
-            solution: script.solution,
-            cta: script.cta,
-            fullScript: script.fullScript ?? '',
-            durationSec: script.durationSec,
-            onScreenText: JSON.stringify(script.onScreenText),
-            bRoll: JSON.stringify(script.bRoll),
-            aiGenerated: true,
-            updatedAt: new Date(),
-        },
-    });
-
-    const portablePrompt = buildSingleItemPortablePrompt(
-        'VIDEO_SCRIPT',
-        { article, workspace },
-        script.title,
-        script.fullScript || script.solution || '',
-        fullSystem
-    );
-    await saveGenerationPrompts('VIDEO_SCRIPT', scriptId, [
-        { itemKey: 'main', prompt: portablePrompt },
-    ]);
-
-    await markJobCompleted(
-        job.id,
-        updateItemsForTarget(items, 'VIDEO_SCRIPT', {
-            status: 'COMPLETED',
-            error: null,
-        })
-    );
 }
 
 // -----------------------------------------------------------------------------

@@ -31,14 +31,8 @@ const ArticleEditor = lazy(() =>
 const ContentPiecesPage = lazy(() =>
     import('@/pages/content/content-pieces').then((m) => ({ default: m.ContentPiecesPage }))
 );
-const VideoScriptsPage = lazy(() =>
-    import('@/pages/content/video-scripts').then((m) => ({ default: m.VideoScriptsPage }))
-);
 const ContentPieceDetailPage = lazy(() =>
     import('@/pages/content/content-piece-detail').then((m) => ({ default: m.ContentPieceDetailPage }))
-);
-const VideoScriptDetailPage = lazy(() =>
-    import('@/pages/content/video-script-detail').then((m) => ({ default: m.VideoScriptDetailPage }))
 );
 const WeeklyPlannerPage = lazy(() =>
     import('@/pages/planner/weekly-planner').then((m) => ({ default: m.WeeklyPlannerPage }))
@@ -200,27 +194,6 @@ export function App() {
                             }
                         />
 
-                        <Route
-                            path="/:workspaceId/video-scripts"
-                            element={
-                                <ProtectedWorkspaceRoute>
-                                    <DashboardLayout>
-                                        <VideoScriptsPage />
-                                    </DashboardLayout>
-                                </ProtectedWorkspaceRoute>
-                            }
-                        />
-
-                        <Route
-                            path="/:workspaceId/video-scripts/:id"
-                            element={
-                                <ProtectedWorkspaceRoute>
-                                    <DashboardLayout>
-                                        <VideoScriptDetailPage />
-                                    </DashboardLayout>
-                                </ProtectedWorkspaceRoute>
-                            }
-                        />
 
                         <Route
                             path="/:workspaceId/planning"

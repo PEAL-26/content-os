@@ -195,6 +195,7 @@ export function ContentPieceModal({
                 format: piece.format,
                 body: piece.body,
                 slideCount: piece.slideCount,
+                channelId: piece.channelId,
             }}
             onRewritePrompt={onRewritePrompt}
             isRewritingPrompt={isRewritingPrompt}
@@ -226,12 +227,21 @@ export function ContentPieceModal({
                     className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
                 >
                     <option value="">Selecionar canal</option>
-                    {channels.map((c) => (
-                        <option key={c.id} value={c.id}>
-                            {CHANNEL_LABELS[c.channel]}{' '}
-                            {c.handle ? `(@${c.handle})` : ''}
-                        </option>
-                    ))}
+                    {/* Só canais ACTIVOS são escolhíveis (Decisão 15) — mas o
+                        canal que a peça JÁ tem continua visível, mesmo
+                        inactivo: o conteúdo existe e o utilizador tem de o
+                        poder ver e trocar sem ficar com o select vazio. */}
+                    {channels.map((c) => {
+                        const isCurrent = c.id === piece.channelId;
+                        if (!c.isActive && !isCurrent) return null;
+                        return (
+                            <option key={c.id} value={c.id}>
+                                {CHANNEL_LABELS[c.channel]}{' '}
+                                {c.handle ? `(@${c.handle})` : ''}
+                                {!c.isActive && ' (inactivo)'}
+                            </option>
+                        );
+                    })}
                 </select>
             </div>
 
@@ -321,11 +331,10 @@ export function ContentPieceModal({
                 </div>
             )}
 
-            {(piece.format === 'LINKEDIN_POST' ||
+            {(piece.format === 'POST' ||
                 piece.format === 'IMAGE' ||
-                piece.format === 'CTA_POST' ||
                 piece.format === 'SHORT_VIDEO' ||
-                piece.format === 'THREAD') && (
+                piece.format === 'VIDEO') && (
                 <div>
                     <label className="mb-1.5 block text-sm font-medium text-gray-700">
                         Body
@@ -341,7 +350,7 @@ export function ContentPieceModal({
             )}
 
             {(piece.format === 'SHORT_VIDEO' ||
-                piece.format === 'VIDEO_SCRIPT') && (
+                piece.format === 'VIDEO') && (
                 <>
                     <div>
                         <label className="mb-1.5 block text-sm font-medium text-gray-700">
@@ -371,7 +380,7 @@ export function ContentPieceModal({
                 </>
             )}
 
-            {(piece.format === 'LINKEDIN_POST' ||
+            {(piece.format === 'POST' ||
                 piece.format === 'IMAGE') && (
                 <div>
                     <label className="mb-1.5 block text-sm font-medium text-gray-700">

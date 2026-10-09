@@ -6,6 +6,7 @@ import {
     type ProviderSaveData,
 } from '@/components/ai/provider-editor-modal';
 import { SystemPromptsEditor } from '@/components/ai/system-prompts-editor';
+import { ArtifactModelSettingsCard } from '@/components/ai/artifact-model-settings-card';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAIProviders } from '@/hooks/use-ai-providers';
@@ -367,6 +368,31 @@ export function AISettingsPage() {
                         </div>
                     </div>
                 </Tabs>
+            </div>
+
+            {/* MODELO POR MODALIDADE — quem gera a imagem, quem gera o áudio,
+                quem gera o vídeo.
+                É o nível acima das modalidades: no editor de providers
+                declaras *que* um modelo produz imagem; aqui escolhes *qual*
+                quando há mais do que um. "Automático" usa o primeiro activo por
+                `priority`, que é a mesma cadeia de resolução do texto. */}
+            <div className="space-y-4">
+                <div>
+                    <h2 className="text-lg font-semibold text-gray-900">
+                        Artefactos (imagem, áudio, vídeo)
+                    </h2>
+                    <p className="mt-0.5 text-sm text-gray-500">
+                        Só os modelos que declaram a modalidade aparecem aqui.
+                        O custo de cada geração é mostrado antes de a pagares.
+                    </p>
+                </div>
+
+                <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+                    <ArtifactModelSettingsCard
+                        workspaceId={currentWorkspace?.id ?? ''}
+                        readOnly={!isWorkspaceOwner}
+                    />
+                </div>
             </div>
 
             {/* Editor de provider — o mesmo para criar e para editar, seeded

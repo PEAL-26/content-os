@@ -3,6 +3,7 @@ import { ArtefactsPanel } from '@/components/content/artefacts-panel';
 import { ContentNotFound } from '@/components/content/content-not-found';
 import { ContentPieceModal } from '@/components/content/content-piece-modal';
 import { ContentPromptsPanel } from '@/components/content/content-prompts-panel';
+import { MediaPromptsPanel } from '@/components/media/media-prompts-panel';
 import { CopyMenu } from '@/components/content/copy-menu';
 import { PiecePreview } from '@/components/content/piece-preview';
 import { PillarBadge } from '@/components/content/pillar-badge';
@@ -26,6 +27,27 @@ import {
 import type { ContentPillar } from '@/types/pillar';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+
+/**
+ * Rótulos legíveis dos `itemKey` de uma peça: `slide-3` → "Slide 3",
+ * `scene-2` → "Cena 2", `main` → rótulo do tipo.
+ *
+ * É o que faz o painel de media prompts mostrar "Slide 3" em vez do
+ * `slide-3` cru — e o que confirma ao utilizador que o prompt que está a ler
+ * é o do slide certo.
+ */
+function pieceItemLabels(piece: {
+    format: string;
+    slides?: ContentSlide[] | null;
+}): Record<string, string> {
+    const labels: Record<string, string> = {
+        main: CONTENT_FORMAT_LABELS[piece.format as never] ?? 'Peça',
+    };
+    for (const slide of piece.slides ?? []) {
+        labels[`slide-${slide.order}`] = `Slide ${slide.order}`;
+    }
+    return labels;
+}
 
 /**
  * Página de detalhe de uma peça: conteúdo em leitura + artefactos e publicações.
@@ -216,9 +238,7 @@ export function ContentPieceDetailPage() {
                     formats: [piece.format],
                     // Sem isto o prompt saía sem produto e sem o canal da peça.
                     productId: piece.productId ?? null,
-                    channelIds: piece.channelId
-                        ? { [piece.format]: piece.channelId }
-                        : undefined,
+                    channelIds: piece.channelId ? [piece.channelId] : [],
                 },
                 targets: [{ format: piece.format, targetId: piece.id }],
             });
@@ -433,6 +453,7 @@ export function ContentPieceDetailPage() {
                                     format: piece.format,
                                     body: piece.body,
                                     slideCount: piece.slideCount,
+                                    channelId: piece.channelId,
                                 }}
                             />
                         )}
@@ -448,6 +469,7 @@ export function ContentPieceDetailPage() {
                                     format: piece.format,
                                     body: piece.body,
                                     slideCount: piece.slideCount,
+                                    channelId: piece.channelId,
                                 }}
                             />
                         )}
@@ -455,6 +477,22 @@ export function ContentPieceDetailPage() {
                 </div>
 
                 <div className="w-[30%] space-y-5 overflow-y-auto border-r border-b bg-gray-50 p-4">
+                    {/* Prompts de media (imagem/áudio/vídeo) por slide ou por
+                        cena. É o painel onde se lê, edita e copia o prompt
+                        portátil — e, se houver modelo activo, onde se gera o
+                        ficheiro (com o custo à vista). */}
+                    <section>
+                        <h4 className="mb-2 text-sm font-medium text-gray-700">
+                            Prompts de media
+                        </h4>
+                        <MediaPromptsPanel
+                            workspaceId={piece.workspaceId}
+                            targetType="PIECE"
+                            targetId={piece.id}
+                            labelsByItemKey={pieceItemLabels(piece)}
+                        />
+                    </section>
+
                     <ArtefactsPanel
                         targetType="PIECE"
                         targetId={piece.id}

@@ -4,6 +4,7 @@ import { useArticles } from '@/hooks/use-articles';
 import { useGenerationJob } from '@/hooks/use-generation-job';
 import { useWorkspaceContentPieces } from '@/hooks/use-workspace-content-pieces';
 import { workspacePath } from '@/lib/workspace-paths';
+import { ALL_CONTENT_FORMATS } from '@/helpers/content-format';
 import { generationJobService } from '@/services/generation-job.service';
 import { useGenerationJobStore } from '@/stores/generation-jobs-store';
 import { useWorkspaceStore } from '@/stores/workspace-store';
@@ -22,15 +23,8 @@ import { useNavigate } from 'react-router-dom';
 
 type ViewMode = 'list' | 'grid';
 
-const ALL_FORMATS: ContentFormat[] = [
-    'CAROUSEL',
-    'LINKEDIN_POST',
-    'IMAGE',
-    'SHORT_VIDEO',
-    'CTA_POST',
-    'THREAD',
-    'VIDEO_SCRIPT',
-];
+/** Filtro de formato: o registo único, não uma cópia do enum. */
+const ALL_FORMATS: ContentFormat[] = [...ALL_CONTENT_FORMATS];
 
 const STATUS_OPTIONS: Array<{
     value: ContentPieceStatus | 'ALL';
@@ -185,8 +179,8 @@ export function ContentPiecesPage() {
                     // peça — diferente do que o painel do artigo produz.
                     productId: editingPiece.productId ?? null,
                     channelIds: editingPiece.channelId
-                        ? { [editingPiece.format]: editingPiece.channelId }
-                        : undefined,
+                        ? [editingPiece.channelId]
+                        : [],
                 },
                 targets: [
                     {

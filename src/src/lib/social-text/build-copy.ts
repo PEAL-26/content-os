@@ -15,7 +15,7 @@
  * simples e não tem nada a converter.
  */
 
-import type { VideoScriptWithRelations } from '@/services/video-script.service';
+
 import type { ContentPieceWithRelations } from '@/types/database';
 
 import {
@@ -49,9 +49,7 @@ export type CopyBlock =
     | { kind: 'hashtags'; items: string[] };
 
 /** Fontes que o conversor sabe montar. */
-export type CopySource =
-    | { type: 'piece'; piece: ContentPieceWithRelations }
-    | { type: 'videoScript'; script: VideoScriptWithRelations };
+export type CopySource = { type: 'piece'; piece: ContentPieceWithRelations };
 
 // ---------------------------------------------------------------------------
 // Parsing
@@ -300,14 +298,13 @@ function hashtagBlock(
  *
  * O mapeamento por formato usa os campos estruturados que o schema já tem:
  *
- * | Formato         | Blocos                                          |
- * |-----------------|-------------------------------------------------|
- * | `CAROUSEL`      | heading (título do slide) + paragraph (corpo)   |
- * | `THREAD`        | um paragraph por tweet, com `ordinal`            |
- * | `LINKEDIN_POST` | heading (hook) + body + heading (CTA)           |
- * | `IMAGE`         | body + hashtags                                 |
- * | `CTA_POST`      | body + heading (CTA) + hashtags                 |
- * | `SHORT_VIDEO`   | heading (hook) + heading (CTA)                  |
+ * | Tipo           | Blocos                                        |
+ * |----------------|-----------------------------------------------|
+ * | `CAROUSEL`     | heading (título do slide) + paragraph (corpo) |
+ * | `POST`         | paragraph (sequência numerada se for thread)  |
+ * | `IMAGE`        | body + hashtags                               |
+ * | `SHORT_VIDEO`  | heading (hook) + body + heading (CTA)         |
+ * | `VIDEO`        | heading (hook) + body + heading (CTA)         |
  *
  * `title` é de propósito ignorado: o schema documenta-o como "Título
  * interno/referência" e não é para publicar.
@@ -316,23 +313,6 @@ export function buildBlocks(
     source: CopySource,
     platform?: PlatformPreset
 ): CopyBlock[] {
-    if (source.type === 'videoScript') {
-        const { script } = source;
-        return withHashtags(
-            [
-                ...headingBlock(script.hook),
-                ...parseBody(script.problem ?? ''),
-                ...parseBody(script.solution ?? ''),
-                ...parseBody(script.fullScript ?? ''),
-                ...headingBlock(script.cta),
-            ],
-            // O `VideoScript` não tem campo de hashtags — só as peças de
-            // conteúdo é que os guardam.
-            null,
-            platform
-        );
-    }
-
     const { piece } = source;
     const blocks: CopyBlock[] = [];
 
@@ -352,34 +332,24 @@ export function buildBlocks(
             break;
         }
 
-        case 'THREAD':
+        case 'POST':
+            // Um POST num canal COM threads é uma sequência numerada; nos outros
+            // é texto corrido. `withOrdinals` só produz "1/5" se o preset pedir.
+            blocks.push(...headingBlock(piece.hookText));
             blocks.push(
                 ...parseBody(piece.body ?? '', /* withOrdinals */ true)
             );
-            break;
-
-        case 'LINKEDIN_POST':
-            blocks.push(...headingBlock(piece.hookText));
-            blocks.push(...parseBody(piece.body ?? ''));
             blocks.push(...headingBlock(piece.ctaText));
             break;
 
         case 'IMAGE':
-            blocks.push(...parseBody(piece.body ?? ''));
-            break;
-
-        case 'CTA_POST':
+            blocks.push(...headingBlock(piece.hookText));
             blocks.push(...parseBody(piece.body ?? ''));
             blocks.push(...headingBlock(piece.ctaText));
             break;
 
         case 'SHORT_VIDEO':
-            blocks.push(...headingBlock(piece.hookText));
-            blocks.push(...parseBody(piece.body ?? ''));
-            blocks.push(...headingBlock(piece.ctaText));
-            break;
-
-        case 'VIDEO_SCRIPT':
+        case 'VIDEO':
             blocks.push(...headingBlock(piece.hookText));
             blocks.push(...parseBody(piece.body ?? ''));
             blocks.push(...headingBlock(piece.ctaText));
@@ -575,19 +545,6 @@ export function buildCopy(
  * opção que copia o texto intacto.
  */
 export function buildPlainCopy(source: CopySource): string {
-    if (source.type === 'videoScript') {
-        const { script } = source;
-        return [
-            script.hook,
-            script.problem,
-            script.solution,
-            script.fullScript,
-            script.cta,
-        ]
-            .filter(Boolean)
-            .join('\n\n');
-    }
-
     const { piece } = source;
     // Hook primeiro: é a frase que abre o post. A ordem antiga (body, hook,
     // cta) punha o gancho a meio do texto, que é o contrário do que um gancho

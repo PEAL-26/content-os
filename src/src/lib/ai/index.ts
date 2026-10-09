@@ -4,4 +4,6 @@ export * from './content-prompts';
 export * from './provider';
 export * from './resolver';
 export * from './types';
-export * from './video-script-generator';
+export * from './media-prompts';
+export * from './illustrations';
+export * from './model-modalities';
